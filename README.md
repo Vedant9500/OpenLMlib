@@ -1,25 +1,65 @@
 # LMlib
 
-Phase 1 core for a local knowledge library: SQLite metadata + JSON findings + vector index.
+Local knowledge and research library for LLM workflows: SQLite metadata + JSON findings + vector index + MCP tools.
 
 ## Quickstart
 
-1. Install dependencies:
+### Option A: One-command install from source checkout
 
+Windows (PowerShell):
+
+```powershell
+./install.ps1
 ```
+
+macOS/Linux:
+
+```bash
+chmod +x install.sh
+./install.sh
+```
+
+The installer will:
+
+- install with pipx
+- run `lmlib setup`
+- run `lmlib doctor`
+
+### Option B: Manual local dev setup
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # on Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+python -m lmlib.cli setup
+python -m lmlib.cli doctor
 ```
 
-2. Initialize the database and storage:
+## CLI Usage
 
-```
-python -m lmlib.cli init
+Initialize storage:
+
+```bash
+lmlib init
 ```
 
-3. Add a finding:
+First-run bootstrap (init + optional model warmup + health output):
 
+```bash
+lmlib setup
 ```
-python -m lmlib.cli add \
+
+Run diagnostics:
+
+```bash
+lmlib doctor
+lmlib doctor --check-model
+```
+
+Add a finding:
+
+```bash
+lmlib add \
   --project glassbox \
   --claim "API response time improved 40% with Redis caching" \
   --confidence 0.8 \
@@ -29,10 +69,19 @@ python -m lmlib.cli add \
   --caveats "Requires distributed cache"
 ```
 
-4. List findings:
+List and fetch findings:
 
+```bash
+lmlib list --limit 50
+lmlib get --id <finding-id>
 ```
-python -m lmlib.cli list
+
+Search and retrieval:
+
+```bash
+lmlib query --query "contextual retrieval" --project lmlib --final-k 5
+lmlib query --query "retrieval" --project lmlib --tags retrieval --confidence-min 0.8
+lmlib query --query "retrieval robustness" --project lmlib --safe-context
 ```
 
 ## Notes
@@ -62,7 +111,7 @@ pip install -r requirements.txt
 3. The server runs with:
 
 ```
-python -m lmlib.mcp_server
+lmlib-mcp
 ```
 
 If your Python executable is not on PATH, update `command` in [.vscode/mcp.json](.vscode/mcp.json) to your interpreter.
@@ -74,6 +123,8 @@ If your Python executable is not on PATH, update `command` in [.vscode/mcp.json]
 - `lmlib_list_findings`
 - `lmlib_get_finding`
 - `lmlib_search_fts`
+- `lmlib_retrieve`
+- `lmlib_retrieve_context`
 - `lmlib_delete_finding` (requires `confirm=true`)
 - `lmlib_health`
 
@@ -148,5 +199,5 @@ tags:
 ## Tests
 
 ```
-python -m unittest discover -s tests
+python -m unittest discover -s tests -v
 ```

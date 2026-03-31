@@ -32,14 +32,60 @@ def init_library(settings_path: Path) -> Dict[str, Any]:
     db.init_db(conn)
     conn.close()
 
-    store = create_vector_store(settings.embedding_dim, settings.embedding_metric)
-    save_vector_store(store, settings.vector_index_path, settings.vector_meta_path)
+    if not settings.vector_index_path.exists() or not settings.vector_meta_path.exists():
+        store = create_vector_store(settings.embedding_dim, settings.embedding_metric)
+        save_vector_store(store, settings.vector_index_path, settings.vector_meta_path)
 
     return {
         "status": "ok",
         "message": "Initialized LMlib data layout and database",
         "db_path": str(settings.db_path),
         "vector_index_path": str(settings.vector_index_path),
+    }
+
+
+def rebuild_vector_index(settings_path: Path) -> Dict[str, Any]:
+    settings = load_settings(settings_path)
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+
+    cache = EmbeddingCache(settings.embeddings_cache_path)
+    embedder = SentenceTransformerEmbedder(
+        settings.embedding_model,
+        cache=cache,
+        normalize=settings.embedding_metric == "cosine",
+    )
+
+    store = create_vector_store(settings.embedding_dim, settings.embedding_metric)
+    rows = conn.execute("SELECT id FROM findings ORDER BY created_at ASC").fetchall()
+
+    rebuilt = 0
+    skipped = 0
+    for row in rows:
+        finding = db.get_finding(conn, row["id"])
+        if finding is None:
+            skipped += 1
+            continue
+        embedding_text = build_contextual_chunk(
+            claim=finding.claim,
+            evidence=finding.text.evidence,
+            reasoning=finding.text.reasoning,
+            full_text=finding.full_text,
+        )
+        vec = embedder.encode([embedding_text])[0]
+        store.add([finding.embedding_id], [vec])
+        rebuilt += 1
+
+    save_vector_store(store, settings.vector_index_path, settings.vector_meta_path)
+    cache.save()
+    conn.close()
+
+    return {
+        "status": "ok",
+        "rebuilt": rebuilt,
+        "skipped": skipped,
+        "vector_backend": store.backend,
+        "vector_count": store.count(),
     }
 
 

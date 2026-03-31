@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lmlib"
+version = "0.1.0"
+description = "Local cross-project knowledge and research library for LLM workflows"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "LMlib Contributors" }
+]
+dependencies = [
+  "numpy>=1.23",
+  "mcp>=1.0.0",
+  "sentence-transformers>=2.2"
+]
+
+[project.optional-dependencies]
+faiss = ["faiss-cpu>=1.7.4"]
+
+[project.scripts]
+lmlib = "lmlib.cli:main"
+lmlib-mcp = "lmlib.mcp_server:main"
+
+[tool.setuptools]
+packages = ["lmlib"]

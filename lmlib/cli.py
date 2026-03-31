@@ -3,15 +3,19 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import traceback
 
 from .library import (
     add_finding,
     get_finding,
+    health,
     init_library,
     list_findings,
+    rebuild_vector_index,
     retrieve_findings,
     retrieve_prompt_context,
 )
+from .settings import load_settings
 
 
 def _print_issues(issues) -> None:
@@ -24,6 +28,123 @@ def cmd_init(args) -> int:
     result = init_library(Path(args.settings))
     print(result.get("message", "Initialized LMlib data layout and database"))
     return 0
+
+
+def _check_python_deps() -> dict:
+    checks = {}
+    try:
+        import numpy  # noqa: F401
+
+        checks["numpy"] = "ok"
+    except Exception as exc:
+        checks["numpy"] = f"error: {exc}"
+
+    try:
+        import sentence_transformers  # noqa: F401
+
+        checks["sentence_transformers"] = "ok"
+    except Exception as exc:
+        checks["sentence_transformers"] = f"error: {exc}"
+
+    return checks
+
+
+def _warm_embedding_model(settings_path: Path) -> dict:
+    from .embeddings import EmbeddingCache, SentenceTransformerEmbedder
+
+    settings = load_settings(settings_path)
+    cache = EmbeddingCache(settings.embeddings_cache_path)
+    embedder = SentenceTransformerEmbedder(
+        settings.embedding_model,
+        cache=cache,
+        normalize=settings.embedding_metric == "cosine",
+    )
+    _ = embedder.encode(["lmlib setup warmup"])
+    cache.save()
+    return {"status": "ok", "model": settings.embedding_model}
+
+
+def cmd_setup(args) -> int:
+    settings_path = Path(args.settings)
+    init_result = init_library(settings_path)
+    if init_result.get("status") != "ok":
+        print("ERROR: initialization failed")
+        print(json.dumps(init_result, indent=2))
+        return 1
+
+    model_result = {"status": "skipped"}
+    if not args.skip_model_warmup:
+        try:
+            model_result = _warm_embedding_model(settings_path)
+        except Exception as exc:
+            model_result = {
+                "status": "error",
+                "message": str(exc),
+                "trace": traceback.format_exc(limit=1),
+            }
+
+    health_result = health(settings_path)
+    rebuild_result = {"status": "not_required"}
+    health_payload = health_result.get("health", {}) if isinstance(health_result, dict) else {}
+    findings_count = int(health_payload.get("findings_count", 0) or 0)
+    vector_count = int(health_payload.get("vector_count", 0) or 0)
+    if findings_count > 0 and vector_count < findings_count:
+        rebuild_result = rebuild_vector_index(settings_path)
+        health_result = health(settings_path)
+
+    output = {
+        "status": "ok",
+        "init": init_result,
+        "model_warmup": model_result,
+        "vector_rebuild": rebuild_result,
+        "health": health_result,
+    }
+    print(json.dumps(output, indent=2))
+    return 0 if model_result.get("status") in {"ok", "skipped"} else 1
+
+
+def cmd_doctor(args) -> int:
+    settings_path = Path(args.settings)
+    checks = {
+        "settings_path": str(settings_path),
+        "deps": _check_python_deps(),
+    }
+
+    try:
+        settings = load_settings(settings_path)
+        checks["paths"] = {
+            "data_root": str(settings.data_root),
+            "db_path": str(settings.db_path),
+            "vector_index_path": str(settings.vector_index_path),
+            "findings_dir": str(settings.findings_dir),
+        }
+    except Exception as exc:
+        checks["settings_error"] = str(exc)
+        print(json.dumps({"status": "error", "checks": checks}, indent=2))
+        return 1
+
+    health_result = health(settings_path)
+    checks["health"] = health_result
+
+    if args.check_model:
+        try:
+            checks["model"] = _warm_embedding_model(settings_path)
+        except Exception as exc:
+            checks["model"] = {"status": "error", "message": str(exc)}
+
+    dep_ok = all(value == "ok" for value in checks["deps"].values())
+    health_ok = health_result.get("status") == "ok"
+    model_ok = checks.get("model", {}).get("status") != "error"
+
+    status = "ok" if dep_ok and health_ok and model_ok else "error"
+    print(json.dumps({"status": status, "checks": checks}, indent=2))
+    return 0 if status == "ok" else 1
+
+
+def cmd_rebuild_index(args) -> int:
+    result = rebuild_vector_index(Path(args.settings))
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("status") == "ok" else 1
 
 
 def cmd_add(args) -> int:
@@ -122,6 +243,28 @@ def build_parser() -> argparse.ArgumentParser:
 
     init_parser = subparsers.add_parser("init", help="Initialize database and storage")
     init_parser.set_defaults(func=cmd_init)
+
+    setup_parser = subparsers.add_parser("setup", help="Bootstrap LMlib for first-time use")
+    setup_parser.add_argument(
+        "--skip-model-warmup",
+        action="store_true",
+        help="Skip one-time embedding model warmup/download",
+    )
+    setup_parser.set_defaults(func=cmd_setup)
+
+    doctor_parser = subparsers.add_parser("doctor", help="Run environment and storage diagnostics")
+    doctor_parser.add_argument(
+        "--check-model",
+        action="store_true",
+        help="Attempt embedding model load as part of diagnostics",
+    )
+    doctor_parser.set_defaults(func=cmd_doctor)
+
+    rebuild_parser = subparsers.add_parser(
+        "rebuild-index",
+        help="Rebuild vector index from stored findings",
+    )
+    rebuild_parser.set_defaults(func=cmd_rebuild_index)
 
     add_parser = subparsers.add_parser("add", help="Add a new finding")
     add_parser.add_argument("--id", help="Finding id")
