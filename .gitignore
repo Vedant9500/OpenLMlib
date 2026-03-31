@@ -1,0 +1,51 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+
+# Tests and coverage
+.pytest_cache/
+.coverage
+coverage/
+htmlcov/
+
+# Type checking and lint caches
+.mypy_cache/
+.pytype/
+.pyre/
+.ruff_cache/
+
+# Local data and caches
+.cache/
+
+# LMlib local storage (keep .gitkeep)
+data/**
+!data/.gitkeep
+!data/findings/.gitkeep
+
+# Environment files
+.env
+.env.*
+
+# IDE
+.vscode/*
+!.vscode/mcp.json
+!.vscode/extensions.json
+.idea/
+*.iml
+.github/
+
+# OS files
+.DS_Store
+Thumbs.db

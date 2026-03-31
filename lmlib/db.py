@@ -1,0 +1,209 @@
+from __future__ import annotations
+
+import json
+import sqlite3
+from pathlib import Path
+from typing import Dict, List, Optional
+
+from .schema import Finding, FindingAudit, FindingText
+
+
+def connect(db_path: Path) -> sqlite3.Connection:
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON;")
+    return conn
+
+
+def init_db(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS findings (
+          id TEXT PRIMARY KEY,
+          project TEXT,
+          claim TEXT NOT NULL,
+          confidence REAL,
+          created_at TEXT,
+          embedding_id INTEGER,
+          content_hash TEXT,
+          status TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS findings_text (
+          id TEXT PRIMARY KEY,
+          tags TEXT,
+          evidence TEXT,
+          caveats TEXT,
+          reasoning TEXT,
+          FOREIGN KEY (id) REFERENCES findings(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS findings_audit (
+          id TEXT PRIMARY KEY,
+          proposed_by TEXT,
+          evidence_provided INTEGER,
+          reasoning_length INTEGER,
+          failure_log TEXT,
+          confidence_history TEXT,
+          FOREIGN KEY (id) REFERENCES findings(id) ON DELETE CASCADE
+        );
+
+        CREATE VIRTUAL TABLE IF NOT EXISTS findings_fts USING fts5(
+          id UNINDEXED,
+          claim,
+          evidence,
+          reasoning
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_findings_project ON findings(project);
+        CREATE INDEX IF NOT EXISTS idx_findings_created_at ON findings(created_at);
+        CREATE INDEX IF NOT EXISTS idx_findings_status ON findings(status);
+        """
+    )
+    conn.commit()
+
+
+def _json_dump(value) -> str:
+    return json.dumps(value, separators=(",", ":"))
+
+
+def _json_load(value: Optional[str], default):
+    if value is None:
+        return default
+    return json.loads(value)
+
+
+def insert_finding(conn: sqlite3.Connection, finding: Finding) -> None:
+    text = finding.text
+    audit = finding.audit
+
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO findings (id, project, claim, confidence, created_at, embedding_id, content_hash, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                finding.id,
+                finding.project,
+                finding.claim,
+                finding.confidence,
+                finding.created_at,
+                finding.embedding_id,
+                finding.content_hash,
+                finding.status,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO findings_text (id, tags, evidence, caveats, reasoning)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                finding.id,
+                _json_dump(text.tags),
+                _json_dump(text.evidence),
+                _json_dump(text.caveats),
+                text.reasoning,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO findings_audit (id, proposed_by, evidence_provided, reasoning_length, failure_log, confidence_history)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                finding.id,
+                audit.proposed_by,
+                1 if audit.evidence_provided else 0,
+                audit.reasoning_length,
+                _json_dump(audit.failure_log),
+                _json_dump(audit.confidence_history),
+            ),
+        )
+        conn.execute("DELETE FROM findings_fts WHERE id = ?", (finding.id,))
+        conn.execute(
+            """
+            INSERT INTO findings_fts (id, claim, evidence, reasoning)
+            VALUES (?, ?, ?, ?)
+            """,
+            (finding.id, finding.claim, " ".join(text.evidence), text.reasoning),
+        )
+
+
+def delete_finding(conn: sqlite3.Connection, finding_id: str) -> None:
+    with conn:
+        conn.execute("DELETE FROM findings_fts WHERE id = ?", (finding_id,))
+        conn.execute("DELETE FROM findings WHERE id = ?", (finding_id,))
+
+
+def get_finding(conn: sqlite3.Connection, finding_id: str) -> Optional[Finding]:
+    row = conn.execute("SELECT * FROM findings WHERE id = ?", (finding_id,)).fetchone()
+    if row is None:
+        return None
+
+    text_row = conn.execute("SELECT * FROM findings_text WHERE id = ?", (finding_id,)).fetchone()
+    audit_row = conn.execute("SELECT * FROM findings_audit WHERE id = ?", (finding_id,)).fetchone()
+
+    text = FindingText(
+        tags=_json_load(text_row["tags"], []) if text_row else [],
+        evidence=_json_load(text_row["evidence"], []) if text_row else [],
+        caveats=_json_load(text_row["caveats"], []) if text_row else [],
+        reasoning=text_row["reasoning"] if text_row else "",
+    )
+    audit = FindingAudit(
+        proposed_by=audit_row["proposed_by"] if audit_row else "",
+        evidence_provided=bool(audit_row["evidence_provided"]) if audit_row else False,
+        reasoning_length=int(audit_row["reasoning_length"]) if audit_row else 0,
+        failure_log=_json_load(audit_row["failure_log"], []) if audit_row else [],
+        confidence_history=_json_load(audit_row["confidence_history"], []) if audit_row else [],
+    )
+
+    return Finding(
+        id=row["id"],
+        project=row["project"],
+        claim=row["claim"],
+        confidence=float(row["confidence"]) if row["confidence"] is not None else 0.0,
+        created_at=row["created_at"],
+        embedding_id=int(row["embedding_id"]) if row["embedding_id"] is not None else 0,
+        content_hash=row["content_hash"],
+        status=row["status"],
+        text=text,
+        audit=audit,
+    )
+
+
+def get_finding_by_embedding_id(conn: sqlite3.Connection, embedding_id: int) -> Optional[str]:
+    row = conn.execute("SELECT id FROM findings WHERE embedding_id = ?", (embedding_id,)).fetchone()
+    return row["id"] if row else None
+
+
+def list_findings(conn: sqlite3.Connection, limit: int = 50, offset: int = 0) -> List[Dict[str, str]]:
+    rows = conn.execute(
+        """
+        SELECT id, project, claim, confidence, created_at, status
+        FROM findings
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?
+        """,
+        (limit, offset),
+    ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def search_findings(conn: sqlite3.Connection, query: str, limit: int = 10) -> List[Dict[str, str]]:
+    rows = conn.execute(
+        """
+        SELECT f.id, f.project, f.claim, f.confidence, f.created_at, f.status
+        FROM findings_fts AS fts
+        JOIN findings AS f ON f.id = fts.id
+        WHERE findings_fts MATCH ?
+        ORDER BY rank
+        LIMIT ?
+        """,
+        (query, limit),
+    ).fetchall()
+
+    return [dict(row) for row in rows]

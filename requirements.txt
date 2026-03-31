@@ -1,0 +1,5 @@
+numpy>=1.23
+mcp>=1.0.0
+sentence-transformers>=2.2
+# Optional: faiss-cpu (or faiss-gpu) for vector search
+# Optional: hnswlib as a lightweight ANN alternative
