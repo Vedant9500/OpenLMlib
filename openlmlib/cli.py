@@ -29,7 +29,7 @@ def _print_issues(issues) -> None:
 
 def cmd_init(args) -> int:
     result = init_library(Path(args.settings))
-    print(result.get("message", "Initialized LMlib data layout and database"))
+    print(result.get("message", "Initialized OpenLMlib data layout and database"))
     return 0
 
 
@@ -62,7 +62,7 @@ def _warm_embedding_model(settings_path: Path) -> dict:
         cache=cache,
         normalize=settings.embedding_metric == "cosine",
     )
-    _ = embedder.encode(["lmlib setup warmup"])
+    _ = embedder.encode(["openlmlib setup warmup"])
     cache.save()
     return {"status": "ok", "model": settings.embedding_model}
 
@@ -254,8 +254,8 @@ def cmd_query(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="LMlib CLI")
-    parser.add_argument("--version", action="version", version=f"lmlib {__version__}")
+    parser = argparse.ArgumentParser(description="OpenLMlib CLI")
+    parser.add_argument("--version", action="version", version=f"openlmlib {__version__}")
     parser.add_argument(
         "--settings",
         default="config/settings.json",
@@ -267,7 +267,7 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser = subparsers.add_parser("init", help="Initialize database and storage")
     init_parser.set_defaults(func=cmd_init)
 
-    setup_parser = subparsers.add_parser("setup", help="Bootstrap LMlib for first-time use")
+    setup_parser = subparsers.add_parser("setup", help="Bootstrap OpenLMlib for first-time use")
     setup_parser.add_argument(
         "--skip-model-warmup",
         action="store_true",
@@ -291,7 +291,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     backup_parser = subparsers.add_parser(
         "backup",
-        help="Create a timestamped backup of LMlib data",
+        help="Create a timestamped backup of OpenLMlib data",
     )
     backup_parser.add_argument(
         "--output-dir",
@@ -301,7 +301,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     restore_parser = subparsers.add_parser(
         "restore",
-        help="Restore LMlib data from a backup directory",
+        help="Restore OpenLMlib data from a backup directory",
     )
     restore_parser.add_argument("--backup-dir", required=True, help="Backup directory path")
     restore_parser.add_argument(

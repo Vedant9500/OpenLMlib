@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from lmlib.library import backup_library, restore_library
+from openlmlib.library import backup_library, restore_library
 
 
 class TestBackupRestore(unittest.TestCase):

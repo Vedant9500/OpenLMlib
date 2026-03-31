@@ -1,71 +1,97 @@
-# LMlib
+# OpenLMlib
 
 Local knowledge and research library for LLM workflows: SQLite metadata + JSON findings + vector index + MCP tools.
 
 ## Quickstart
 
-### Option A: One-command install from source checkout
+The easiest way to install OpenLMlib is via pip. 
 
-Windows (PowerShell):
+```bash
+pip install openlmlib
+```
 
+After installing, you must initialize the knowledge base and run diagnostics:
+
+```bash
+openlmlib setup
+openlmlib doctor
+```
+
+### Advanced Installation (From Source)
+
+If you'd like to install directly from the source code or set up a local development environment, you have two options:
+
+**Option A: One-command Installer**
+
+*Windows (PowerShell):*
 ```powershell
 ./install.ps1
 ```
 
-macOS/Linux:
-
+*macOS/Linux:*
 ```bash
 chmod +x install.sh
 ./install.sh
 ```
+*(The installer will automatically install dependencies via pipx and run the `setup` commands for you.)*
 
-The installer will:
-
-- install with pipx
-- run `lmlib setup`
-- run `lmlib doctor`
-
-### Option B: Manual local dev setup
+**Option B: Manual Local Dev Setup**
 
 ```bash
+git clone https://github.com/Vedant9500/LMlib.git
+cd LMlib
 python -m venv .venv
 source .venv/bin/activate  # on Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-python -m lmlib.cli setup
-python -m lmlib.cli doctor
+pip install -e .
+openlmlib setup
+openlmlib doctor
 ```
+
+### Uninstallation
+
+Depending on how you installed OpenLMlib, you can remove it by running:
+
+```bash
+# If installed via pip or Manual Dev Setup
+pip uninstall openlmlib
+
+# If installed via Option A One-command installer (which uses pipx)
+pipx uninstall openlmlib
+```
+
+*(Note: Uninstalling the package will not automatically delete your local knowledge base. You can safely delete your `data/` directory if you wish to remove all stored findings and database files.)*
 
 ## CLI Usage
 
 Initialize storage:
 
 ```bash
-lmlib init
+openlmlib init
 ```
 
 First-run bootstrap (init + optional model warmup + health output):
 
 ```bash
-lmlib setup
+openlmlib setup
 ```
 
 Run diagnostics:
 
 ```bash
-lmlib doctor
-lmlib doctor --check-model
+openlmlib doctor
+openlmlib doctor --check-model
 ```
 
 Show installed version:
 
 ```bash
-lmlib --version
+openlmlib --version
 ```
 
 Add a finding:
 
 ```bash
-lmlib add \
+openlmlib add \
   --project glassbox \
   --claim "API response time improved 40% with Redis caching" \
   --confidence 0.8 \
@@ -78,38 +104,38 @@ lmlib add \
 List and fetch findings:
 
 ```bash
-lmlib list --limit 50
-lmlib get --id <finding-id>
+openlmlib list --limit 50
+openlmlib get --id <finding-id>
 ```
 
 Search and retrieval:
 
 ```bash
-lmlib query --query "contextual retrieval" --project lmlib --final-k 5
-lmlib query --query "retrieval" --project lmlib --tags retrieval --confidence-min 0.8
-lmlib query --query "retrieval robustness" --project lmlib --safe-context
+openlmlib query --query "contextual retrieval" --project openlmlib --final-k 5
+openlmlib query --query "retrieval" --project openlmlib --tags retrieval --confidence-min 0.8
+openlmlib query --query "retrieval robustness" --project openlmlib --safe-context
 ```
 
 Backup and restore:
 
 ```bash
-lmlib backup
-lmlib backup --output-dir ./my-backups
+openlmlib backup
+openlmlib backup --output-dir ./my-backups
 
 # Restore requires explicit confirmation and creates a pre-restore backup by default
-lmlib restore --backup-dir ./data/backups/lmlib-YYYYMMDD-HHMMSSZ --confirm
+openlmlib restore --backup-dir ./data/backups/openlmlib-YYYYMMDD-HHMMSSZ --confirm
 ```
 
 ## Notes
 
 - Settings live in config/settings.json
-- If faiss is not installed, LMlib uses a numpy fallback for vector search
+- If faiss is not installed, OpenLMlib uses a numpy fallback for vector search
 - Optional: install faiss-cpu (or faiss-gpu) or hnswlib for faster vector search
 - Data is stored under data/
 
 ## Repository Hygiene
 
-- .gitignore excludes local envs, caches, and LMlib storage outputs
+- .gitignore excludes local envs, caches, and OpenLMlib storage outputs
 - data/ holds local DB, embeddings, and index artifacts and is not meant for version control
 
 ## Releases
@@ -134,30 +160,30 @@ pip install -r requirements.txt
 3. The server runs with:
 
 ```
-lmlib-mcp
+openlmlib-mcp
 ```
 
 If your Python executable is not on PATH, update `command` in [.vscode/mcp.json](.vscode/mcp.json) to your interpreter.
 
 ### Available tools
 
-- `lmlib_init`
-- `lmlib_add_finding` (requires `confirm=true`)
-- `lmlib_list_findings`
-- `lmlib_get_finding`
-- `lmlib_search_fts`
-- `lmlib_retrieve`
-- `lmlib_retrieve_context`
-- `lmlib_delete_finding` (requires `confirm=true`)
-- `lmlib_health`
+- `openlmlib_init`
+- `openlmlib_add_finding` (requires `confirm=true`)
+- `openlmlib_list_findings`
+- `openlmlib_get_finding`
+- `openlmlib_search_fts`
+- `openlmlib_retrieve`
+- `openlmlib_retrieve_context`
+- `openlmlib_delete_finding` (requires `confirm=true`)
+- `openlmlib_health`
 
 ## System Instruction Template
 
-Use this template in a `.instructions.md` file to make an agent aware of LMlib tools and safety rules. Update the `description` (and optional `applyTo`) for your repo.
+Use this template in a `.instructions.md` file to make an agent aware of OpenLMlib tools and safety rules. Update the `description` (and optional `applyTo`) for your repo.
 
 ```
 ---
-description: Load when the task involves LMlib tool use, managing findings, or answering questions that may need LMlib retrieval.
+description: Load when the task involves OpenLMlib tool use, managing findings, or answering questions that may need OpenLMlib retrieval.
 # applyTo: '**/*' # when provided, instructions will automatically be added to the request context when the pattern matches an attached file
 ---
 
@@ -171,23 +197,23 @@ INSTRUCTION PRIORITY
 3) Tool outputs
 If instructions conflict, follow the highest priority.
 
-LMlib TOOLS (available)
-- lmlib_init: initialize storage if needed
-- lmlib_health: check DB/index readiness
-- lmlib_search_fts: search existing findings
-- lmlib_list_findings: list findings for review/browse
-- lmlib_get_finding: fetch a finding by id
-- lmlib_add_finding: add a new finding (write)
-- lmlib_delete_finding: delete a finding (write)
+OpenLMlib TOOLS (available)
+- openlmlib_init: initialize storage if needed
+- openlmlib_health: check DB/index readiness
+- openlmlib_search_fts: search existing findings
+- openlmlib_list_findings: list findings for review/browse
+- openlmlib_get_finding: fetch a finding by id
+- openlmlib_add_finding: add a new finding (write)
+- openlmlib_delete_finding: delete a finding (write)
 
 TOOL USE RULES
-- Use lmlib_search_fts before adding to avoid duplicates.
-- Use lmlib_list_findings for browsing and lmlib_get_finding for details.
-- If health is unknown or errors occur, call lmlib_health or lmlib_init.
+- Use openlmlib_search_fts before adding to avoid duplicates.
+- Use openlmlib_list_findings for browsing and openlmlib_get_finding for details.
+- If health is unknown or errors occur, call openlmlib_health or openlmlib_init.
 - Do not guess about stored data; rely on tool outputs.
 
 WRITE SAFETY (HARD RULES)
-- Never call lmlib_add_finding or lmlib_delete_finding with confirm=true without explicit user approval in the current turn.
+- Never call openlmlib_add_finding or openlmlib_delete_finding with confirm=true without explicit user approval in the current turn.
 - For deletes: fetch the finding, summarize it, ask for confirmation, then delete if approved.
 - For adds: draft a candidate finding, ask for confirmation, then add if approved.
 

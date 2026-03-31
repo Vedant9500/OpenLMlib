@@ -9,12 +9,12 @@ if ! command -v pipx >/dev/null 2>&1; then
 fi
 
 if [ ! -f "pyproject.toml" ]; then
-  echo "Run this script from the LMlib repository root."
+  echo "Run this script from the OpenLMlib repository root."
   exit 1
 fi
 
 pipx install . --force
-lmlib setup
-lmlib doctor
+openlmlib setup
+openlmlib doctor
 
-echo "LMlib installed and validated. Try: lmlib query --query 'retrieval'"
+echo "OpenLMlib installed and validated. Try: openlmlib query --query 'retrieval'"

@@ -18,6 +18,6 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 ## [0.1.0] - 2026-03-31
 
 ### Added
-- Core LMlib schema, write pipeline, storage, and MCP server.
+- Core OpenLMlib schema, write pipeline, storage, and MCP server.
 - Dual-index retrieval with filtering and safe context rendering.
 - Onboarding flow with setup, doctor, installer scripts, and CI workflow.

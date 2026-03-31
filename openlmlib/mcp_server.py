@@ -20,21 +20,21 @@ from .library import (
 
 
 def _settings_path() -> Path:
-    value = os.environ.get("LMLIB_SETTINGS", "config/settings.json")
+    value = os.environ.get("OPENLMLIB_SETTINGS", "config/settings.json")
     return Path(value)
 
 
-mcp = FastMCP("LMlib")
+mcp = FastMCP("OpenLMlib")
 
 
 @mcp.tool()
-def lmlib_init() -> dict:
+def openlmlib_init() -> dict:
     """Initialize database, data directories, and vector index."""
     return init_library(_settings_path())
 
 
 @mcp.tool()
-def lmlib_add_finding(
+def openlmlib_add_finding(
     project: str,
     claim: str,
     confidence: float,
@@ -47,7 +47,7 @@ def lmlib_add_finding(
     finding_id: Optional[str] = None,
     confirm: bool = False,
 ) -> dict:
-    """Add a finding to LMlib. Requires confirm=true for writes."""
+    """Add a finding to OpenLMlib. Requires confirm=true for writes."""
     return add_finding(
         settings_path=_settings_path(),
         project=project,
@@ -65,25 +65,25 @@ def lmlib_add_finding(
 
 
 @mcp.tool()
-def lmlib_list_findings(limit: int = 50, offset: int = 0) -> dict:
-    """List findings in LMlib."""
+def openlmlib_list_findings(limit: int = 50, offset: int = 0) -> dict:
+    """List findings in OpenLMlib."""
     return list_findings(_settings_path(), limit=limit, offset=offset)
 
 
 @mcp.tool()
-def lmlib_get_finding(finding_id: str) -> dict:
+def openlmlib_get_finding(finding_id: str) -> dict:
     """Get a finding by id."""
     return get_finding(_settings_path(), finding_id)
 
 
 @mcp.tool()
-def lmlib_search_fts(query: str, limit: int = 10) -> dict:
+def openlmlib_search_fts(query: str, limit: int = 10) -> dict:
     """Search findings using SQLite FTS5."""
     return search_fts(_settings_path(), query, limit=limit)
 
 
 @mcp.tool()
-def lmlib_retrieve(
+def openlmlib_retrieve(
     query: str,
     project: Optional[str] = None,
     tags: Optional[List[str]] = None,
@@ -110,7 +110,7 @@ def lmlib_retrieve(
 
 
 @mcp.tool()
-def lmlib_retrieve_context(
+def openlmlib_retrieve_context(
     query: str,
     project: Optional[str] = None,
     tags: Optional[List[str]] = None,
@@ -129,13 +129,13 @@ def lmlib_retrieve_context(
 
 
 @mcp.tool()
-def lmlib_delete_finding(finding_id: str, confirm: bool = False) -> dict:
+def openlmlib_delete_finding(finding_id: str, confirm: bool = False) -> dict:
     """Delete a finding by id. Requires confirm=true for writes."""
     return delete_finding(_settings_path(), finding_id, confirm=confirm)
 
 
 @mcp.tool()
-def lmlib_health() -> dict:
+def openlmlib_health() -> dict:
     """Return database and vector index health info."""
     return health(_settings_path())
 

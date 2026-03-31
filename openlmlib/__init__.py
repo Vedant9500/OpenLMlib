@@ -1,4 +1,4 @@
-"""LMlib core package."""
+"""OpenLMlib core package."""
 
 from .settings import Settings, load_settings
 from .schema import Finding, FindingAudit, FindingText, ValidationIssue

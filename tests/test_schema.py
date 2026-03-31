@@ -1,6 +1,6 @@
 import unittest
 
-from lmlib.schema import compute_content_hash, make_embedding_id
+from openlmlib.schema import compute_content_hash, make_embedding_id
 
 
 class TestSchema(unittest.TestCase):

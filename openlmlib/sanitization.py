@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import Dict, Iterable, List
 
 TRUSTED_CONTEXT_HEADER = "UNTRUSTED_LIBRARY_CONTEXT"
-START_DELIMITER = "<lmlib_untrusted_context>"
-END_DELIMITER = "</lmlib_untrusted_context>"
+START_DELIMITER = "<openlmlib_untrusted_context>"
+END_DELIMITER = "</openlmlib_untrusted_context>"
 
 
 def sanitize_text(value: str) -> str:

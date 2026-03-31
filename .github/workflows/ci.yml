@@ -64,7 +64,7 @@ jobs:
         run: python -m pip install numpy mcp
 
       - name: Verify CLI entrypoint
-        run: lmlib --help
+        run: openlmlib --help
 
       - name: Verify package imports
-        run: python -c "import lmlib; import lmlib.cli; import lmlib.mcp_server; print('import-ok')"
+        run: python -c "import openlmlib; import openlmlib.cli; import openlmlib.mcp_server; print('import-ok')"

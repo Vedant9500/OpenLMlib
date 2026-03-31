@@ -1,6 +1,6 @@
 import unittest
 
-from lmlib.sanitization import (
+from openlmlib.sanitization import (
     END_DELIMITER,
     START_DELIMITER,
     TRUSTED_CONTEXT_HEADER,

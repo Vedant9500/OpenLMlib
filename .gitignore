@@ -29,7 +29,7 @@ htmlcov/
 # Local data and caches
 .cache/
 
-# LMlib local storage (keep .gitkeep)
+# OpenLMlib local storage (keep .gitkeep)
 data/**
 !data/.gitkeep
 !data/findings/.gitkeep

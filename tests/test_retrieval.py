@@ -2,11 +2,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from lmlib import db
-from lmlib.retrieval import RetrievalEngine, RetrievalFilters
-from lmlib.schema import Finding, FindingAudit, FindingText, compute_content_hash
-from lmlib.settings import RetrievalSettings
-from lmlib.vector_store import NumpyVectorStore
+from openlmlib import db
+from openlmlib.retrieval import RetrievalEngine, RetrievalFilters
+from openlmlib.schema import Finding, FindingAudit, FindingText, compute_content_hash
+from openlmlib.settings import RetrievalSettings
+from openlmlib.vector_store import NumpyVectorStore
 
 
 class DummyEmbedder:

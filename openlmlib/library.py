@@ -40,7 +40,7 @@ def init_library(settings_path: Path) -> Dict[str, Any]:
 
     return {
         "status": "ok",
-        "message": "Initialized LMlib data layout and database",
+        "message": "Initialized OpenLMlib data layout and database",
         "db_path": str(settings.db_path),
         "vector_index_path": str(settings.vector_index_path),
     }
@@ -99,7 +99,7 @@ def _backup_dir_name(prefix: str = "backup") -> str:
 def backup_library(settings_path: Path, output_dir: Optional[Path] = None) -> Dict[str, Any]:
     settings = load_settings(settings_path)
     root = output_dir or (settings.data_root / "backups")
-    backup_dir = root / _backup_dir_name("lmlib")
+    backup_dir = root / _backup_dir_name("openlmlib")
     backup_dir.mkdir(parents=True, exist_ok=False)
 
     copied_files: List[str] = []

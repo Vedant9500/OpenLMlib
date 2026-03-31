@@ -64,7 +64,7 @@ Ensure-Pipx
 Refresh-Path
 
 if (-not (Test-Path .\pyproject.toml)) {
-    Write-Error "Run this script from the LMlib repository root."
+    Write-Error "Run this script from the OpenLMlib repository root."
     exit 1
 }
 
@@ -74,24 +74,24 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-$lmlibCmd = Get-Command lmlib -ErrorAction SilentlyContinue
-if ($lmlibCmd) {
-    & lmlib setup
+$openlmlibCmd = Get-Command openlmlib -ErrorAction SilentlyContinue
+if ($openlmlibCmd) {
+    & openlmlib setup
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "lmlib setup failed."
+        Write-Error "openlmlib setup failed."
         exit $LASTEXITCODE
     }
 
-    & lmlib doctor
+    & openlmlib doctor
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "lmlib doctor failed."
+        Write-Error "openlmlib doctor failed."
         exit $LASTEXITCODE
     }
 } else {
-    Write-Warning "lmlib command is not available in this shell yet. Open a new terminal and run:"
-    Write-Host "  lmlib setup"
-    Write-Host "  lmlib doctor"
+    Write-Warning "openlmlib command is not available in this shell yet. Open a new terminal and run:"
+    Write-Host "  openlmlib setup"
+    Write-Host "  openlmlib doctor"
     exit 1
 }
 
-Write-Host "LMlib installed and validated. Try: lmlib query --query 'retrieval'"
+Write-Host "OpenLMlib installed and validated. Try: openlmlib query --query 'retrieval'"

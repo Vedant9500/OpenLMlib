@@ -4,11 +4,11 @@
 
 - This project uses Semantic Versioning (`MAJOR.MINOR.PATCH`).
 - Pre-release tags are allowed (`a`, `b`, `rc`, `dev`).
-- Package version is defined in `lmlib/__init__.py` and `pyproject.toml`.
+- Package version is defined in `openlmlib/__init__.py` and `pyproject.toml`.
 
 ## Update Checklist
 
-1. Update version in `lmlib/__init__.py` and `pyproject.toml`.
+1. Update version in `openlmlib/__init__.py` and `pyproject.toml`.
 2. Add release notes to `CHANGELOG.md` under a new version heading.
 3. Run tests locally:
    - `python -m unittest discover -s tests -v`

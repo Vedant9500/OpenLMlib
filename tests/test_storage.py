@@ -2,8 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from lmlib import db
-from lmlib.schema import Finding, FindingAudit, FindingText, compute_content_hash
+from openlmlib import db
+from openlmlib.schema import Finding, FindingAudit, FindingText, compute_content_hash
 
 
 class TestStorage(unittest.TestCase):
