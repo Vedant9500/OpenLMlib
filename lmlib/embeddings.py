@@ -100,3 +100,47 @@ class SentenceTransformerEmbedder:
                 self._cache.set(key, vec)
 
         return np.vstack(vectors)
+
+
+def _trim_tokens(text: str, max_tokens: int) -> str:
+    tokens = text.split()
+    if len(tokens) <= max_tokens:
+        return text.strip()
+    return " ".join(tokens[:max_tokens]).strip()
+
+
+def build_contextual_chunk(
+    claim: str,
+    evidence: Optional[List[str]] = None,
+    reasoning: str = "",
+    full_text: str = "",
+    context_tokens: int = 80,
+) -> str:
+    evidence = evidence or []
+    evidence_text = " ".join(evidence)
+    source = "\n".join([claim.strip(), reasoning.strip(), evidence_text.strip(), full_text.strip()]).strip()
+    context = _trim_tokens(source, max_tokens=context_tokens)
+    body = "\n".join(
+        [
+            f"Claim: {claim.strip()}",
+            f"Evidence: {evidence_text.strip()}",
+            f"Reasoning: {reasoning.strip()}",
+        ]
+    )
+    if context:
+        return f"Context: {context}\n{body}".strip()
+    return body.strip()
+
+
+def build_contextual_query(query: str, project: Optional[str] = None, tags: Optional[List[str]] = None) -> str:
+    tags = tags or []
+    scope_bits: List[str] = []
+    if project:
+        scope_bits.append(f"project={project}")
+    if tags:
+        scope_bits.append("tags=" + ",".join(tags))
+
+    scope = " ".join(scope_bits)
+    if not scope:
+        return query.strip()
+    return f"{query.strip()}\nScope: {scope}".strip()

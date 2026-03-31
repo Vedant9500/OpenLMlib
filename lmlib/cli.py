@@ -4,7 +4,14 @@ import argparse
 import json
 from pathlib import Path
 
-from .library import add_finding, get_finding, init_library, list_findings
+from .library import (
+    add_finding,
+    get_finding,
+    init_library,
+    list_findings,
+    retrieve_findings,
+    retrieve_prompt_context,
+)
 
 
 def _print_issues(issues) -> None:
@@ -67,6 +74,42 @@ def cmd_get(args) -> int:
     return 0
 
 
+def cmd_query(args) -> int:
+    if args.safe_context:
+        result = retrieve_prompt_context(
+            settings_path=Path(args.settings),
+            query=args.query,
+            project=args.project,
+            tags=args.tags or [],
+            confidence_min=args.confidence_min,
+            final_k=args.final_k,
+        )
+        if result.get("status") != "ok":
+            print("ERROR: retrieval failed")
+            return 1
+        print(result.get("safe_context", ""))
+        return 0
+
+    result = retrieve_findings(
+        settings_path=Path(args.settings),
+        query=args.query,
+        project=args.project,
+        tags=args.tags or [],
+        created_after=args.created_after,
+        created_before=args.created_before,
+        confidence_min=args.confidence_min,
+        semantic_k=args.semantic_k,
+        lexical_k=args.lexical_k,
+        final_k=args.final_k,
+    )
+    if result.get("status") != "ok":
+        print("ERROR: retrieval failed")
+        return 1
+
+    print(json.dumps(result, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="LMlib CLI")
     parser.add_argument(
@@ -101,6 +144,23 @@ def build_parser() -> argparse.ArgumentParser:
     get_parser = subparsers.add_parser("get", help="Get a finding by id")
     get_parser.add_argument("--id", required=True)
     get_parser.set_defaults(func=cmd_get)
+
+    query_parser = subparsers.add_parser("query", help="Retrieve findings with semantic + keyword search")
+    query_parser.add_argument("--query", required=True, help="Query text")
+    query_parser.add_argument("--project", help="Filter by project")
+    query_parser.add_argument("--tags", action="append", help="Tag filter (repeatable)")
+    query_parser.add_argument("--created-after", help="ISO timestamp lower bound")
+    query_parser.add_argument("--created-before", help="ISO timestamp upper bound")
+    query_parser.add_argument("--confidence-min", type=float, help="Minimum confidence")
+    query_parser.add_argument("--semantic-k", type=int, help="Semantic candidate limit")
+    query_parser.add_argument("--lexical-k", type=int, help="Keyword candidate limit")
+    query_parser.add_argument("--final-k", type=int, help="Final returned results")
+    query_parser.add_argument(
+        "--safe-context",
+        action="store_true",
+        help="Render sanitized untrusted context block instead of JSON",
+    )
+    query_parser.set_defaults(func=cmd_query)
 
     return parser
 

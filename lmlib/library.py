@@ -16,6 +16,9 @@ from .schema import (
     utc_now_iso,
 )
 from .embeddings import EmbeddingCache, SentenceTransformerEmbedder
+from .embeddings import build_contextual_chunk
+from .retrieval import RetrievalEngine, RetrievalFilters
+from .sanitization import render_untrusted_context
 from .vector_store import create_vector_store, load_vector_store, save_vector_store
 from .write_gate import WriteGate
 
@@ -153,8 +156,12 @@ def add_finding(
             encoding="utf-8",
         )
         db.insert_finding(conn, finding)
-        evidence_text = " ".join(finding.text.evidence)
-        embedding_text = f"{finding.claim}\n{evidence_text}"
+        embedding_text = build_contextual_chunk(
+            claim=finding.claim,
+            evidence=finding.text.evidence,
+            reasoning=finding.text.reasoning,
+            full_text=finding.full_text,
+        )
         embedding_vec = embedder.encode([embedding_text])[0]
         store.add([finding.embedding_id], [embedding_vec])
         save_vector_store(store, settings.vector_index_path, settings.vector_meta_path)
@@ -213,6 +220,86 @@ def search_fts(settings_path: Path, query: str, limit: int = 10) -> Dict[str, An
     results = db.search_findings(conn, query, limit=limit)
     conn.close()
     return {"status": "ok", "items": results}
+
+
+def retrieve_findings(
+    settings_path: Path,
+    query: str,
+    project: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    created_after: Optional[str] = None,
+    created_before: Optional[str] = None,
+    confidence_min: Optional[float] = None,
+    semantic_k: Optional[int] = None,
+    lexical_k: Optional[int] = None,
+    final_k: Optional[int] = None,
+) -> Dict[str, Any]:
+    settings = load_settings(settings_path)
+
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+
+    cache = EmbeddingCache(settings.embeddings_cache_path)
+    embedder = SentenceTransformerEmbedder(
+        settings.embedding_model,
+        cache=cache,
+        normalize=settings.embedding_metric == "cosine",
+    )
+    store = _load_store(settings)
+    engine = RetrievalEngine(conn=conn, embedder=embedder, vector_store=store, settings=settings)
+
+    payload = engine.search(
+        query=query,
+        filters=RetrievalFilters(
+            project=project,
+            tags=tags,
+            created_after=created_after,
+            created_before=created_before,
+            confidence_min=confidence_min,
+        ),
+        semantic_k=semantic_k,
+        lexical_k=lexical_k,
+        final_k=final_k,
+    )
+    cache.save()
+    conn.close()
+
+    return {
+        "status": "ok",
+        "query": payload["query"],
+        "filters": payload["filters"],
+        "items": payload["items"],
+        "meta": payload["meta"],
+    }
+
+
+def retrieve_prompt_context(
+    settings_path: Path,
+    query: str,
+    project: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    confidence_min: Optional[float] = None,
+    final_k: Optional[int] = None,
+) -> Dict[str, Any]:
+    retrieval = retrieve_findings(
+        settings_path=settings_path,
+        query=query,
+        project=project,
+        tags=tags,
+        confidence_min=confidence_min,
+        final_k=final_k,
+    )
+    if retrieval.get("status") != "ok":
+        return retrieval
+
+    items = retrieval.get("items", [])
+    return {
+        "status": "ok",
+        "query": query,
+        "items": items,
+        "safe_context": render_untrusted_context(items),
+        "meta": retrieval.get("meta", {}),
+    }
 
 
 def delete_finding(settings_path: Path, finding_id: str, confirm: bool = False) -> Dict[str, Any]:

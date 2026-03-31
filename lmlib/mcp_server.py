@@ -13,6 +13,8 @@ from .library import (
     health,
     init_library,
     list_findings,
+    retrieve_findings,
+    retrieve_prompt_context,
     search_fts,
 )
 
@@ -78,6 +80,52 @@ def lmlib_get_finding(finding_id: str) -> dict:
 def lmlib_search_fts(query: str, limit: int = 10) -> dict:
     """Search findings using SQLite FTS5."""
     return search_fts(_settings_path(), query, limit=limit)
+
+
+@mcp.tool()
+def lmlib_retrieve(
+    query: str,
+    project: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    created_after: Optional[str] = None,
+    created_before: Optional[str] = None,
+    confidence_min: Optional[float] = None,
+    semantic_k: Optional[int] = None,
+    lexical_k: Optional[int] = None,
+    final_k: Optional[int] = None,
+) -> dict:
+    """Run dual-index retrieval (semantic + lexical) with optional filters."""
+    return retrieve_findings(
+        settings_path=_settings_path(),
+        query=query,
+        project=project,
+        tags=tags,
+        created_after=created_after,
+        created_before=created_before,
+        confidence_min=confidence_min,
+        semantic_k=semantic_k,
+        lexical_k=lexical_k,
+        final_k=final_k,
+    )
+
+
+@mcp.tool()
+def lmlib_retrieve_context(
+    query: str,
+    project: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    confidence_min: Optional[float] = None,
+    final_k: Optional[int] = None,
+) -> dict:
+    """Retrieve findings and return sanitized untrusted context block for LLM prompts."""
+    return retrieve_prompt_context(
+        settings_path=_settings_path(),
+        query=query,
+        project=project,
+        tags=tags,
+        confidence_min=confidence_min,
+        final_k=final_k,
+    )
 
 
 @mcp.tool()

@@ -19,6 +19,14 @@ class NoveltySettings:
 
 
 @dataclass
+class RetrievalSettings:
+    semantic_k: int = 20
+    lexical_k: int = 20
+    final_k: int = 5
+    semantic_oversample_factor: int = 3
+
+
+@dataclass
 class Settings:
     data_root: Path
     db_path: Path
@@ -31,6 +39,7 @@ class Settings:
     embedding_metric: str
     write_gate: WriteGateSettings
     novelty: NoveltySettings
+    retrieval: RetrievalSettings
 
     @classmethod
     def from_dict(cls, data: dict, base_dir: Path) -> "Settings":
@@ -43,6 +52,7 @@ class Settings:
 
         write_gate_data = data.get("write_gate", {})
         novelty_data = data.get("novelty", {})
+        retrieval_data = data.get("retrieval", {})
 
         return cls(
             data_root=resolve_path("data_root", "data"),
@@ -62,6 +72,12 @@ class Settings:
             novelty=NoveltySettings(
                 similarity_threshold=float(novelty_data.get("similarity_threshold", 0.85)),
                 top_k=int(novelty_data.get("top_k", 5)),
+            ),
+            retrieval=RetrievalSettings(
+                semantic_k=int(retrieval_data.get("semantic_k", 20)),
+                lexical_k=int(retrieval_data.get("lexical_k", 20)),
+                final_k=int(retrieval_data.get("final_k", 5)),
+                semantic_oversample_factor=int(retrieval_data.get("semantic_oversample_factor", 3)),
             ),
         )
 

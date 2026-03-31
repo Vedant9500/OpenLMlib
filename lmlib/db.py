@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional
 
 from .schema import Finding, FindingAudit, FindingText
 
@@ -207,3 +207,115 @@ def search_findings(conn: sqlite3.Connection, query: str, limit: int = 10) -> Li
     ).fetchall()
 
     return [dict(row) for row in rows]
+
+
+def _append_filters(
+    base_sql: str,
+    params: List,
+    project: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    created_after: Optional[str] = None,
+    created_before: Optional[str] = None,
+    confidence_min: Optional[float] = None,
+) -> str:
+    clauses: List[str] = []
+
+    if project:
+        clauses.append("f.project = ?")
+        params.append(project)
+
+    if created_after:
+        clauses.append("f.created_at >= ?")
+        params.append(created_after)
+
+    if created_before:
+        clauses.append("f.created_at <= ?")
+        params.append(created_before)
+
+    if confidence_min is not None:
+        clauses.append("f.confidence >= ?")
+        params.append(float(confidence_min))
+
+    if tags:
+        for tag in tags:
+            clauses.append(
+                "EXISTS (SELECT 1 FROM json_each(ft.tags) AS je WHERE je.value = ?)"
+            )
+            params.append(tag)
+
+    if clauses:
+        return base_sql + " AND " + " AND ".join(clauses)
+    return base_sql
+
+
+def search_findings_filtered(
+    conn: sqlite3.Connection,
+    query: str,
+    limit: int = 10,
+    project: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    created_after: Optional[str] = None,
+    created_before: Optional[str] = None,
+    confidence_min: Optional[float] = None,
+) -> List[Dict[str, str]]:
+    params: List = [query]
+    sql = """
+        SELECT f.id, f.project, f.claim, f.confidence, f.created_at, f.status, rank AS lexical_rank
+        FROM findings_fts AS fts
+        JOIN findings AS f ON f.id = fts.id
+        JOIN findings_text AS ft ON ft.id = f.id
+        WHERE findings_fts MATCH ?
+    """
+    sql = _append_filters(
+        sql,
+        params,
+        project=project,
+        tags=tags,
+        created_after=created_after,
+        created_before=created_before,
+        confidence_min=confidence_min,
+    )
+    sql += " ORDER BY rank LIMIT ?"
+    params.append(limit)
+    rows = conn.execute(sql, tuple(params)).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_findings_by_embedding_ids(
+    conn: sqlite3.Connection,
+    embedding_ids: Iterable[int],
+) -> Dict[int, Dict[str, str]]:
+    embedding_id_list = [int(value) for value in embedding_ids]
+    if not embedding_id_list:
+        return {}
+
+    placeholders = ",".join(["?"] * len(embedding_id_list))
+    rows = conn.execute(
+        f"""
+        SELECT
+            f.id,
+            f.embedding_id,
+            f.project,
+            f.claim,
+            f.confidence,
+            f.created_at,
+            f.status,
+            ft.tags,
+            ft.evidence,
+            ft.reasoning,
+            ft.caveats
+        FROM findings AS f
+        JOIN findings_text AS ft ON ft.id = f.id
+        WHERE f.embedding_id IN ({placeholders})
+        """,
+        tuple(embedding_id_list),
+    ).fetchall()
+
+    result: Dict[int, Dict[str, str]] = {}
+    for row in rows:
+        payload = dict(row)
+        payload["tags"] = _json_load(payload.get("tags"), [])
+        payload["evidence"] = _json_load(payload.get("evidence"), [])
+        payload["caveats"] = _json_load(payload.get("caveats"), [])
+        result[int(row["embedding_id"])] = payload
+    return result

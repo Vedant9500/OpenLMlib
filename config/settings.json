@@ -16,5 +16,11 @@
   "novelty": {
     "similarity_threshold": 0.85,
     "top_k": 5
+  },
+  "retrieval": {
+    "semantic_k": 20,
+    "lexical_k": 20,
+    "final_k": 5,
+    "semantic_oversample_factor": 3
   }
 }
