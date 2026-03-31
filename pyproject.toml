@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "lmlib"
+name = "openlmlib"
 version = "0.1.0"
 description = "Local cross-project knowledge and research library for LLM workflows"
 readme = "README.md"
