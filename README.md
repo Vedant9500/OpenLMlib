@@ -56,6 +56,12 @@ lmlib doctor
 lmlib doctor --check-model
 ```
 
+Show installed version:
+
+```bash
+lmlib --version
+```
+
 Add a finding:
 
 ```bash
@@ -84,6 +90,16 @@ lmlib query --query "retrieval" --project lmlib --tags retrieval --confidence-mi
 lmlib query --query "retrieval robustness" --project lmlib --safe-context
 ```
 
+Backup and restore:
+
+```bash
+lmlib backup
+lmlib backup --output-dir ./my-backups
+
+# Restore requires explicit confirmation and creates a pre-restore backup by default
+lmlib restore --backup-dir ./data/backups/lmlib-YYYYMMDD-HHMMSSZ --confirm
+```
+
 ## Notes
 
 - Settings live in config/settings.json
@@ -95,6 +111,13 @@ lmlib query --query "retrieval robustness" --project lmlib --safe-context
 
 - .gitignore excludes local envs, caches, and LMlib storage outputs
 - data/ holds local DB, embeddings, and index artifacts and is not meant for version control
+
+## Releases
+
+- Versioning policy and publish flow: [RELEASE.md](RELEASE.md)
+- Change history: [CHANGELOG.md](CHANGELOG.md)
+- Tags in format `vX.Y.Z` trigger release workflow.
+- Pre-release tags (for example `v0.2.0rc1`) publish to TestPyPI only.
 
 ## VS Code MCP Tool Call
 

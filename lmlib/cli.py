@@ -5,13 +5,16 @@ import json
 from pathlib import Path
 import traceback
 
+from . import __version__
 from .library import (
     add_finding,
+    backup_library,
     get_finding,
     health,
     init_library,
     list_findings,
     rebuild_vector_index,
+    restore_library,
     retrieve_findings,
     retrieve_prompt_context,
 )
@@ -147,6 +150,25 @@ def cmd_rebuild_index(args) -> int:
     return 0 if result.get("status") == "ok" else 1
 
 
+def cmd_backup(args) -> int:
+    output_dir = Path(args.output_dir) if args.output_dir else None
+    result = backup_library(Path(args.settings), output_dir=output_dir)
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("status") == "ok" else 1
+
+
+def cmd_restore(args) -> int:
+    backup_dir = Path(args.backup_dir)
+    result = restore_library(
+        settings_path=Path(args.settings),
+        backup_dir=backup_dir,
+        confirm=args.confirm,
+        create_pre_restore_backup=not args.no_pre_backup,
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("status") == "ok" else 1
+
+
 def cmd_add(args) -> int:
     result = add_finding(
         settings_path=Path(args.settings),
@@ -233,6 +255,7 @@ def cmd_query(args) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="LMlib CLI")
+    parser.add_argument("--version", action="version", version=f"lmlib {__version__}")
     parser.add_argument(
         "--settings",
         default="config/settings.json",
@@ -265,6 +288,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="Rebuild vector index from stored findings",
     )
     rebuild_parser.set_defaults(func=cmd_rebuild_index)
+
+    backup_parser = subparsers.add_parser(
+        "backup",
+        help="Create a timestamped backup of LMlib data",
+    )
+    backup_parser.add_argument(
+        "--output-dir",
+        help="Directory to write backup folder into (default: data/backups)",
+    )
+    backup_parser.set_defaults(func=cmd_backup)
+
+    restore_parser = subparsers.add_parser(
+        "restore",
+        help="Restore LMlib data from a backup directory",
+    )
+    restore_parser.add_argument("--backup-dir", required=True, help="Backup directory path")
+    restore_parser.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Required to perform restore",
+    )
+    restore_parser.add_argument(
+        "--no-pre-backup",
+        action="store_true",
+        help="Skip automatic pre-restore backup",
+    )
+    restore_parser.set_defaults(func=cmd_restore)
 
     add_parser = subparsers.add_parser("add", help="Add a new finding")
     add_parser.add_argument("--id", help="Finding id")

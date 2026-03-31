@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import json
+import shutil
+from datetime import datetime, timezone
 
 from .settings import load_settings
 from . import db
@@ -86,6 +88,118 @@ def rebuild_vector_index(settings_path: Path) -> Dict[str, Any]:
         "skipped": skipped,
         "vector_backend": store.backend,
         "vector_count": store.count(),
+    }
+
+
+def _backup_dir_name(prefix: str = "backup") -> str:
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%SZ")
+    return f"{prefix}-{ts}"
+
+
+def backup_library(settings_path: Path, output_dir: Optional[Path] = None) -> Dict[str, Any]:
+    settings = load_settings(settings_path)
+    root = output_dir or (settings.data_root / "backups")
+    backup_dir = root / _backup_dir_name("lmlib")
+    backup_dir.mkdir(parents=True, exist_ok=False)
+
+    copied_files: List[str] = []
+    copied_dirs: List[str] = []
+
+    if settings.db_path.exists():
+        db_dest = backup_dir / "findings.db"
+        shutil.copy2(settings.db_path, db_dest)
+        copied_files.append(str(db_dest))
+
+    if settings.vector_index_path.exists():
+        vec_dest = backup_dir / settings.vector_index_path.name
+        shutil.copy2(settings.vector_index_path, vec_dest)
+        copied_files.append(str(vec_dest))
+
+    if settings.vector_meta_path.exists():
+        meta_dest = backup_dir / settings.vector_meta_path.name
+        shutil.copy2(settings.vector_meta_path, meta_dest)
+        copied_files.append(str(meta_dest))
+
+    if settings.embeddings_cache_path.exists():
+        cache_dest = backup_dir / settings.embeddings_cache_path.name
+        shutil.copy2(settings.embeddings_cache_path, cache_dest)
+        copied_files.append(str(cache_dest))
+
+    if settings.findings_dir.exists():
+        findings_dest = backup_dir / "findings"
+        shutil.copytree(settings.findings_dir, findings_dest)
+        copied_dirs.append(str(findings_dest))
+
+    manifest = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "settings_path": str(settings_path),
+        "copied_files": copied_files,
+        "copied_dirs": copied_dirs,
+    }
+    manifest_path = backup_dir / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    return {
+        "status": "ok",
+        "backup_dir": str(backup_dir),
+        "manifest": str(manifest_path),
+        "files": copied_files,
+        "dirs": copied_dirs,
+    }
+
+
+def restore_library(
+    settings_path: Path,
+    backup_dir: Path,
+    confirm: bool = False,
+    create_pre_restore_backup: bool = True,
+) -> Dict[str, Any]:
+    if not confirm:
+        return {
+            "status": "confirmation_required",
+            "message": "Set confirm=true to restore library data.",
+        }
+
+    settings = load_settings(settings_path)
+    if not backup_dir.exists() or not backup_dir.is_dir():
+        return {"status": "error", "message": "Backup directory does not exist."}
+
+    manifest_path = backup_dir / "manifest.json"
+    if not manifest_path.exists():
+        return {"status": "error", "message": "manifest.json not found in backup directory."}
+
+    pre_restore = None
+    if create_pre_restore_backup:
+        pre_restore = backup_library(settings_path)
+
+    settings.data_root.mkdir(parents=True, exist_ok=True)
+    settings.findings_dir.parent.mkdir(parents=True, exist_ok=True)
+
+    mapping = [
+        (backup_dir / "findings.db", settings.db_path),
+        (backup_dir / settings.vector_index_path.name, settings.vector_index_path),
+        (backup_dir / settings.vector_meta_path.name, settings.vector_meta_path),
+        (backup_dir / settings.embeddings_cache_path.name, settings.embeddings_cache_path),
+    ]
+
+    restored_files: List[str] = []
+    for source, target in mapping:
+        if source.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+            restored_files.append(str(target))
+
+    findings_source = backup_dir / "findings"
+    if findings_source.exists() and findings_source.is_dir():
+        if settings.findings_dir.exists():
+            shutil.rmtree(settings.findings_dir)
+        shutil.copytree(findings_source, settings.findings_dir)
+
+    return {
+        "status": "ok",
+        "restored_from": str(backup_dir),
+        "restored_files": restored_files,
+        "pre_restore_backup": pre_restore,
     }
 
 
