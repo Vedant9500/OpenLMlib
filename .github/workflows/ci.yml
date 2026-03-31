@@ -60,6 +60,9 @@ jobs:
       - name: Install wheel (no deps)
         run: python -m pip install --no-deps dist/*.whl
 
+      - name: Install minimal runtime deps for smoke checks
+        run: python -m pip install numpy mcp
+
       - name: Verify CLI entrypoint
         run: lmlib --help
 
