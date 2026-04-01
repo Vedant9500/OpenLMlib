@@ -6,7 +6,13 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-04-01
+
 ### Added
+- MCP setup module (`mcp_setup.py`) to manage client specifications and configuration paths for various IDEs.
+- Interactive TUI setup (`tui_setup.py`) allowing users to select IDEs for MCP installation.
+- Health check tests for vector store validation.
+- MCP setup tests to ensure correct installation and configuration.
 - Release workflow for TestPyPI and PyPI publishing with trusted publishing.
 - CLI safety commands: `backup` and `restore`.
 - CLI `--version` output and package version constant.
