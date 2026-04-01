@@ -6,7 +6,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
-## [0.1.1] - 2026-04-01
+## [0.1.2] - 2026-04-01
 
 ### Added
 - MCP setup module (`mcp_setup.py`) to manage client specifications and configuration paths for various IDEs.
