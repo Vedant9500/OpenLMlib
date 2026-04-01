@@ -23,8 +23,8 @@ def _settings_path() -> Path:
     value = os.environ.get("OPENLMLIB_SETTINGS")
     if value:
         return Path(value)
-    from .settings import resolve_hybrid_settings_path
-    return resolve_hybrid_settings_path()
+    from .settings import resolve_global_settings_path
+    return resolve_global_settings_path()
 
 
 mcp = FastMCP("OpenLMlib")

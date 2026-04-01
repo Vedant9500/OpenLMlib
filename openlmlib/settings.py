@@ -138,9 +138,13 @@ def write_default_settings(path: Path) -> Path:
     return path
 
 
+def resolve_global_settings_path() -> Path:
+    return Path.home() / ".openlmlib" / "config" / "settings.json"
+
+
 def resolve_hybrid_settings_path() -> Path:
     """Returns local settings if they exist, otherwise global ~/.openlmlib/config/settings.json."""
     local_path = Path("config/settings.json").resolve()
     if local_path.exists():
         return local_path
-    return Path.home() / ".openlmlib" / "config" / "settings.json"
+    return resolve_global_settings_path()

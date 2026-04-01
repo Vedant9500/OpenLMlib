@@ -20,7 +20,7 @@ from .library import (
     retrieve_prompt_context,
 )
 from .mcp_setup import available_clients, install_client_configs, normalize_client_ids
-from .settings import load_settings, resolve_hybrid_settings_path
+from .settings import load_settings, resolve_global_settings_path
 
 
 def _print_issues(issues) -> None:
@@ -357,7 +357,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"openlmlib {__version__}")
     parser.add_argument(
         "--settings",
-        default=str(resolve_hybrid_settings_path()),
+        default=str(resolve_global_settings_path()),
         help="Path to settings.json",
     )
 

@@ -133,7 +133,7 @@ openlmlib restore --backup-dir ./data/backups/openlmlib-YYYYMMDD-HHMMSSZ --confi
 ## Notes
 
 - Global installs use `~/.openlmlib/config/settings.json`
-- If `config/settings.json` exists in your current project, normal CLI commands can still use that local override
+- If you want a repo-local library instead, pass `--settings /absolute/path/to/config/settings.json`
 - If faiss is not installed, OpenLMlib uses a numpy fallback for vector search
 - Optional: install faiss-cpu (or faiss-gpu) or hnswlib for faster vector search
 - Global data is stored under `~/.openlmlib/data/`
@@ -166,6 +166,7 @@ That flow can install OpenLMlib globally into:
 - `cursor`
 - `kiro`
 - `claude_desktop`
+- `antigravity`
 
 You can also target clients directly:
 
@@ -185,6 +186,7 @@ If you want to edit files yourself instead of using `openlmlib setup`, use the m
 - Cursor: `~/.cursor/mcp.json`
 - Kiro: `~/.kiro/settings/mcp.json`
 - Claude Desktop: `claude_desktop_config.json`
+- Antigravity: `~/.gemini/antigravity/mcp_config.json`
 
 VS Code uses this shape:
 
@@ -199,7 +201,7 @@ VS Code uses this shape:
 }
 ```
 
-Cursor, Kiro, and Claude Desktop use this shape:
+Cursor, Kiro, Claude Desktop, and Antigravity use this shape:
 
 ```json
 {

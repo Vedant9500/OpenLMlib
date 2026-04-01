@@ -22,6 +22,7 @@ CLIENT_SPECS = (
     McpClientSpec(id="cursor", label="Cursor", root_key="mcpServers"),
     McpClientSpec(id="kiro", label="Kiro", root_key="mcpServers"),
     McpClientSpec(id="claude_desktop", label="Claude Desktop", root_key="mcpServers"),
+    McpClientSpec(id="antigravity", label="Antigravity", root_key="mcpServers"),
 )
 
 CLIENTS_BY_ID = {client.id: client for client in CLIENT_SPECS}
@@ -35,6 +36,7 @@ CLIENT_ALIASES = {
     "claude": "claude_desktop",
     "claude-desktop": "claude_desktop",
     "claude_desktop": "claude_desktop",
+    "antigravity": "antigravity",
 }
 
 
@@ -109,6 +111,9 @@ def client_config_path(
             return home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
         return None
 
+    if client_id == "antigravity":
+        return home / ".gemini" / "antigravity" / "mcp_config.json"
+
     raise ValueError(f"Unknown client id: {client_id}")
 
 
@@ -116,7 +121,11 @@ def _load_existing_config(path: Path) -> Dict[str, object]:
     if not path.exists():
         return {}
 
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    raw_text = path.read_text(encoding="utf-8")
+    if not raw_text.strip():
+        return {}
+
+    payload = json.loads(raw_text)
     if not isinstance(payload, dict):
         raise ValueError(f"Expected a JSON object in {path}")
     return payload
