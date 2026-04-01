@@ -1,11 +1,11 @@
 {
 	"servers": {
-		"lmlib": {
+		"openlmlib": {
       "type" :"stdio",
 			"command": ".venv\\Scripts\\python.exe",
-      "args": ["-m", "lmlib.mcp_server"],
+      "args": ["-m", "openlmlib.mcp_server"],
       "env": {
-        "LMLIB_SETTINGS": "config/settings.json"
+        "OPENLMLIB_SETTINGS": "config/settings.json"
       }
 		}
 	}

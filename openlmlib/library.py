@@ -6,7 +6,7 @@ import json
 import shutil
 from datetime import datetime, timezone
 
-from .settings import load_settings
+from .settings import load_settings, write_default_settings
 from . import db
 from .schema import (
     Finding,
@@ -26,6 +26,7 @@ from .write_gate import WriteGate
 
 
 def init_library(settings_path: Path) -> Dict[str, Any]:
+    write_default_settings(settings_path)
     settings = load_settings(settings_path)
     settings.data_root.mkdir(parents=True, exist_ok=True)
     settings.findings_dir.mkdir(parents=True, exist_ok=True)
@@ -68,6 +69,7 @@ def rebuild_vector_index(settings_path: Path) -> Dict[str, Any]:
         if finding is None:
             skipped += 1
             continue
+        _hydrate_finding_from_json(settings, finding)
         embedding_text = build_contextual_chunk(
             claim=finding.claim,
             evidence=finding.text.evidence,
@@ -208,6 +210,25 @@ def _load_store(settings):
     if store.dim == 0:
         store = create_vector_store(settings.embedding_dim, settings.embedding_metric)
     return store
+
+
+def _hydrate_finding_from_json(settings, finding: Finding) -> Finding:
+    if finding.full_text:
+        return finding
+
+    json_path = settings.findings_dir / f"{finding.id}.json"
+    if not json_path.exists():
+        return finding
+
+    try:
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+    except Exception:
+        return finding
+
+    full_text = payload.get("full_text")
+    if isinstance(full_text, str):
+        finding.full_text = full_text
+    return finding
 
 
 def _serialize_issues(issues) -> List[Dict[str, str]]:
@@ -370,6 +391,7 @@ def get_finding(settings_path: Path, finding_id: str) -> Dict[str, Any]:
     if finding is None:
         return {"status": "not_found"}
 
+    _hydrate_finding_from_json(settings, finding)
     return {"status": "ok", "finding": finding.to_content_dict()}
 
 
@@ -515,7 +537,15 @@ def health(settings_path: Path) -> Dict[str, Any]:
     status["findings_count"] = int(row["count"]) if row else 0
 
     if settings.vector_meta_path.exists():
-        store = load_vector_store(settings.vector_index_path, settings.vector_meta_path)
+        try:
+            store = load_vector_store(settings.vector_index_path, settings.vector_meta_path)
+        except Exception as exc:
+            status["vector_backend"] = "error"
+            status["vector_count"] = 0
+            status["vector_dim"] = 0
+            status["vector_error"] = str(exc)
+            return {"status": "error", "health": status}
+
         status["vector_backend"] = store.backend
         status["vector_count"] = store.count()
         status["vector_dim"] = store.dim

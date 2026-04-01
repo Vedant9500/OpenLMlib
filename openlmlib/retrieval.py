@@ -33,9 +33,12 @@ class RetrievalEngine:
         final_k: Optional[int] = None,
     ) -> Dict[str, Any]:
         filters = filters or RetrievalFilters()
-        semantic_k = semantic_k or self._settings.retrieval.semantic_k
-        lexical_k = lexical_k or self._settings.retrieval.lexical_k
-        final_k = final_k or self._settings.retrieval.final_k
+        if semantic_k is None:
+            semantic_k = self._settings.retrieval.semantic_k
+        if lexical_k is None:
+            lexical_k = self._settings.retrieval.lexical_k
+        if final_k is None:
+            final_k = self._settings.retrieval.final_k
 
         semantic_items = self._semantic_search(query, filters, semantic_k)
         lexical_items = self._lexical_search(query, filters, lexical_k)

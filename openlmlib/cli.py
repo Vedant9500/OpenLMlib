@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
 import traceback
 
 from . import __version__
@@ -18,13 +19,76 @@ from .library import (
     retrieve_findings,
     retrieve_prompt_context,
 )
-from .settings import load_settings
+from .mcp_setup import available_clients, install_client_configs, normalize_client_ids
+from .settings import load_settings, resolve_hybrid_settings_path
 
 
 def _print_issues(issues) -> None:
     for issue in issues:
         prefix = "ERROR" if issue.severity == "error" else "WARN"
         print(f"{prefix}: {issue.field} - {issue.message}")
+
+
+def _interactive_terminal() -> bool:
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _requested_client_ids(args) -> list[str]:
+    return normalize_client_ids(getattr(args, "ide", None))
+
+
+def _run_mcp_setup(settings_path: Path, requested_client_ids: list[str]) -> dict:
+    if requested_client_ids:
+        return install_client_configs(requested_client_ids, settings_path=settings_path)
+
+    if not _interactive_terminal():
+        return {
+            "status": "skipped",
+            "message": "Non-interactive shell; run openlmlib mcp-config later to install MCP globally.",
+            "results": [],
+            "settings_path": str(settings_path),
+        }
+
+    from .tui_setup import run_interactive_setup
+
+    return run_interactive_setup(settings_path)
+
+
+def _print_setup_summary(output: dict) -> None:
+    init_result = output.get("init", {})
+    model_result = output.get("model_warmup", {})
+    rebuild_result = output.get("vector_rebuild", {})
+    health_result = output.get("health", {}).get("health", {})
+    mcp_result = output.get("mcp_config", {})
+
+    print("OpenLMlib setup")
+    print(f"Settings: {output.get('settings_path', '')}")
+    print(f"Database: {init_result.get('db_path', '')}")
+
+    model_status = model_result.get("status", "unknown")
+    print(f"Model warmup: {model_status}")
+
+    if rebuild_result.get("status") == "ok":
+        print(f"Vector index rebuild: rebuilt {rebuild_result.get('rebuilt', 0)} items")
+    else:
+        print(f"Vector index rebuild: {rebuild_result.get('status', 'not_required')}")
+
+    print(
+        "Health: "
+        f"{health_result.get('findings_count', 0)} findings, "
+        f"{health_result.get('vector_count', 0)} vectors"
+    )
+
+    if mcp_result.get("status") == "skipped":
+        print(f"MCP install: {mcp_result.get('message', 'skipped')}")
+    elif mcp_result.get("status") in {"ok", "partial", "error"}:
+        successful = [item.get("label") for item in mcp_result.get("results", []) if item.get("status") == "ok"]
+        failed = [item.get("label") for item in mcp_result.get("results", []) if item.get("status") != "ok"]
+        print(f"MCP install: {mcp_result.get('status')}")
+        if successful:
+            print(f"Installed for: {', '.join(str(value) for value in successful)}")
+        if failed:
+            print(f"Needs attention: {', '.join(str(value) for value in failed)}")
 
 
 def cmd_init(args) -> int:
@@ -69,6 +133,12 @@ def _warm_embedding_model(settings_path: Path) -> dict:
 
 def cmd_setup(args) -> int:
     settings_path = Path(args.settings)
+    try:
+        requested_client_ids = _requested_client_ids(args)
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
+        return 1
+
     init_result = init_library(settings_path)
     if init_result.get("status") != "ok":
         print("ERROR: initialization failed")
@@ -95,15 +165,44 @@ def cmd_setup(args) -> int:
         rebuild_result = rebuild_vector_index(settings_path)
         health_result = health(settings_path)
 
+    mcp_result = {"status": "skipped", "results": []}
+    if not args.skip_mcp_config:
+        mcp_result = _run_mcp_setup(settings_path, requested_client_ids)
+
     output = {
         "status": "ok",
+        "settings_path": str(settings_path),
         "init": init_result,
         "model_warmup": model_result,
         "vector_rebuild": rebuild_result,
         "health": health_result,
+        "mcp_config": mcp_result,
     }
-    print(json.dumps(output, indent=2))
-    return 0 if model_result.get("status") in {"ok", "skipped"} else 1
+    if _interactive_terminal():
+        _print_setup_summary(output)
+    else:
+        print(json.dumps(output, indent=2))
+
+    mcp_ok = mcp_result.get("status") in {"ok", "skipped"}
+    return 0 if model_result.get("status") in {"ok", "skipped"} and mcp_ok else 1
+
+
+def cmd_mcp_config(args) -> int:
+    if args.list_ides:
+        for client in available_clients():
+            print(f"{client.id} - {client.label}")
+        return 0
+
+    try:
+        requested_client_ids = _requested_client_ids(args)
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
+        return 1
+
+    result = _run_mcp_setup(Path(args.settings), requested_client_ids)
+    if not (_interactive_terminal() and not requested_client_ids):
+        print(json.dumps(result, indent=2))
+    return 0 if result.get("status") in {"ok", "skipped"} else 1
 
 
 def cmd_doctor(args) -> int:
@@ -258,7 +357,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"openlmlib {__version__}")
     parser.add_argument(
         "--settings",
-        default="config/settings.json",
+        default=str(resolve_hybrid_settings_path()),
         help="Path to settings.json",
     )
 
@@ -267,11 +366,34 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser = subparsers.add_parser("init", help="Initialize database and storage")
     init_parser.set_defaults(func=cmd_init)
 
+    mcp_config_parser = subparsers.add_parser("mcp-config", help="Configure MCP client connections interactively")
+    mcp_config_parser.add_argument(
+        "--ide",
+        action="append",
+        help="IDE/client to configure. Repeat or pass a comma-separated list.",
+    )
+    mcp_config_parser.add_argument(
+        "--list-ides",
+        action="store_true",
+        help="List supported IDE/client identifiers and exit.",
+    )
+    mcp_config_parser.set_defaults(func=cmd_mcp_config)
+
     setup_parser = subparsers.add_parser("setup", help="Bootstrap OpenLMlib for first-time use")
     setup_parser.add_argument(
         "--skip-model-warmup",
         action="store_true",
         help="Skip one-time embedding model warmup/download",
+    )
+    setup_parser.add_argument(
+        "--skip-mcp-config",
+        action="store_true",
+        help="Skip the global MCP installation step.",
+    )
+    setup_parser.add_argument(
+        "--ide",
+        action="append",
+        help="IDE/client to configure globally. Repeat or pass a comma-separated list.",
     )
     setup_parser.set_defaults(func=cmd_setup)
 

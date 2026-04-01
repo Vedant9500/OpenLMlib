@@ -37,6 +37,7 @@ class TestStorage(unittest.TestCase):
                 status="active",
                 text=text,
                 audit=audit,
+                full_text="Extended benchmark notes for rebuilds and deep inspection.",
             )
             finding.content_hash = compute_content_hash(finding.to_content_dict(include_hash=False))
 
@@ -48,6 +49,7 @@ class TestStorage(unittest.TestCase):
             self.assertEqual(loaded.id, finding.id)
             self.assertEqual(loaded.claim, finding.claim)
             self.assertEqual(loaded.text.evidence, finding.text.evidence)
+            self.assertEqual(loaded.full_text, finding.full_text)
 
 
 if __name__ == "__main__":

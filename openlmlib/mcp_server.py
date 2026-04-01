@@ -20,8 +20,11 @@ from .library import (
 
 
 def _settings_path() -> Path:
-    value = os.environ.get("OPENLMLIB_SETTINGS", "config/settings.json")
-    return Path(value)
+    value = os.environ.get("OPENLMLIB_SETTINGS")
+    if value:
+        return Path(value)
+    from .settings import resolve_hybrid_settings_path
+    return resolve_hybrid_settings_path()
 
 
 mcp = FastMCP("OpenLMlib")
@@ -141,6 +144,21 @@ def openlmlib_health() -> dict:
 
 
 def main() -> None:
+    import argparse
+    import sys
+    
+    parser = argparse.ArgumentParser(description="OpenLMlib MCP Server", add_help=False)
+    parser.add_argument("--dir", type=str, help="Base directory of the OpenLMlib project")
+    parser.add_argument("--settings", type=str, help="Absolute path to settings.json")
+    
+    args, unknown = parser.parse_known_args()
+    
+    if args.settings:
+        os.environ["OPENLMLIB_SETTINGS"] = args.settings
+    elif args.dir:
+        os.environ["OPENLMLIB_SETTINGS"] = str(Path(args.dir) / "config" / "settings.json")
+        
+    sys.argv = [sys.argv[0]] + unknown
     mcp.run()
 
 

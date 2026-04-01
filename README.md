@@ -4,18 +4,20 @@ Local knowledge and research library for LLM workflows: SQLite metadata + JSON f
 
 ## Quickstart
 
-The easiest way to install OpenLMlib is via pip. 
+The smoothest global install is via `pipx`:
 
 ```bash
-pip install openlmlib
+pipx install openlmlib
 ```
 
-After installing, you must initialize the knowledge base and run diagnostics:
+Then initialize OpenLMlib, optionally warm the embedding model, and install the MCP server into one or more IDEs/clients:
 
 ```bash
 openlmlib setup
 openlmlib doctor
 ```
+
+`openlmlib setup` creates a real settings file, initializes the global library under `~/.openlmlib/`, and prompts for the IDEs/clients you use. You can select multiple targets in one run.
 
 ### Advanced Installation (From Source)
 
@@ -59,7 +61,7 @@ pip uninstall openlmlib
 pipx uninstall openlmlib
 ```
 
-*(Note: Uninstalling the package will not automatically delete your local knowledge base. You can safely delete your `data/` directory if you wish to remove all stored findings and database files.)*
+*(Note: Uninstalling the package will not automatically delete your OpenLMlib data. Remove `~/.openlmlib/` for the global install, or your local `data/` directory if you were using a project-local configuration.)*
 
 ## CLI Usage
 
@@ -73,6 +75,8 @@ First-run bootstrap (init + optional model warmup + health output):
 
 ```bash
 openlmlib setup
+openlmlib setup --ide vscode --ide cursor
+openlmlib setup --skip-mcp-config
 ```
 
 Run diagnostics:
@@ -128,10 +132,11 @@ openlmlib restore --backup-dir ./data/backups/openlmlib-YYYYMMDD-HHMMSSZ --confi
 
 ## Notes
 
-- Settings live in config/settings.json
+- Global installs use `~/.openlmlib/config/settings.json`
+- If `config/settings.json` exists in your current project, normal CLI commands can still use that local override
 - If faiss is not installed, OpenLMlib uses a numpy fallback for vector search
 - Optional: install faiss-cpu (or faiss-gpu) or hnswlib for faster vector search
-- Data is stored under data/
+- Global data is stored under `~/.openlmlib/data/`
 
 ## Repository Hygiene
 
@@ -145,25 +150,67 @@ openlmlib restore --backup-dir ./data/backups/openlmlib-YYYYMMDD-HHMMSSZ --confi
 - Tags in format `vX.Y.Z` trigger release workflow.
 - Pre-release tags (for example `v0.2.0rc1`) publish to TestPyPI only.
 
-## VS Code MCP Tool Call
+## MCP Client Configuration
 
-This repo includes a VS Code MCP server definition in [.vscode/mcp.json](.vscode/mcp.json).
+OpenLMlib provides an MCP server (`openlmlib-mcp`) to let AI assistants securely access and modify your knowledge base.
 
-1. Install dependencies:
+The recommended path is to run:
 
-```
-pip install -r requirements.txt
-```
-
-2. Open the workspace in VS Code and ensure the MCP server is enabled.
-
-3. The server runs with:
-
-```
-openlmlib-mcp
+```bash
+openlmlib setup
 ```
 
-If your Python executable is not on PATH, update `command` in [.vscode/mcp.json](.vscode/mcp.json) to your interpreter.
+That flow can install OpenLMlib globally into:
+
+- `vscode`
+- `cursor`
+- `kiro`
+- `claude_desktop`
+
+You can also target clients directly:
+
+```bash
+openlmlib mcp-config --list-ides
+openlmlib mcp-config --ide vscode --ide cursor
+openlmlib mcp-config --ide kiro
+```
+
+The generated server entry pins `openlmlib-mcp` to your OpenLMlib settings file with `--settings`, so the MCP server keeps using the same cross-project library regardless of the active workspace.
+
+### Manual Global Config
+
+If you want to edit files yourself instead of using `openlmlib setup`, use the matching global config location for your client:
+
+- VS Code user profile: `mcp.json` in your user profile folder, using the `servers` root key
+- Cursor: `~/.cursor/mcp.json`
+- Kiro: `~/.kiro/settings/mcp.json`
+- Claude Desktop: `claude_desktop_config.json`
+
+VS Code uses this shape:
+
+```json
+{
+  "servers": {
+    "openlmlib": {
+      "command": "openlmlib-mcp",
+      "args": ["--settings", "/absolute/path/to/settings.json"]
+    }
+  }
+}
+```
+
+Cursor, Kiro, and Claude Desktop use this shape:
+
+```json
+{
+  "mcpServers": {
+    "openlmlib": {
+      "command": "openlmlib-mcp",
+      "args": ["--settings", "/absolute/path/to/settings.json"]
+    }
+  }
+}
+```
 
 ### Available tools
 

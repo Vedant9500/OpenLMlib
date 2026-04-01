@@ -18,8 +18,11 @@ class EmbeddingCache:
         if self._loaded:
             return
         if self.path.exists():
-            with self.path.open("rb") as handle:
-                self._cache = pickle.load(handle)
+            try:
+                with self.path.open("rb") as handle:
+                    self._cache = pickle.load(handle)
+            except Exception:
+                self._cache = {}
         self._loaded = True
 
     def get(self, key: str):

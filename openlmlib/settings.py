@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
-from pathlib import Path
 import json
+from pathlib import Path
 
 
 @dataclass
@@ -82,8 +83,40 @@ class Settings:
         )
 
 
+DEFAULT_SETTINGS_DATA = {
+    "data_root": "data",
+    "db_path": "data/findings.db",
+    "vector_index_path": "data/embeddings.faiss",
+    "vector_meta_path": "data/embeddings_meta.json",
+    "findings_dir": "data/findings",
+    "embeddings_cache_path": "data/embeddings_cache.pkl",
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "embedding_dim": 384,
+    "embedding_metric": "cosine",
+    "write_gate": {
+        "min_confidence": 0.6,
+        "min_reasoning_length": 50,
+        "min_claim_evidence_sim": 0.7,
+    },
+    "novelty": {
+        "similarity_threshold": 0.85,
+        "top_k": 5,
+    },
+    "retrieval": {
+        "semantic_k": 20,
+        "lexical_k": 20,
+        "final_k": 5,
+        "semantic_oversample_factor": 3,
+    },
+}
+
+
+def default_settings_payload() -> dict:
+    return copy.deepcopy(DEFAULT_SETTINGS_DATA)
+
+
 def default_settings(base_dir: Path) -> Settings:
-    return Settings.from_dict({}, base_dir)
+    return Settings.from_dict(default_settings_payload(), base_dir)
 
 
 def load_settings(path: Path) -> Settings:
@@ -94,3 +127,20 @@ def load_settings(path: Path) -> Settings:
 
     base_dir = path.parent.parent if path.parent.name == "config" else path.parent
     return default_settings(base_dir)
+
+
+def write_default_settings(path: Path) -> Path:
+    if path.exists():
+        return path
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(default_settings_payload(), indent=2), encoding="utf-8")
+    return path
+
+
+def resolve_hybrid_settings_path() -> Path:
+    """Returns local settings if they exist, otherwise global ~/.openlmlib/config/settings.json."""
+    local_path = Path("config/settings.json").resolve()
+    if local_path.exists():
+        return local_path
+    return Path.home() / ".openlmlib" / "config" / "settings.json"

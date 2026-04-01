@@ -36,6 +36,7 @@ def init_db(conn: sqlite3.Connection) -> None:
           evidence TEXT,
           caveats TEXT,
           reasoning TEXT,
+          full_text TEXT DEFAULT '',
           FOREIGN KEY (id) REFERENCES findings(id) ON DELETE CASCADE
         );
 
@@ -61,7 +62,19 @@ def init_db(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_findings_status ON findings(status);
         """
     )
+    _migrate_schema(conn)
     conn.commit()
+
+
+def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    return {str(row["name"]) for row in rows}
+
+
+def _migrate_schema(conn: sqlite3.Connection) -> None:
+    findings_text_columns = _table_columns(conn, "findings_text")
+    if "full_text" not in findings_text_columns:
+        conn.execute("ALTER TABLE findings_text ADD COLUMN full_text TEXT DEFAULT ''")
 
 
 def _json_dump(value) -> str:
@@ -97,8 +110,8 @@ def insert_finding(conn: sqlite3.Connection, finding: Finding) -> None:
         )
         conn.execute(
             """
-            INSERT INTO findings_text (id, tags, evidence, caveats, reasoning)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO findings_text (id, tags, evidence, caveats, reasoning, full_text)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
                 finding.id,
@@ -106,6 +119,7 @@ def insert_finding(conn: sqlite3.Connection, finding: Finding) -> None:
                 _json_dump(text.evidence),
                 _json_dump(text.caveats),
                 text.reasoning,
+                finding.full_text,
             ),
         )
         conn.execute(
@@ -171,6 +185,7 @@ def get_finding(conn: sqlite3.Connection, finding_id: str) -> Optional[Finding]:
         status=row["status"],
         text=text,
         audit=audit,
+        full_text=text_row["full_text"] if text_row and "full_text" in text_row.keys() else "",
     )
 
 
