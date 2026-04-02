@@ -1,6 +1,7 @@
 import unittest
 
 from openlmlib.write_gate import WriteGate
+from openlmlib.schema import ValidationIssue
 
 
 class FixedEmbedder:
@@ -90,6 +91,23 @@ class TestWriteGate(unittest.TestCase):
         contradiction_issues = [issue for issue in issues if issue.field == "contradiction"]
         self.assertTrue(contradiction_issues)
         self.assertTrue(gate.is_allowed(issues))
+
+    def test_adjusts_confidence_down_for_warnings(self):
+        gate = WriteGate(
+            min_confidence=0.6,
+            min_reasoning_length=10,
+            min_claim_evidence_sim=0.7,
+            novelty_similarity_threshold=0.85,
+            novelty_top_k=5,
+            embedder=FixedEmbedder(),
+        )
+        adjusted = gate.adjust_confidence(
+            claim="claim",
+            evidence=["evidence"],
+            proposed_confidence=0.9,
+            issues=[ValidationIssue(field="novelty", message="similar", severity="warning")],
+        )
+        self.assertLess(adjusted, 0.9)
 
 
 if __name__ == "__main__":

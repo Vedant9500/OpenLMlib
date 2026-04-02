@@ -17,6 +17,13 @@ class TestCli(unittest.TestCase):
             str(fake_home / ".openlmlib" / "config" / "settings.json"),
         )
 
+    def test_eval_command_parsing(self):
+        parser = build_parser()
+        args = parser.parse_args(["eval", "--dataset", "config/eval_queries.json", "--final-k", "10"])
+        self.assertEqual(args.command, "eval")
+        self.assertEqual(args.dataset, "config/eval_queries.json")
+        self.assertEqual(args.final_k, 10)
+
 
 if __name__ == "__main__":
     unittest.main()

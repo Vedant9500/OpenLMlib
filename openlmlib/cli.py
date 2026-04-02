@@ -10,6 +10,7 @@ from . import __version__
 from .library import (
     add_finding,
     backup_library,
+    evaluate_dataset,
     get_finding,
     health,
     init_library,
@@ -352,6 +353,16 @@ def cmd_query(args) -> int:
     return 0
 
 
+def cmd_eval(args) -> int:
+    result = evaluate_dataset(
+        settings_path=Path(args.settings),
+        dataset_path=Path(args.dataset),
+        final_k=args.final_k,
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("status") == "ok" else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="OpenLMlib CLI")
     parser.add_argument("--version", action="version", version=f"openlmlib {__version__}")
@@ -476,6 +487,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Render sanitized untrusted context block instead of JSON",
     )
     query_parser.set_defaults(func=cmd_query)
+
+    eval_parser = subparsers.add_parser("eval", help="Run retrieval evaluation on a query dataset")
+    eval_parser.add_argument(
+        "--dataset",
+        default="config/eval_queries.json",
+        help="Path to evaluation dataset JSON",
+    )
+    eval_parser.add_argument(
+        "--final-k",
+        type=int,
+        default=10,
+        help="Top-k results to evaluate against expected IDs",
+    )
+    eval_parser.set_defaults(func=cmd_eval)
 
     return parser
 

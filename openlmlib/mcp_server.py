@@ -9,6 +9,7 @@ from mcp.server.fastmcp import FastMCP
 from .library import (
     add_finding,
     delete_finding,
+    evaluate_dataset,
     get_finding,
     health,
     init_library,
@@ -141,6 +142,16 @@ def openlmlib_delete_finding(finding_id: str, confirm: bool = False) -> dict:
 def openlmlib_health() -> dict:
     """Return database and vector index health info."""
     return health(_settings_path())
+
+
+@mcp.tool()
+def openlmlib_evaluate_dataset(dataset_path: str = "config/eval_queries.json", final_k: int = 10) -> dict:
+    """Run retrieval evaluation metrics on a local dataset file."""
+    return evaluate_dataset(
+        settings_path=_settings_path(),
+        dataset_path=Path(dataset_path),
+        final_k=final_k,
+    )
 
 
 def main() -> None:

@@ -1,0 +1,25 @@
+[
+  {"query": "contextual retrieval embeddings top-20 failure", "expected_ids": ["fnd-cefb406ce479"], "project": "lmlib", "tags": ["retrieval"]},
+  {"query": "contextual BM25 retrieval improvement", "expected_ids": ["fnd-cefb406ce479"], "project": "lmlib", "tags": ["bm25"]},
+  {"query": "reranking reduced top-20 failures anthropic", "expected_ids": ["fnd-cefb406ce479"], "project": "lmlib", "tags": ["reranking"]},
+  {"query": "anthropic contextual retrieval metrics", "expected_ids": ["fnd-cefb406ce479"], "project": "lmlib"},
+  {"query": "contextual embeddings and retrieval quality", "expected_ids": ["fnd-cefb406ce479"], "project": "lmlib"},
+
+  {"query": "CRAG retrieval evaluator", "expected_ids": ["fnd-ecd8cca0820f"], "project": "lmlib", "tags": ["crag"]},
+  {"query": "decompose then recompose retrieval filtering", "expected_ids": ["fnd-ecd8cca0820f"], "project": "lmlib", "tags": ["filtering"]},
+  {"query": "corrective retrieval augmented generation quality gate", "expected_ids": ["fnd-ecd8cca0820f"], "project": "lmlib", "tags": ["quality-gate"]},
+  {"query": "when retrieval quality is poor CRAG", "expected_ids": ["fnd-ecd8cca0820f"], "project": "lmlib"},
+  {"query": "CRAG robustness for RAG", "expected_ids": ["fnd-ecd8cca0820f"], "project": "lmlib", "tags": ["rag"]},
+
+  {"query": "retrieval paper with contextual embeddings and bm25", "expected_ids": ["fnd-cefb406ce479"], "project": "lmlib", "tags": ["contextual-embeddings"]},
+  {"query": "retrieval paper with evaluator and decomposition", "expected_ids": ["fnd-ecd8cca0820f"], "project": "lmlib"},
+  {"query": "anthropic report contextual retrieval sep 2024", "expected_ids": ["fnd-cefb406ce479"], "project": "lmlib"},
+  {"query": "arxiv 2401.15884 retrieval evaluator", "expected_ids": ["fnd-ecd8cca0820f"], "project": "lmlib"},
+  {"query": "lmlib retrieval findings contextual retrieval", "expected_ids": ["fnd-cefb406ce479"], "project": "lmlib", "confidence_min": 0.7},
+
+  {"query": "lmlib retrieval findings crag quality", "expected_ids": ["fnd-ecd8cca0820f"], "project": "lmlib", "confidence_min": 0.7},
+  {"query": "retrieval reranking and contextual bm25", "expected_ids": ["fnd-cefb406ce479"], "project": "lmlib"},
+  {"query": "decompose-recompose irrelevant info filtering", "expected_ids": ["fnd-ecd8cca0820f"], "project": "lmlib"},
+  {"query": "contextual retrieval failure rate deltas", "expected_ids": ["fnd-cefb406ce479"], "project": "lmlib", "tags": ["retrieval", "rag"]},
+  {"query": "crag paper retrieval quality evaluator and web search", "expected_ids": ["fnd-ecd8cca0820f"], "project": "lmlib", "tags": ["retrieval", "crag"]}
+]

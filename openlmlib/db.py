@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import re
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
@@ -50,6 +51,19 @@ def init_db(conn: sqlite3.Connection) -> None:
           FOREIGN KEY (id) REFERENCES findings(id) ON DELETE CASCADE
         );
 
+                CREATE TABLE IF NOT EXISTS retrieval_usage (
+                    query_id TEXT NOT NULL,
+                    finding_id TEXT NOT NULL,
+                    rank INTEGER NOT NULL,
+                    cited INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    query TEXT NOT NULL,
+                    project TEXT,
+                    tags TEXT,
+                    PRIMARY KEY (query_id, finding_id),
+                    FOREIGN KEY (finding_id) REFERENCES findings(id) ON DELETE CASCADE
+                );
+
         CREATE VIRTUAL TABLE IF NOT EXISTS findings_fts USING fts5(
           id UNINDEXED,
           claim,
@@ -60,6 +74,9 @@ def init_db(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_findings_project ON findings(project);
         CREATE INDEX IF NOT EXISTS idx_findings_created_at ON findings(created_at);
         CREATE INDEX IF NOT EXISTS idx_findings_status ON findings(status);
+        CREATE INDEX IF NOT EXISTS idx_retrieval_usage_query_id ON retrieval_usage(query_id);
+        CREATE INDEX IF NOT EXISTS idx_retrieval_usage_finding_id ON retrieval_usage(finding_id);
+        CREATE INDEX IF NOT EXISTS idx_retrieval_usage_created_at ON retrieval_usage(created_at);
         """
     )
     _migrate_schema(conn)
@@ -85,6 +102,13 @@ def _json_load(value: Optional[str], default):
     if value is None:
         return default
     return json.loads(value)
+
+
+def _normalize_fts_query(query: str) -> str:
+    tokens = re.findall(r"[A-Za-z0-9_]+", query)
+    if not tokens:
+        return ""
+    return " ".join(tokens)
 
 
 def insert_finding(conn: sqlite3.Connection, finding: Finding) -> None:
@@ -209,6 +233,9 @@ def list_findings(conn: sqlite3.Connection, limit: int = 50, offset: int = 0) ->
 
 
 def search_findings(conn: sqlite3.Connection, query: str, limit: int = 10) -> List[Dict[str, str]]:
+    normalized_query = _normalize_fts_query(query)
+    if not normalized_query:
+        return []
     rows = conn.execute(
         """
         SELECT f.id, f.project, f.claim, f.confidence, f.created_at, f.status
@@ -218,7 +245,7 @@ def search_findings(conn: sqlite3.Connection, query: str, limit: int = 10) -> Li
         ORDER BY rank
         LIMIT ?
         """,
-        (query, limit),
+        (normalized_query, limit),
     ).fetchall()
 
     return [dict(row) for row in rows]
@@ -273,7 +300,11 @@ def search_findings_filtered(
     created_before: Optional[str] = None,
     confidence_min: Optional[float] = None,
 ) -> List[Dict[str, str]]:
-    params: List = [query]
+    normalized_query = _normalize_fts_query(query)
+    if not normalized_query:
+        return []
+
+    params: List = [normalized_query]
     sql = """
         SELECT f.id, f.project, f.claim, f.confidence, f.created_at, f.status, rank AS lexical_rank
         FROM findings_fts AS fts
@@ -334,3 +365,57 @@ def get_findings_by_embedding_ids(
         payload["caveats"] = _json_load(payload.get("caveats"), [])
         result[int(row["embedding_id"])] = payload
     return result
+
+
+def log_retrieval_usage(
+    conn: sqlite3.Connection,
+    query_id: str,
+    query: str,
+    created_at: str,
+    items: List[Dict[str, str]],
+    project: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+) -> None:
+    tags_json = _json_dump(tags or [])
+    with conn:
+        for rank, item in enumerate(items, start=1):
+            finding_id = str(item.get("id") or "").strip()
+            if not finding_id:
+                continue
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO retrieval_usage
+                  (query_id, finding_id, rank, cited, created_at, query, project, tags)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    query_id,
+                    finding_id,
+                    rank,
+                    1,
+                    created_at,
+                    query,
+                    project,
+                    tags_json,
+                ),
+            )
+
+
+def list_retrieval_usage(conn: sqlite3.Connection, query_id: str) -> List[Dict[str, str]]:
+    rows = conn.execute(
+        """
+        SELECT query_id, finding_id, rank, cited, created_at, query, project, tags
+        FROM retrieval_usage
+        WHERE query_id = ?
+        ORDER BY rank ASC
+        """,
+        (query_id,),
+    ).fetchall()
+
+    items: List[Dict[str, str]] = []
+    for row in rows:
+        payload = dict(row)
+        payload["tags"] = _json_load(payload.get("tags"), [])
+        payload["cited"] = bool(payload.get("cited"))
+        items.append(payload)
+    return items

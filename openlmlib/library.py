@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import json
 import shutil
+import uuid
 from datetime import datetime, timezone
 
 from .settings import load_settings, write_default_settings
@@ -12,6 +13,7 @@ from .schema import (
     Finding,
     FindingAudit,
     FindingText,
+    ValidationIssue,
     compute_content_hash,
     make_embedding_id,
     new_finding_id,
@@ -21,6 +23,7 @@ from .embeddings import EmbeddingCache, SentenceTransformerEmbedder
 from .embeddings import build_contextual_chunk
 from .retrieval import RetrievalEngine, RetrievalFilters
 from .sanitization import render_untrusted_context
+from .evaluation import evaluate_retrieval, faithfulness_score, relevance_alignment
 from .vector_store import create_vector_store, load_vector_store, save_vector_store
 from .write_gate import WriteGate
 
@@ -298,6 +301,22 @@ def add_finding(
     )
 
     issues = gate.validate(claim, evidence, reasoning, confidence)
+    adjusted_confidence = gate.adjust_confidence(
+        claim=claim,
+        evidence=evidence,
+        proposed_confidence=confidence,
+        issues=issues,
+    )
+    if adjusted_confidence < settings.write_gate.min_confidence:
+        issues.append(
+            ValidationIssue(
+                field="confidence",
+                message=(
+                    "Validator-adjusted confidence "
+                    f"{adjusted_confidence:.2f} below threshold {settings.write_gate.min_confidence:.2f}"
+                ),
+            )
+        )
     issues_payload = _serialize_issues(issues)
     if not gate.is_allowed(issues):
         conn.close()
@@ -312,7 +331,10 @@ def add_finding(
         evidence_provided=bool(evidence),
         reasoning_length=len(reasoning.strip()),
         failure_log=[],
-        confidence_history=[{"timestamp": created_at, "confidence": confidence, "reason": "initial"}],
+        confidence_history=[
+            {"timestamp": created_at, "confidence": confidence, "reason": "proposed"},
+            {"timestamp": created_at, "confidence": adjusted_confidence, "reason": "validator_adjusted"},
+        ],
     )
     text = FindingText(tags=tags, evidence=evidence, caveats=caveats, reasoning=reasoning)
 
@@ -320,7 +342,7 @@ def add_finding(
         id=finding_id,
         project=project,
         claim=claim,
-        confidence=confidence,
+        confidence=adjusted_confidence,
         created_at=created_at,
         embedding_id=embedding_id,
         content_hash="",
@@ -369,6 +391,7 @@ def add_finding(
     return {
         "status": "ok",
         "id": finding.id,
+        "confidence": finding.confidence,
         "issues": issues_payload,
     }
 
@@ -444,11 +467,25 @@ def retrieve_findings(
         lexical_k=lexical_k,
         final_k=final_k,
     )
+
+    query_id = "qry-" + uuid.uuid4().hex[:12]
+    query_created_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    db.log_retrieval_usage(
+        conn,
+        query_id=query_id,
+        query=query,
+        created_at=query_created_at,
+        items=payload["items"],
+        project=project,
+        tags=tags,
+    )
+
     cache.save()
     conn.close()
 
     return {
         "status": "ok",
+        "query_id": query_id,
         "query": payload["query"],
         "filters": payload["filters"],
         "items": payload["items"],
@@ -478,10 +515,131 @@ def retrieve_prompt_context(
     items = retrieval.get("items", [])
     return {
         "status": "ok",
+        "query_id": retrieval.get("query_id"),
         "query": query,
         "items": items,
         "safe_context": render_untrusted_context(items),
         "meta": retrieval.get("meta", {}),
+    }
+
+
+def evaluate_dataset(
+    settings_path: Path,
+    dataset_path: Path,
+    final_k: int = 10,
+) -> Dict[str, Any]:
+    settings = load_settings(settings_path)
+    if not dataset_path.exists():
+        return {
+            "status": "error",
+            "message": f"Dataset not found: {dataset_path}",
+        }
+
+    try:
+        dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {
+            "status": "error",
+            "message": f"Failed to parse dataset: {exc}",
+        }
+
+    if not isinstance(dataset, list):
+        return {
+            "status": "error",
+            "message": "Dataset must be a list of query entries.",
+        }
+
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+    cache = EmbeddingCache(settings.embeddings_cache_path)
+    embedder = SentenceTransformerEmbedder(
+        settings.embedding_model,
+        cache=cache,
+        normalize=settings.embedding_metric == "cosine",
+    )
+    store = _load_store(settings)
+    engine = RetrievalEngine(conn=conn, embedder=embedder, vector_store=store, settings=settings)
+
+    query_results: List[Dict[str, Any]] = []
+    precision5_values: List[float] = []
+    recall5_values: List[float] = []
+    recall10_values: List[float] = []
+    faithfulness_values: List[float] = []
+    alignment_values: List[float] = []
+
+    for idx, row in enumerate(dataset):
+        if not isinstance(row, dict):
+            continue
+        query = str(row.get("query") or "").strip()
+        expected_ids = [str(value) for value in (row.get("expected_ids") or [])]
+        if not query:
+            continue
+
+        filters = RetrievalFilters(
+            project=row.get("project"),
+            tags=row.get("tags") or None,
+            created_after=row.get("created_after"),
+            created_before=row.get("created_before"),
+            confidence_min=row.get("confidence_min"),
+        )
+        payload = engine.search(
+            query=query,
+            filters=filters,
+            final_k=max(10, final_k),
+        )
+        items = payload.get("items", [])
+        retrieved_ids = [str(item.get("id")) for item in items]
+
+        metrics = evaluate_retrieval(expected_ids=expected_ids, retrieved_ids=retrieved_ids, k_values=(5, 10))
+        p5 = float(metrics.precision_at_k.get(5, 0.0))
+        r5 = float(metrics.recall_at_k.get(5, 0.0))
+        r10 = float(metrics.recall_at_k.get(10, 0.0))
+        precision5_values.append(p5)
+        recall5_values.append(r5)
+        recall10_values.append(r10)
+
+        answer = str(row.get("answer") or "")
+        faith: Optional[float] = None
+        if answer:
+            faith = float(faithfulness_score(answer, items))
+            faithfulness_values.append(faith)
+        alignment = float(relevance_alignment(query, items, embedder=embedder))
+        alignment_values.append(alignment)
+
+        query_results.append(
+            {
+                "index": idx,
+                "query": query,
+                "expected_count": len(expected_ids),
+                "retrieved_count": len(retrieved_ids),
+                "precision_at_5": p5,
+                "recall_at_5": r5,
+                "recall_at_10": r10,
+                "faithfulness": faith,
+                "alignment": alignment,
+            }
+        )
+
+    cache.save()
+    conn.close()
+
+    def _avg(values: List[float]) -> float:
+        if not values:
+            return 0.0
+        return sum(values) / len(values)
+
+    return {
+        "status": "ok",
+        "dataset_path": str(dataset_path),
+        "queries_evaluated": len(query_results),
+        "summary": {
+            "precision_at_5": _avg(precision5_values),
+            "recall_at_5": _avg(recall5_values),
+            "recall_at_10": _avg(recall10_values),
+            "faithfulness": _avg(faithfulness_values) if faithfulness_values else None,
+            "alignment": _avg(alignment_values),
+        },
+        "results": query_results,
     }
 
 

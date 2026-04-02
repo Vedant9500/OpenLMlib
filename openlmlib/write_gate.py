@@ -140,6 +140,31 @@ class WriteGate:
 
         return issues
 
+    def adjust_confidence(
+        self,
+        claim: str,
+        evidence: List[str],
+        proposed_confidence: float,
+        issues: Optional[List[ValidationIssue]] = None,
+    ) -> float:
+        adjusted = float(proposed_confidence)
+        if self.embedder is not None and evidence:
+            claim_vec = self.embedder.encode([claim])[0]
+            evidence_vec = self.embedder.encode([" ".join(evidence)])[0]
+            sim = _cosine_similarity(claim_vec, evidence_vec)
+            adjusted = (0.7 * adjusted) + (0.3 * sim)
+
+        for issue in issues or []:
+            if issue.severity != "warning":
+                continue
+            if issue.field == "contradiction":
+                adjusted -= 0.1
+            elif issue.field == "novelty":
+                adjusted -= 0.05
+
+        adjusted = max(0.0, min(1.0, adjusted))
+        return round(adjusted, 3)
+
     @staticmethod
     def is_allowed(issues: List[ValidationIssue]) -> bool:
         return all(issue.severity != "error" for issue in issues)
