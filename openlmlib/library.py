@@ -294,6 +294,7 @@ def add_finding(
         novelty_top_k=settings.novelty.top_k,
         embedder=embedder,
         vector_store=store,
+        finding_lookup=lambda embedding_id: db.get_findings_by_embedding_ids(conn, [embedding_id]).get(embedding_id),
     )
 
     issues = gate.validate(claim, evidence, reasoning, confidence)

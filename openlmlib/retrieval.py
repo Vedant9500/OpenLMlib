@@ -94,7 +94,7 @@ class RetrievalEngine:
                 continue
             if not _passes_filters(row, filters):
                 continue
-            item = _to_result(row)
+            item = _to_result(row, validity_days=self._settings.retrieval.validity_days)
             item["semantic_score"] = float(score)
             items.append(item)
             if len(items) >= semantic_k:
@@ -120,7 +120,7 @@ class RetrievalEngine:
 
         items: List[Dict[str, Any]] = []
         for row in rows:
-            item = _to_result(row)
+            item = _to_result(row, validity_days=self._settings.retrieval.validity_days)
             lexical_rank = float(row.get("lexical_rank", 0.0))
             item["lexical_score"] = -lexical_rank
             items.append(item)
@@ -160,18 +160,22 @@ class RetrievalEngine:
         return merged
 
 
-def _to_result(row: Dict[str, Any]) -> Dict[str, Any]:
+def _to_result(row: Dict[str, Any], validity_days: int = 90) -> Dict[str, Any]:
+    created_at = row.get("created_at")
+    stale, age_days = _staleness(created_at, validity_days=validity_days)
     return {
         "id": row.get("id"),
         "project": row.get("project"),
         "claim": row.get("claim"),
         "confidence": float(row.get("confidence") or 0.0),
-        "created_at": row.get("created_at"),
+        "created_at": created_at,
         "status": row.get("status"),
         "tags": row.get("tags", []),
         "evidence": row.get("evidence", []),
         "reasoning": row.get("reasoning", ""),
         "caveats": row.get("caveats", []),
+        "pending_review": stale,
+        "age_days": age_days,
     }
 
 
@@ -224,3 +228,11 @@ def _passes_filters(row: Dict[str, Any], filters: RetrievalFilters) -> bool:
             return False
 
     return True
+
+
+def _staleness(created_at: Optional[str], validity_days: int = 90) -> tuple[bool, int]:
+    created = _parse_utc(created_at or "")
+    if created is None:
+        return (False, 0)
+    age_days = int(max(0.0, (datetime.now(timezone.utc) - created).total_seconds() / 86400.0))
+    return (age_days >= validity_days, age_days)

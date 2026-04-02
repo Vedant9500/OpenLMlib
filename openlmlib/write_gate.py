@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Iterable, List, Optional
+from typing import Callable, Dict, Iterable, List, Optional
 import math
+import re
 
 from .schema import ValidationIssue
 
@@ -27,16 +28,24 @@ class WriteGate:
         min_claim_evidence_sim: float,
         novelty_similarity_threshold: float,
         novelty_top_k: int,
+        contradiction_similarity_threshold: Optional[float] = None,
         embedder=None,
         vector_store=None,
+        finding_lookup: Optional[Callable[[int], Optional[Dict[str, str]]]] = None,
     ) -> None:
         self.min_confidence = min_confidence
         self.min_reasoning_length = min_reasoning_length
         self.min_claim_evidence_sim = min_claim_evidence_sim
         self.novelty_similarity_threshold = novelty_similarity_threshold
+        self.contradiction_similarity_threshold = (
+            0.8
+            if contradiction_similarity_threshold is None
+            else contradiction_similarity_threshold
+        )
         self.novelty_top_k = novelty_top_k
         self.embedder = embedder
         self.vector_store = vector_store
+        self.finding_lookup = finding_lookup
 
     def validate(
         self,
@@ -108,8 +117,56 @@ class WriteGate:
                             )
                         )
 
+                if self.finding_lookup is not None:
+                    for match_id, match_score in matches:
+                        if match_score < self.contradiction_similarity_threshold:
+                            continue
+                        existing = self.finding_lookup(int(match_id))
+                        if not existing:
+                            continue
+                        existing_claim = str(existing.get("claim") or "")
+                        if _claims_contradict(claim, existing_claim):
+                            issues.append(
+                                ValidationIssue(
+                                    field="contradiction",
+                                    message=(
+                                        "Potential contradiction with existing finding "
+                                        f"(id={existing.get('id')}, score={match_score:.2f})"
+                                    ),
+                                    severity="warning",
+                                )
+                            )
+                            break
+
         return issues
 
     @staticmethod
     def is_allowed(issues: List[ValidationIssue]) -> bool:
         return all(issue.severity != "error" for issue in issues)
+
+
+_STOPWORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "in", "is", "it", "of", "on", "or", "that", "the", "to", "with",
+}
+_NEGATION_TERMS = {"not", "no", "never", "without", "cannot", "can't", "fails", "failed", "avoid"}
+
+
+def _tokenize(text: str) -> List[str]:
+    return [token for token in re.findall(r"[a-z0-9']+", text.lower()) if token not in _STOPWORDS]
+
+
+def _has_negation(tokens: List[str]) -> bool:
+    return any(token in _NEGATION_TERMS for token in tokens)
+
+
+def _claims_contradict(candidate: str, existing: str) -> bool:
+    candidate_tokens = _tokenize(candidate)
+    existing_tokens = _tokenize(existing)
+    if not candidate_tokens or not existing_tokens:
+        return False
+
+    shared = set(candidate_tokens).intersection(existing_tokens)
+    if len(shared) < 3:
+        return False
+
+    return _has_negation(candidate_tokens) != _has_negation(existing_tokens)

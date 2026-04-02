@@ -25,6 +25,7 @@ class RetrievalSettings:
     lexical_k: int = 20
     final_k: int = 5
     semantic_oversample_factor: int = 3
+    validity_days: int = 90
 
 
 @dataclass
@@ -79,6 +80,7 @@ class Settings:
                 lexical_k=int(retrieval_data.get("lexical_k", 20)),
                 final_k=int(retrieval_data.get("final_k", 5)),
                 semantic_oversample_factor=int(retrieval_data.get("semantic_oversample_factor", 3)),
+                validity_days=int(retrieval_data.get("validity_days", 90)),
             ),
         )
 
@@ -107,6 +109,7 @@ DEFAULT_SETTINGS_DATA = {
         "lexical_k": 20,
         "final_k": 5,
         "semantic_oversample_factor": 3,
+        "validity_days": 90,
     },
 }
 

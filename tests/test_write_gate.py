@@ -19,6 +19,16 @@ class SplitEmbedder:
         return vectors
 
 
+class SimpleVectorStore:
+    dim = 2
+
+    def count(self):
+        return 1
+
+    def search(self, vec, top_k):
+        return [(101, 0.91)]
+
+
 class TestWriteGate(unittest.TestCase):
     def test_rejects_low_confidence(self):
         gate = WriteGate(
@@ -54,6 +64,31 @@ class TestWriteGate(unittest.TestCase):
             embedder=FixedEmbedder(),
         )
         issues = gate.validate("claim", ["evidence"], "reasoning text", 0.9)
+        self.assertTrue(gate.is_allowed(issues))
+
+    def test_flags_potential_contradiction(self):
+        gate = WriteGate(
+            min_confidence=0.6,
+            min_reasoning_length=10,
+            min_claim_evidence_sim=0.7,
+            novelty_similarity_threshold=0.85,
+            novelty_top_k=5,
+            embedder=FixedEmbedder(),
+            vector_store=SimpleVectorStore(),
+            finding_lookup=lambda embedding_id: {
+                "id": "f-1",
+                "claim": "Redis caching does not reduce API latency under production load",
+            },
+        )
+
+        issues = gate.validate(
+            "Redis caching reduces API latency under production load",
+            ["evidence"],
+            "reasoning text",
+            0.9,
+        )
+        contradiction_issues = [issue for issue in issues if issue.field == "contradiction"]
+        self.assertTrue(contradiction_issues)
         self.assertTrue(gate.is_allowed(issues))
 
 

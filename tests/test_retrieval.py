@@ -151,6 +151,39 @@ class TestRetrieval(unittest.TestCase):
 
             self.assertEqual([item["id"] for item in result["items"]], ["f-1"])
 
+    def test_marks_old_findings_pending_review(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "findings.db"
+            conn = db.connect(db_path)
+            db.init_db(conn)
+
+            _insert_finding(
+                conn,
+                finding_id="f-old",
+                embedding_id=303,
+                project="glassbox",
+                claim="Legacy cache behavior",
+                tags=["cache"],
+                confidence=0.9,
+                created_at="2025-10-01T00:00:00Z",
+            )
+
+            store = NumpyVectorStore(dim=2, metric="cosine")
+            store.add([303], [[1.0, 0.0]])
+
+            engine = RetrievalEngine(
+                conn=conn,
+                embedder=DummyEmbedder(),
+                vector_store=store,
+                settings=DummySettings(),
+            )
+
+            result = engine.search("cache latency")
+            conn.close()
+
+            self.assertEqual(result["items"][0]["id"], "f-old")
+            self.assertTrue(result["items"][0]["pending_review"])
+
 
 if __name__ == "__main__":
     unittest.main()
