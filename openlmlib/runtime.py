@@ -78,6 +78,32 @@ def get_runtime(settings_path: Path) -> RuntimeState:
         return state
 
 
+def shutdown_runtime(settings_path: Path) -> bool:
+    """
+    Shut down and remove a cached runtime.
+
+    Closes the SQLite connection and removes the runtime from the cache.
+    The next call to get_runtime() will create a fresh runtime with
+    connections to the current files on disk.
+
+    Returns True if a runtime was found and shut down, False otherwise.
+    """
+    key = _runtime_key(settings_path)
+    with _RUNTIME_LOCK:
+        state = _RUNTIMES.pop(key, None)
+        if state is None:
+            return False
+
+    # Close outside the lock to avoid blocking other threads.
+    # Connection may already be closed in edge cases.
+    try:
+        state.conn.close()
+    except Exception:
+        pass
+
+    return True
+
+
 def mark_dirty(state: RuntimeState, vector: bool = False, cache: bool = False) -> None:
     if vector:
         state.dirty_vector = True

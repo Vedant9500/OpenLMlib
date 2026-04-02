@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import json
 import shutil
+import sqlite3
 import uuid
 from datetime import datetime, timezone
 
@@ -112,8 +113,21 @@ def backup_library(settings_path: Path, output_dir: Optional[Path] = None) -> Di
     copied_dirs: List[str] = []
 
     if settings.db_path.exists():
+        # Use SQLite Online Backup API for WAL-mode safety.
+        # This creates a consistent snapshot even with concurrent connections,
+        # without needing to checkpoint or copy -wal/-shm companion files.
         db_dest = backup_dir / "findings.db"
-        shutil.copy2(settings.db_path, db_dest)
+        try:
+            src_conn = sqlite3.connect(str(settings.db_path))
+            dest_conn = sqlite3.connect(str(db_dest))
+            try:
+                src_conn.backup(dest_conn)
+            finally:
+                dest_conn.close()
+                src_conn.close()
+        except sqlite3.DatabaseError:
+            # Fallback for corrupted or non-SQLite files — copy raw bytes.
+            shutil.copy2(settings.db_path, db_dest)
         copied_files.append(str(db_dest))
 
     if settings.vector_index_path.exists():
@@ -200,6 +214,11 @@ def restore_library(
         if settings.findings_dir.exists():
             shutil.rmtree(settings.findings_dir)
         shutil.copytree(findings_source, settings.findings_dir)
+
+    # Invalidate the cached runtime so the next get_runtime() creates fresh
+    # connections to the restored files on disk.
+    from .runtime import shutdown_runtime
+    shutdown_runtime(settings_path)
 
     return {
         "status": "ok",
