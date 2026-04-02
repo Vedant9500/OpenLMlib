@@ -14,6 +14,12 @@ def connect(db_path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
+    conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute("PRAGMA synchronous = NORMAL;")
+    conn.execute("PRAGMA busy_timeout = 5000;")
+    conn.execute("PRAGMA temp_store = MEMORY;")
+    conn.execute("PRAGMA cache_size = -20000;")
+    conn.execute("PRAGMA wal_autocheckpoint = 4000;")
     return conn
 
 
@@ -160,10 +166,9 @@ def insert_finding(conn: sqlite3.Connection, finding: Finding) -> None:
                 _json_dump(audit.confidence_history),
             ),
         )
-        conn.execute("DELETE FROM findings_fts WHERE id = ?", (finding.id,))
         conn.execute(
             """
-            INSERT INTO findings_fts (id, claim, evidence, reasoning)
+            INSERT OR REPLACE INTO findings_fts (id, claim, evidence, reasoning)
             VALUES (?, ?, ?, ?)
             """,
             (finding.id, finding.claim, " ".join(text.evidence), text.reasoning),

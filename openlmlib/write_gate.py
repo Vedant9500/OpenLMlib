@@ -163,7 +163,7 @@ class WriteGate:
                 adjusted -= 0.05
 
         adjusted = max(0.0, min(1.0, adjusted))
-        return round(adjusted, 3)
+        return float(round(float(adjusted), 3))
 
     @staticmethod
     def is_allowed(issues: List[ValidationIssue]) -> bool:

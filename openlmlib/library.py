@@ -24,6 +24,7 @@ from .embeddings import build_contextual_chunk
 from .retrieval import RetrievalEngine, RetrievalFilters
 from .sanitization import render_untrusted_context
 from .evaluation import evaluate_retrieval, faithfulness_score, relevance_alignment
+from .runtime import get_runtime, mark_dirty, maybe_flush
 from .vector_store import create_vector_store, load_vector_store, save_vector_store
 from .write_gate import WriteGate
 
@@ -261,17 +262,15 @@ def add_finding(
             "message": "Set confirm=true to add a finding.",
         }
 
-    settings = load_settings(settings_path)
+    runtime = get_runtime(settings_path)
+    settings = runtime.settings
+    conn = runtime.conn
     settings.findings_dir.mkdir(parents=True, exist_ok=True)
-
-    conn = db.connect(settings.db_path)
-    db.init_db(conn)
 
     finding_id = finding_id or new_finding_id()
     embedding_id = make_embedding_id(finding_id)
     existing_id = db.get_finding_by_embedding_id(conn, embedding_id)
     if existing_id and existing_id != finding_id:
-        conn.close()
         return {
             "status": "error",
             "message": "embedding_id collision detected. Try a different id.",
@@ -281,13 +280,8 @@ def add_finding(
     tags = tags or []
     caveats = caveats or []
 
-    cache = EmbeddingCache(settings.embeddings_cache_path)
-    embedder = SentenceTransformerEmbedder(
-        settings.embedding_model,
-        cache=cache,
-        normalize=settings.embedding_metric == "cosine",
-    )
-    store = _load_store(settings)
+    embedder = runtime.embedder
+    store = runtime.store
 
     gate = WriteGate(
         min_confidence=settings.write_gate.min_confidence,
@@ -300,7 +294,8 @@ def add_finding(
         finding_lookup=lambda embedding_id: db.get_findings_by_embedding_ids(conn, [embedding_id]).get(embedding_id),
     )
 
-    issues = gate.validate(claim, evidence, reasoning, confidence)
+    with runtime.write_lock:
+        issues = gate.validate(claim, evidence, reasoning, confidence)
     adjusted_confidence = gate.adjust_confidence(
         claim=claim,
         evidence=evidence,
@@ -319,7 +314,6 @@ def add_finding(
         )
     issues_payload = _serialize_issues(issues)
     if not gate.is_allowed(issues):
-        conn.close()
         return {
             "status": "rejected",
             "issues": issues_payload,
@@ -355,11 +349,6 @@ def add_finding(
 
     json_path = settings.findings_dir / f"{finding.id}.json"
     try:
-        json_path.write_text(
-            json.dumps(finding.to_content_dict(), indent=2),
-            encoding="utf-8",
-        )
-        db.insert_finding(conn, finding)
         embedding_text = build_contextual_chunk(
             claim=finding.claim,
             evidence=finding.text.evidence,
@@ -367,26 +356,33 @@ def add_finding(
             full_text=finding.full_text,
         )
         embedding_vec = embedder.encode([embedding_text])[0]
-        store.add([finding.embedding_id], [embedding_vec])
-        save_vector_store(store, settings.vector_index_path, settings.vector_meta_path)
-        cache.save()
+
+        json_path.write_text(
+            json.dumps(finding.to_content_dict(), indent=2),
+            encoding="utf-8",
+        )
+        with runtime.write_lock:
+            db.insert_finding(conn, finding)
+            store.add([finding.embedding_id], [embedding_vec])
+            mark_dirty(runtime, vector=True, cache=True)
+            maybe_flush(runtime)
     except Exception as exc:
-        db.delete_finding(conn, finding.id)
+        with runtime.write_lock:
+            db.delete_finding(conn, finding.id)
         try:
-            store.delete([finding.embedding_id])
-            save_vector_store(store, settings.vector_index_path, settings.vector_meta_path)
+            with runtime.write_lock:
+                store.delete([finding.embedding_id])
+                mark_dirty(runtime, vector=True)
+                maybe_flush(runtime, force=True)
         except Exception:
             pass
         if json_path.exists():
             json_path.unlink()
-        conn.close()
         return {
             "status": "error",
             "message": f"failed to add finding: {exc}",
             "issues": issues_payload,
         }
-    finally:
-        conn.close()
 
     return {
         "status": "ok",
@@ -440,33 +436,27 @@ def retrieve_findings(
     lexical_k: Optional[int] = None,
     final_k: Optional[int] = None,
 ) -> Dict[str, Any]:
-    settings = load_settings(settings_path)
-
-    conn = db.connect(settings.db_path)
-    db.init_db(conn)
-
-    cache = EmbeddingCache(settings.embeddings_cache_path)
-    embedder = SentenceTransformerEmbedder(
-        settings.embedding_model,
-        cache=cache,
-        normalize=settings.embedding_metric == "cosine",
-    )
-    store = _load_store(settings)
+    runtime = get_runtime(settings_path)
+    settings = runtime.settings
+    conn = runtime.conn
+    embedder = runtime.embedder
+    store = runtime.store
     engine = RetrievalEngine(conn=conn, embedder=embedder, vector_store=store, settings=settings)
 
-    payload = engine.search(
-        query=query,
-        filters=RetrievalFilters(
-            project=project,
-            tags=tags,
-            created_after=created_after,
-            created_before=created_before,
-            confidence_min=confidence_min,
-        ),
-        semantic_k=semantic_k,
-        lexical_k=lexical_k,
-        final_k=final_k,
-    )
+    with runtime.write_lock:
+        payload = engine.search(
+            query=query,
+            filters=RetrievalFilters(
+                project=project,
+                tags=tags,
+                created_after=created_after,
+                created_before=created_before,
+                confidence_min=confidence_min,
+            ),
+            semantic_k=semantic_k,
+            lexical_k=lexical_k,
+            final_k=final_k,
+        )
 
     query_id = "qry-" + uuid.uuid4().hex[:12]
     query_created_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -480,8 +470,7 @@ def retrieve_findings(
         tags=tags,
     )
 
-    cache.save()
-    conn.close()
+    maybe_flush(runtime)
 
     return {
         "status": "ok",
@@ -528,7 +517,8 @@ def evaluate_dataset(
     dataset_path: Path,
     final_k: int = 10,
 ) -> Dict[str, Any]:
-    settings = load_settings(settings_path)
+    runtime = get_runtime(settings_path)
+    settings = runtime.settings
     if not dataset_path.exists():
         return {
             "status": "error",
@@ -549,15 +539,9 @@ def evaluate_dataset(
             "message": "Dataset must be a list of query entries.",
         }
 
-    conn = db.connect(settings.db_path)
-    db.init_db(conn)
-    cache = EmbeddingCache(settings.embeddings_cache_path)
-    embedder = SentenceTransformerEmbedder(
-        settings.embedding_model,
-        cache=cache,
-        normalize=settings.embedding_metric == "cosine",
-    )
-    store = _load_store(settings)
+    conn = runtime.conn
+    embedder = runtime.embedder
+    store = runtime.store
     engine = RetrievalEngine(conn=conn, embedder=embedder, vector_store=store, settings=settings)
 
     query_results: List[Dict[str, Any]] = []
@@ -582,11 +566,12 @@ def evaluate_dataset(
             created_before=row.get("created_before"),
             confidence_min=row.get("confidence_min"),
         )
-        payload = engine.search(
-            query=query,
-            filters=filters,
-            final_k=max(10, final_k),
-        )
+        with runtime.write_lock:
+            payload = engine.search(
+                query=query,
+                filters=filters,
+                final_k=max(10, final_k),
+            )
         items = payload.get("items", [])
         retrieved_ids = [str(item.get("id")) for item in items]
 
@@ -620,8 +605,7 @@ def evaluate_dataset(
             }
         )
 
-    cache.save()
-    conn.close()
+    maybe_flush(runtime)
 
     def _avg(values: List[float]) -> float:
         if not values:

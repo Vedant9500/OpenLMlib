@@ -7,6 +7,23 @@ from openlmlib.schema import Finding, FindingAudit, FindingText, compute_content
 
 
 class TestStorage(unittest.TestCase):
+    def test_connect_sets_perf_pragmas(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "findings.db"
+            conn = db.connect(db_path)
+            journal_mode = conn.execute("PRAGMA journal_mode;").fetchone()[0]
+            synchronous = conn.execute("PRAGMA synchronous;").fetchone()[0]
+            temp_store = conn.execute("PRAGMA temp_store;").fetchone()[0]
+            cache_size = conn.execute("PRAGMA cache_size;").fetchone()[0]
+            wal_autocheckpoint = conn.execute("PRAGMA wal_autocheckpoint;").fetchone()[0]
+            conn.close()
+
+            self.assertEqual(str(journal_mode).lower(), "wal")
+            self.assertEqual(int(synchronous), 1)
+            self.assertEqual(int(temp_store), 2)
+            self.assertEqual(int(cache_size), -20000)
+            self.assertEqual(int(wal_autocheckpoint), 4000)
+
     def test_insert_and_get(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "findings.db"
