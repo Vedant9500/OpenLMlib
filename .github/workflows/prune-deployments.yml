@@ -1,0 +1,59 @@
+name: Prune Deployments
+
+on:
+  schedule:
+    - cron: '0 0 * * 0' # Runs every Sunday at midnight
+  workflow_dispatch: # Allows you to run it manually right away
+
+permissions:
+  deployments: write
+
+jobs:
+  prune-deployments:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prune failed and old deployments
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            
+            // Fetch all deployments
+            const deployments = await github.rest.repos.listDeployments({
+              owner,
+              repo,
+              per_page: 100
+            });
+            
+            console.log(`Found ${deployments.data.length} deployments.`);
+            
+            for (const deployment of deployments.data) {
+              const statuses = await github.rest.repos.listDeploymentStatuses({
+                owner,
+                repo,
+                deployment_id: deployment.id,
+              });
+              
+              const latestStatus = statuses.data[0];
+              const state = latestStatus ? latestStatus.state : 'unknown';
+              
+              // We want to delete if it failed, or if it is an older inactive deployment
+              if (['error', 'failure', 'inactive'].includes(state)) {
+                console.log(`Deleting deployment ${deployment.id} (Environment: ${deployment.environment}) - State: ${state}`);
+                try {
+                  await github.rest.repos.deleteDeployment({
+                    owner,
+                    repo,
+                    deployment_id: deployment.id,
+                  });
+                } catch (error) {
+                  console.error(`Failed to delete deployment ${deployment.id}: ${error.message}`);
+                }
+              } else {
+                console.log(`Keeping deployment ${deployment.id} (Environment: ${deployment.environment}) - State: ${state}`);
+                
+                // If you want to force delete successful but old deployments manually, uncomment the line below for your very first run:
+                // await github.rest.repos.deleteDeployment({ owner, repo, deployment_id: deployment.id });
+              }
+            }
