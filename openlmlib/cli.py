@@ -20,7 +20,12 @@ from .library import (
     retrieve_findings,
     retrieve_prompt_context,
 )
-from .mcp_setup import available_clients, install_client_configs, normalize_client_ids
+from .mcp_setup import (
+    available_clients,
+    install_client_configs,
+    install_or_refresh_default_client_configs,
+    normalize_client_ids,
+)
 from .settings import load_settings, resolve_global_settings_path
 
 
@@ -43,12 +48,12 @@ def _run_mcp_setup(settings_path: Path, requested_client_ids: list[str]) -> dict
         return install_client_configs(requested_client_ids, settings_path=settings_path)
 
     if not _interactive_terminal():
-        return {
-            "status": "skipped",
-            "message": "Non-interactive shell; run openlmlib mcp-config later to install MCP globally.",
-            "results": [],
-            "settings_path": str(settings_path),
-        }
+        result = install_or_refresh_default_client_configs(settings_path=settings_path)
+        result["message"] = (
+            "Non-interactive shell; refreshed MCP configs for existing clients "
+            "(or installed VS Code default)."
+        )
+        return result
 
     from .tui_setup import run_interactive_setup
 
@@ -200,7 +205,10 @@ def cmd_mcp_config(args) -> int:
         print(f"ERROR: {exc}")
         return 1
 
-    result = _run_mcp_setup(Path(args.settings), requested_client_ids)
+    if args.refresh_defaults and not requested_client_ids:
+        result = install_or_refresh_default_client_configs(settings_path=Path(args.settings))
+    else:
+        result = _run_mcp_setup(Path(args.settings), requested_client_ids)
     if not (_interactive_terminal() and not requested_client_ids):
         print(json.dumps(result, indent=2))
     return 0 if result.get("status") in {"ok", "skipped"} else 1
@@ -387,6 +395,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--list-ides",
         action="store_true",
         help="List supported IDE/client identifiers and exit.",
+    )
+    mcp_config_parser.add_argument(
+        "--refresh-defaults",
+        action="store_true",
+        help="Refresh existing client MCP entries, or install VS Code config if none exist.",
     )
     mcp_config_parser.set_defaults(func=cmd_mcp_config)
 

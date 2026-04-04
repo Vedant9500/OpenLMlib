@@ -1,9 +1,14 @@
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from openlmlib.mcp_setup import install_client_config, normalize_client_ids
+from openlmlib.mcp_setup import (
+    install_client_config,
+    install_or_refresh_default_client_configs,
+    normalize_client_ids,
+)
 
 
 class TestMcpSetup(unittest.TestCase):
@@ -28,10 +33,10 @@ class TestMcpSetup(unittest.TestCase):
             payload = json.loads(config_path.read_text(encoding="utf-8"))
             self.assertIn("servers", payload)
             self.assertNotIn("mcpServers", payload)
-            self.assertEqual(payload["servers"]["openlmlib"]["command"], "openlmlib-mcp")
+            self.assertEqual(payload["servers"]["openlmlib"]["command"], sys.executable)
             self.assertEqual(
                 payload["servers"]["openlmlib"]["args"],
-                ["--settings", str(settings_path.resolve())],
+                ["-m", "openlmlib.mcp_server", "--settings", str(settings_path.resolve())],
             )
 
     def test_install_vscode_global_config_migrates_old_root_key(self):
@@ -116,6 +121,41 @@ class TestMcpSetup(unittest.TestCase):
             payload = json.loads(config_path.read_text(encoding="utf-8"))
             self.assertIn("mcpServers", payload)
             self.assertIn("openlmlib", payload["mcpServers"])
+
+    def test_refresh_defaults_prefers_existing_client_configs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            settings_path = home / ".openlmlib" / "config" / "settings.json"
+
+            # Seed only Cursor config to emulate an existing install.
+            cursor_path = home / ".cursor" / "mcp.json"
+            cursor_path.parent.mkdir(parents=True, exist_ok=True)
+            cursor_path.write_text("{}", encoding="utf-8")
+
+            result = install_or_refresh_default_client_configs(
+                settings_path=settings_path,
+                platform="linux",
+                home=home,
+            )
+
+            self.assertEqual(result["status"], "ok")
+            configured = {item["client"] for item in result["results"]}
+            self.assertEqual(configured, {"cursor"})
+
+    def test_refresh_defaults_falls_back_to_vscode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            settings_path = home / ".openlmlib" / "config" / "settings.json"
+
+            result = install_or_refresh_default_client_configs(
+                settings_path=settings_path,
+                platform="linux",
+                home=home,
+            )
+
+            self.assertEqual(result["status"], "ok")
+            configured = {item["client"] for item in result["results"]}
+            self.assertEqual(configured, {"vscode"})
 
 
 if __name__ == "__main__":

@@ -69,10 +69,12 @@ def global_settings_path() -> Path:
 
 
 def build_server_entry(settings_path: Path) -> Dict[str, object]:
+    import sys
+
     resolved_settings = str(Path(settings_path).expanduser().resolve(strict=False))
     return {
-        "command": "openlmlib-mcp",
-        "args": ["--settings", resolved_settings],
+        "command": sys.executable,
+        "args": ["-m", "openlmlib.mcp_server", "--settings", resolved_settings],
     }
 
 
@@ -227,3 +229,41 @@ def install_client_configs(
         "settings_path": str(Path(settings_path).expanduser().resolve(strict=False)),
         "results": results,
     }
+
+
+def discover_existing_client_ids(
+    *,
+    platform: Optional[str] = None,
+    env: Optional[Dict[str, str]] = None,
+    home: Optional[Path] = None,
+) -> List[str]:
+    discovered: List[str] = []
+    for client in CLIENT_SPECS:
+        path = client_config_path(client.id, platform=platform, env=env, home=home)
+        if path is None:
+            continue
+        if path.exists():
+            discovered.append(client.id)
+    return discovered
+
+
+def install_or_refresh_default_client_configs(
+    *,
+    settings_path: Path,
+    platform: Optional[str] = None,
+    env: Optional[Dict[str, str]] = None,
+    home: Optional[Path] = None,
+) -> Dict[str, object]:
+    # Upgrade MCP entries for clients the user already configured.
+    # If no client config exists yet, seed VS Code by default.
+    client_ids = discover_existing_client_ids(platform=platform, env=env, home=home)
+    if not client_ids:
+        client_ids = ["vscode"]
+
+    return install_client_configs(
+        client_ids,
+        settings_path=settings_path,
+        platform=platform,
+        env=env,
+        home=home,
+    )

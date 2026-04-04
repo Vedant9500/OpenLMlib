@@ -210,12 +210,18 @@ def create_vector_store(dim: int, metric: str, prefer_faiss: bool = True) -> Vec
 def load_vector_store(index_path: Path, meta_path: Path) -> VectorStore:
     if meta_path.exists():
         meta = load_meta(meta_path)
+        resolved_index_path = Path(meta.index_path)
+        if not resolved_index_path.is_absolute():
+            # Legacy metadata may store a relative path. Use the explicit
+            # index_path argument from current settings to avoid cwd-dependent
+            # failures when loading from MCP server processes.
+            resolved_index_path = Path(index_path)
         if meta.backend == "faiss":
             if faiss is None:
                 raise RuntimeError("Vector index uses faiss, but faiss is not installed.")
-            return FaissVectorStore.load(Path(meta.index_path), meta.metric)
+            return FaissVectorStore.load(resolved_index_path, meta.metric)
         if meta.backend == "numpy":
-            return NumpyVectorStore.load(Path(meta.index_path), meta.metric)
+            return NumpyVectorStore.load(resolved_index_path, meta.metric)
         raise RuntimeError(f"Unknown vector store backend: {meta.backend}")
 
     return create_vector_store(dim=0, metric="cosine", prefer_faiss=False)

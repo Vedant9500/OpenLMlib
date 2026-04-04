@@ -3,10 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import json
+import logging
 import shutil
 import sqlite3
 import uuid
 from datetime import datetime, timezone
+from time import monotonic
 
 from .settings import load_settings, write_default_settings
 from . import db
@@ -28,6 +30,8 @@ from .evaluation import evaluate_retrieval, faithfulness_score, relevance_alignm
 from .runtime import get_runtime, mark_dirty, maybe_flush
 from .vector_store import create_vector_store, load_vector_store, save_vector_store
 from .write_gate import WriteGate
+
+logger = logging.getLogger(__name__)
 
 
 def init_library(settings_path: Path) -> Dict[str, Any]:
@@ -281,7 +285,11 @@ def add_finding(
             "message": "Set confirm=true to add a finding.",
         }
 
+    t0 = monotonic()
     runtime = get_runtime(settings_path)
+    t1 = monotonic()
+    logger.debug("add_finding: get_runtime=%.1fs", t1 - t0)
+
     settings = runtime.settings
     conn = runtime.conn
     settings.findings_dir.mkdir(parents=True, exist_ok=True)
@@ -313,14 +321,21 @@ def add_finding(
         finding_lookup=lambda embedding_id: db.get_findings_by_embedding_ids(conn, [embedding_id]).get(embedding_id),
     )
 
+    t2 = monotonic()
     with runtime.write_lock:
         issues = gate.validate(claim, evidence, reasoning, confidence)
+    t3 = monotonic()
+    logger.debug("add_finding: gate.validate=%.1fs", t3 - t2)
+
     adjusted_confidence = gate.adjust_confidence(
         claim=claim,
         evidence=evidence,
         proposed_confidence=confidence,
         issues=issues,
     )
+    t4 = monotonic()
+    logger.debug("add_finding: gate.adjust_confidence=%.1fs", t4 - t3)
+
     if adjusted_confidence < settings.write_gate.min_confidence:
         issues.append(
             ValidationIssue(
@@ -374,7 +389,10 @@ def add_finding(
             reasoning=finding.text.reasoning,
             full_text=finding.full_text,
         )
+        t5 = monotonic()
         embedding_vec = embedder.encode([embedding_text])[0]
+        t6 = monotonic()
+        logger.debug("add_finding: embed_contextual_chunk=%.1fs", t6 - t5)
 
         json_path.write_text(
             json.dumps(finding.to_content_dict(), indent=2),
@@ -385,6 +403,10 @@ def add_finding(
             store.add([finding.embedding_id], [embedding_vec])
             mark_dirty(runtime, vector=True, cache=True)
             maybe_flush(runtime)
+        t7 = monotonic()
+        logger.debug("add_finding: db_insert+store_add+flush=%.1fs", t7 - t6)
+        logger.info("add_finding: total=%.1fs (runtime=%.1fs, validate=%.1fs, adjust=%.1fs, encode=%.1fs, persist=%.1fs)",
+                     t7 - t0, t1 - t0, t3 - t2, t4 - t3, t6 - t5, t7 - t6)
     except Exception as exc:
         with runtime.write_lock:
             db.delete_finding(conn, finding.id)

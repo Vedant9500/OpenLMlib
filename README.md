@@ -174,9 +174,17 @@ You can also target clients directly:
 openlmlib mcp-config --list-ides
 openlmlib mcp-config --ide vscode --ide cursor
 openlmlib mcp-config --ide kiro
+openlmlib mcp-config --refresh-defaults
 ```
 
-The generated server entry pins `openlmlib-mcp` to your OpenLMlib settings file with `--settings`, so the MCP server keeps using the same cross-project library regardless of the active workspace.
+Defaults and upgrades:
+- `openlmlib setup` now refreshes existing MCP client entries automatically in non-interactive installs.
+- If no existing client config is found, setup installs the VS Code MCP config by default.
+- `openlmlib mcp-config --refresh-defaults` performs the same migration explicitly.
+
+The generated server entry pins your active Python interpreter and runs `openlmlib.mcp_server` with `--settings`, so the MCP server keeps using the same cross-project library regardless of the active workspace.
+
+`openlmlib.mcp_server` is a Python module name, not a direct shell command. For manual launch, use either `openlmlib-mcp --settings <path>` or `<python> -m openlmlib.mcp_server --settings <path>`.
 
 ### Manual Global Config
 
@@ -194,8 +202,8 @@ VS Code uses this shape:
 {
   "servers": {
     "openlmlib": {
-      "command": "openlmlib-mcp",
-      "args": ["--settings", "/absolute/path/to/settings.json"]
+      "command": "/absolute/path/to/python",
+      "args": ["-m", "openlmlib.mcp_server", "--settings", "/absolute/path/to/settings.json"]
     }
   }
 }
@@ -207,8 +215,8 @@ Cursor, Kiro, Claude Desktop, and Antigravity use this shape:
 {
   "mcpServers": {
     "openlmlib": {
-      "command": "openlmlib-mcp",
-      "args": ["--settings", "/absolute/path/to/settings.json"]
+      "command": "/absolute/path/to/python",
+      "args": ["-m", "openlmlib.mcp_server", "--settings", "/absolute/path/to/settings.json"]
     }
   }
 }

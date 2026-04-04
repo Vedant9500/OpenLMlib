@@ -14,7 +14,7 @@ if [ ! -f "pyproject.toml" ]; then
 fi
 
 pipx install . --force
-openlmlib setup
-openlmlib doctor
+pipx run --spec . openlmlib setup
+pipx run --spec . openlmlib doctor
 
 echo "OpenLMlib installed and validated. Try: openlmlib query --query 'retrieval'"

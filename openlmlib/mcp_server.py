@@ -18,6 +18,7 @@ from .library import (
     retrieve_prompt_context,
     search_fts,
 )
+from .runtime import get_runtime
 
 
 def _settings_path() -> Path:
@@ -29,6 +30,19 @@ def _settings_path() -> Path:
 
 
 mcp = FastMCP("OpenLMlib")
+
+
+def _ensure_runtime() -> None:
+    """Pre-initialize the runtime so the first tool call isn't slow.
+
+    This loads the embedding model, connects to the database, and warms
+    up the vector store before any MCP tool is invoked.
+    """
+    try:
+        get_runtime(_settings_path())
+    except Exception:
+        # If initialization fails, let individual tools handle it.
+        pass
 
 
 @mcp.tool()
@@ -170,6 +184,12 @@ def main() -> None:
         os.environ["OPENLMLIB_SETTINGS"] = str(Path(args.dir) / "config" / "settings.json")
         
     sys.argv = [sys.argv[0]] + unknown
+
+    # Pre-warm the runtime before the MCP server starts accepting tool calls.
+    # This ensures the embedding model is loaded and ready, avoiding a cold
+    # start penalty on the first user request.
+    _ensure_runtime()
+
     mcp.run()
 
 

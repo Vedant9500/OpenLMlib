@@ -46,6 +46,28 @@ class WriteGate:
         self.embedder = embedder
         self.vector_store = vector_store
         self.finding_lookup = finding_lookup
+        self._claim_vec = None
+        self._evidence_vec = None
+        self._memo_claim = None
+        self._memo_evidence_text = None
+
+    def _encode_claim_evidence(self, claim: str, evidence: List[str]):
+        evidence_text = " ".join(evidence)
+        if (
+            self._claim_vec is not None
+            and self._evidence_vec is not None
+            and self._memo_claim == claim
+            and self._memo_evidence_text == evidence_text
+        ):
+            return self._claim_vec, self._evidence_vec
+
+        claim_vec = self.embedder.encode([claim])[0]
+        evidence_vec = self.embedder.encode([evidence_text])[0]
+        self._claim_vec = claim_vec
+        self._evidence_vec = evidence_vec
+        self._memo_claim = claim
+        self._memo_evidence_text = evidence_text
+        return claim_vec, evidence_vec
 
     def validate(
         self,
@@ -90,9 +112,7 @@ class WriteGate:
             )
             return issues
 
-        claim_vec = self.embedder.encode([claim])[0]
-        evidence_text = " ".join(evidence)
-        evidence_vec = self.embedder.encode([evidence_text])[0]
+        claim_vec, evidence_vec = self._encode_claim_evidence(claim, evidence)
         similarity = _cosine_similarity(claim_vec, evidence_vec)
 
         if similarity < self.min_claim_evidence_sim:
@@ -149,8 +169,7 @@ class WriteGate:
     ) -> float:
         adjusted = float(proposed_confidence)
         if self.embedder is not None and evidence:
-            claim_vec = self.embedder.encode([claim])[0]
-            evidence_vec = self.embedder.encode([" ".join(evidence)])[0]
+            claim_vec, evidence_vec = self._encode_claim_evidence(claim, evidence)
             sim = _cosine_similarity(claim_vec, evidence_vec)
             adjusted = (0.7 * adjusted) + (0.3 * sim)
 

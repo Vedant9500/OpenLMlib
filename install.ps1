@@ -88,10 +88,19 @@ if ($openlmlibCmd) {
         exit $LASTEXITCODE
     }
 } else {
-    Write-Warning "openlmlib command is not available in this shell yet. Open a new terminal and run:"
-    Write-Host "  openlmlib setup"
-    Write-Host "  openlmlib doctor"
-    exit 1
+    Write-Warning "openlmlib command is not available in this shell yet. Running setup via pipx fallback."
+
+    Invoke-Pipx -PipxArgs @('run', '--spec', '.', 'openlmlib', 'setup')
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "openlmlib setup failed via pipx fallback."
+        exit $LASTEXITCODE
+    }
+
+    Invoke-Pipx -PipxArgs @('run', '--spec', '.', 'openlmlib', 'doctor')
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "openlmlib doctor failed via pipx fallback."
+        exit $LASTEXITCODE
+    }
 }
 
 Write-Host "OpenLMlib installed and validated. Try: openlmlib query --query 'retrieval'"
