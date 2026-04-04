@@ -9,16 +9,26 @@ import traceback
 from . import __version__
 from .library import (
     add_finding,
+    archive_finding,
     backup_library,
     evaluate_dataset,
+    find_stale_findings,
+    generate_cluster_summary,
+    get_failure_ledger,
     get_finding,
+    get_maintenance_summary,
     health,
     init_library,
     list_findings,
+    log_finding_failure,
+    mark_findings_for_review,
     rebuild_vector_index,
+    restore_finding,
     restore_library,
     retrieve_findings,
+    retrieve_findings_enhanced,
     retrieve_prompt_context,
+    run_consolidation,
 )
 from .mcp_setup import (
     available_clients,
@@ -361,6 +371,103 @@ def cmd_query(args) -> int:
     return 0
 
 
+def cmd_query_enhanced(args) -> int:
+    result = retrieve_findings_enhanced(
+        settings_path=Path(args.settings),
+        query=args.query,
+        project=args.project,
+        tags=args.tags or [],
+        created_after=args.created_after,
+        created_before=args.created_before,
+        confidence_min=args.confidence_min,
+        semantic_k=args.semantic_k,
+        lexical_k=args.lexical_k,
+        final_k=args.final_k,
+        rerank=not args.no_rerank,
+        rerank_top_k=args.rerank_top_k,
+        expand_query=args.expand,
+        decompose=not args.no_decompose,
+        deduplicate=not args.no_dedup,
+        dedup_threshold=args.dedup_threshold,
+        pack_context=args.pack,
+        max_context_tokens=args.max_tokens,
+        reasoning_trace=not args.no_trace,
+    )
+    if result.get("status") != "ok":
+        print("ERROR: retrieval failed")
+        return 1
+
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+def cmd_maintenance(args) -> int:
+    result = get_maintenance_summary(
+        settings_path=Path(args.settings),
+        validity_days=args.validity_days,
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("status") == "ok" else 1
+
+
+def cmd_stale(args) -> int:
+    result = find_stale_findings(
+        settings_path=Path(args.settings),
+        validity_days=args.validity_days,
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("status") == "ok" else 1
+
+
+def cmd_consolidate(args) -> int:
+    result = run_consolidation(
+        settings_path=Path(args.settings),
+        similarity_threshold=args.threshold,
+        project=args.project,
+        auto_consolidate=args.auto,
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("status") == "ok" else 1
+
+
+def cmd_failure(args) -> int:
+    if args.ledger:
+        result = get_failure_ledger(
+            settings_path=Path(args.settings),
+            finding_id=args.finding_id,
+            limit=args.limit,
+        )
+        print(json.dumps(result, indent=2))
+        return 0 if result.get("status") == "ok" else 1
+
+    result = log_finding_failure(
+        settings_path=Path(args.settings),
+        finding_id=args.finding_id,
+        task_id=args.task_id,
+        failure_reason=args.reason,
+        confidence_decay=args.decay,
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("status") == "ok" else 1
+
+
+def cmd_archive(args) -> int:
+    if args.restore:
+        result = restore_finding(
+            settings_path=Path(args.settings),
+            finding_id=args.finding_id,
+        )
+    else:
+        result = archive_finding(
+            settings_path=Path(args.settings),
+            finding_id=args.finding_id,
+            reason=args.reason or "",
+            confirm=args.confirm,
+        )
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("status") == "ok" else 1
+
+
 def cmd_eval(args) -> int:
     result = evaluate_dataset(
         settings_path=Path(args.settings),
@@ -501,6 +608,68 @@ def build_parser() -> argparse.ArgumentParser:
     )
     query_parser.set_defaults(func=cmd_query)
 
+    query_enhanced_parser = subparsers.add_parser(
+        "query-enhanced",
+        help="Retrieve findings with Phase 4 enhancements (reranking, expansion, decomposition, packing)",
+    )
+    query_enhanced_parser.add_argument("--query", required=True, help="Query text")
+    query_enhanced_parser.add_argument("--project", help="Filter by project")
+    query_enhanced_parser.add_argument("--tags", action="append", help="Tag filter (repeatable)")
+    query_enhanced_parser.add_argument("--created-after", help="ISO timestamp lower bound")
+    query_enhanced_parser.add_argument("--created-before", help="ISO timestamp upper bound")
+    query_enhanced_parser.add_argument("--confidence-min", type=float, help="Minimum confidence")
+    query_enhanced_parser.add_argument("--semantic-k", type=int, help="Semantic candidate limit")
+    query_enhanced_parser.add_argument("--lexical-k", type=int, help="Keyword candidate limit")
+    query_enhanced_parser.add_argument("--final-k", type=int, help="Final returned results")
+    query_enhanced_parser.add_argument(
+        "--no-rerank",
+        action="store_true",
+        help="Disable cross-encoder reranking",
+    )
+    query_enhanced_parser.add_argument(
+        "--rerank-top-k",
+        type=int,
+        help="Top-k results after reranking",
+    )
+    query_enhanced_parser.add_argument(
+        "--expand",
+        action="store_true",
+        help="Enable query expansion (multiple variants)",
+    )
+    query_enhanced_parser.add_argument(
+        "--no-decompose",
+        action="store_true",
+        help="Disable document decomposition",
+    )
+    query_enhanced_parser.add_argument(
+        "--pack",
+        action="store_true",
+        help="Enable position-aware context packing",
+    )
+    query_enhanced_parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=4000,
+        help="Maximum context tokens for packing",
+    )
+    query_enhanced_parser.add_argument(
+        "--no-dedup",
+        action="store_true",
+        help="Disable cross-project deduplication",
+    )
+    query_enhanced_parser.add_argument(
+        "--dedup-threshold",
+        type=float,
+        default=0.85,
+        help="Similarity threshold for deduplication (0.0-1.0)",
+    )
+    query_enhanced_parser.add_argument(
+        "--no-trace",
+        action="store_true",
+        help="Disable reasoning trace output",
+    )
+    query_enhanced_parser.set_defaults(func=cmd_query_enhanced)
+
     eval_parser = subparsers.add_parser("eval", help="Run retrieval evaluation on a query dataset")
     eval_parser.add_argument(
         "--dataset",
@@ -514,6 +683,94 @@ def build_parser() -> argparse.ArgumentParser:
         help="Top-k results to evaluate against expected IDs",
     )
     eval_parser.set_defaults(func=cmd_eval)
+
+    # Phase 5: Maintenance commands
+    maint_parser = subparsers.add_parser("maintenance", help="Get library maintenance summary")
+    maint_parser.add_argument(
+        "--validity-days",
+        type=int,
+        help="Override validity window in days",
+    )
+    maint_parser.set_defaults(func=cmd_maintenance)
+
+    stale_parser = subparsers.add_parser("stale", help="Find stale findings needing review")
+    stale_parser.add_argument(
+        "--validity-days",
+        type=int,
+        help="Override validity window in days",
+    )
+    stale_parser.set_defaults(func=cmd_stale)
+
+    consolidate_parser = subparsers.add_parser("consolidate", help="Find and merge similar findings")
+    consolidate_parser.add_argument(
+        "--threshold",
+        type=float,
+        default=0.85,
+        help="Similarity threshold for grouping (0.0-1.0)",
+    )
+    consolidate_parser.add_argument(
+        "--project",
+        help="Filter by project",
+    )
+    consolidate_parser.add_argument(
+        "--auto",
+        action="store_true",
+        help="Automatically consolidate similar findings",
+    )
+    consolidate_parser.set_defaults(func=cmd_consolidate)
+
+    failure_parser = subparsers.add_parser("failure", help="Log or view finding failures")
+    failure_parser.add_argument(
+        "--finding-id",
+        help="Finding ID to log failure for or view ledger",
+    )
+    failure_parser.add_argument(
+        "--task-id",
+        help="Task ID that failed",
+    )
+    failure_parser.add_argument(
+        "--reason",
+        help="Failure reason description",
+    )
+    failure_parser.add_argument(
+        "--decay",
+        type=float,
+        help="Confidence decay factor (default 0.9)",
+    )
+    failure_parser.add_argument(
+        "--ledger",
+        action="store_true",
+        help="View failure ledger instead of logging",
+    )
+    failure_parser.add_argument(
+        "--limit",
+        type=int,
+        default=50,
+        help="Max ledger entries to return",
+    )
+    failure_parser.set_defaults(func=cmd_failure)
+
+    archive_parser = subparsers.add_parser("archive", help="Archive or restore findings")
+    archive_parser.add_argument(
+        "--finding-id",
+        required=True,
+        help="Finding ID to archive or restore",
+    )
+    archive_parser.add_argument(
+        "--reason",
+        help="Reason for archiving",
+    )
+    archive_parser.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Required to perform archive",
+    )
+    archive_parser.add_argument(
+        "--restore",
+        action="store_true",
+        help="Restore an archived finding instead of archiving",
+    )
+    archive_parser.set_defaults(func=cmd_archive)
 
     return parser
 

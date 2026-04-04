@@ -24,7 +24,7 @@ from .schema import (
 )
 from .embeddings import EmbeddingCache, SentenceTransformerEmbedder
 from .embeddings import build_contextual_chunk
-from .retrieval import RetrievalEngine, RetrievalFilters
+from .retrieval import RetrievalEngine, RetrievalFilters, Phase4Options
 from .sanitization import render_untrusted_context
 from .evaluation import evaluate_retrieval, faithfulness_score, relevance_alignment
 from .runtime import get_runtime, mark_dirty, maybe_flush
@@ -523,6 +523,88 @@ def retrieve_findings(
     }
 
 
+def retrieve_findings_enhanced(
+    settings_path: Path,
+    query: str,
+    project: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    created_after: Optional[str] = None,
+    created_before: Optional[str] = None,
+    confidence_min: Optional[float] = None,
+    semantic_k: Optional[int] = None,
+    lexical_k: Optional[int] = None,
+    final_k: Optional[int] = None,
+    rerank: bool = True,
+    rerank_top_k: Optional[int] = None,
+    expand_query: bool = False,
+    decompose: bool = True,
+    deduplicate: bool = True,
+    dedup_threshold: float = 0.85,
+    pack_context: bool = False,
+    max_context_tokens: int = 4000,
+    reasoning_trace: bool = True,
+) -> Dict[str, Any]:
+    """Enhanced retrieval with Phase 4 features: reranking, query expansion, decomposition, dedup, packing."""
+    runtime = get_runtime(settings_path)
+    settings = runtime.settings
+    conn = runtime.conn
+    embedder = runtime.embedder
+    store = runtime.store
+    engine = RetrievalEngine(conn=conn, embedder=embedder, vector_store=store, settings=settings)
+
+    options = Phase4Options(
+        rerank=rerank,
+        rerank_top_k=rerank_top_k,
+        expand_query=expand_query,
+        decompose=decompose,
+        deduplicate=deduplicate,
+        dedup_threshold=dedup_threshold,
+        pack_context=pack_context,
+        max_context_tokens=max_context_tokens,
+        reasoning_trace=reasoning_trace,
+    )
+
+    with runtime.write_lock:
+        payload = engine.search_enhanced(
+            query=query,
+            filters=RetrievalFilters(
+                project=project,
+                tags=tags,
+                created_after=created_after,
+                created_before=created_before,
+                confidence_min=confidence_min,
+            ),
+            options=options,
+            semantic_k=semantic_k,
+            lexical_k=lexical_k,
+            final_k=final_k,
+        )
+
+    query_id = "qry-" + uuid.uuid4().hex[:12]
+    query_created_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    db.log_retrieval_usage(
+        conn,
+        query_id=query_id,
+        query=query,
+        created_at=query_created_at,
+        items=payload["items"],
+        project=project,
+        tags=tags,
+    )
+
+    maybe_flush(runtime)
+
+    return {
+        "status": "ok",
+        "query_id": query_id,
+        "query": payload["query"],
+        "effective_query": payload.get("effective_query", query),
+        "filters": payload["filters"],
+        "items": payload["items"],
+        "meta": payload["meta"],
+    }
+
+
 def retrieve_prompt_context(
     settings_path: Path,
     query: str,
@@ -739,3 +821,203 @@ def health(settings_path: Path) -> Dict[str, Any]:
         status["vector_dim"] = 0
 
     return {"status": "ok", "health": status}
+
+
+# ─── Phase 5: Maintenance & Rot Prevention ───────────────────────────────────
+
+def find_stale_findings(
+    settings_path: Path,
+    validity_days: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Find findings that exceed the validity window and need review."""
+    from .maintenance import MaintenanceEngine, MaintenanceSettings
+
+    settings = load_settings(settings_path)
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+
+    maint_settings = MaintenanceSettings(
+        validity_days=validity_days or settings.retrieval.validity_days,
+    )
+    engine = MaintenanceEngine(conn, settings=maint_settings)
+    stale = engine.find_stale_findings(validity_days=validity_days)
+
+    conn.close()
+    return {
+        "status": "ok",
+        "stale_findings": [
+            {
+                "id": s.id,
+                "project": s.project,
+                "claim": s.claim,
+                "confidence": s.confidence,
+                "created_at": s.created_at,
+                "age_days": s.age_days,
+            }
+            for s in stale
+        ],
+        "count": len(stale),
+        "validity_days": maint_settings.validity_days,
+    }
+
+
+def mark_findings_for_review(
+    settings_path: Path,
+    finding_ids: List[str],
+) -> Dict[str, Any]:
+    """Mark findings as pending_review."""
+    from .maintenance import MaintenanceEngine
+
+    settings = load_settings(settings_path)
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+
+    engine = MaintenanceEngine(conn)
+    result = engine.mark_for_review(finding_ids)
+
+    conn.close()
+    return result
+
+
+def run_consolidation(
+    settings_path: Path,
+    similarity_threshold: Optional[float] = None,
+    project: Optional[str] = None,
+    auto_consolidate: bool = False,
+) -> Dict[str, Any]:
+    """Find and optionally consolidate similar findings."""
+    from .maintenance import MaintenanceEngine
+
+    settings = load_settings(settings_path)
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+
+    engine = MaintenanceEngine(conn)
+    result = engine.run_consolidation(
+        similarity_threshold=similarity_threshold,
+        project=project,
+        auto_consolidate=auto_consolidate,
+    )
+
+    conn.close()
+    return result
+
+
+def log_finding_failure(
+    settings_path: Path,
+    finding_id: str,
+    task_id: str,
+    failure_reason: str,
+    confidence_decay: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Log a task failure related to a finding and decay its confidence."""
+    from .maintenance import MaintenanceEngine
+
+    settings = load_settings(settings_path)
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+
+    engine = MaintenanceEngine(conn)
+    result = engine.log_failure(
+        finding_id=finding_id,
+        task_id=task_id,
+        failure_reason=failure_reason,
+        confidence_decay=confidence_decay,
+    )
+
+    conn.close()
+    return result
+
+
+def get_failure_ledger(
+    settings_path: Path,
+    finding_id: Optional[str] = None,
+    limit: int = 50,
+) -> Dict[str, Any]:
+    """Get failure ledger entries."""
+    from .maintenance import MaintenanceEngine
+
+    settings = load_settings(settings_path)
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+
+    engine = MaintenanceEngine(conn)
+    ledger = engine.get_failure_ledger(finding_id=finding_id, limit=limit)
+
+    conn.close()
+    return {"status": "ok", "ledger": ledger, "count": len(ledger)}
+
+
+def archive_finding(
+    settings_path: Path,
+    finding_id: str,
+    reason: str = "",
+    confirm: bool = False,
+) -> Dict[str, Any]:
+    """Soft-archive a finding."""
+    if not confirm:
+        return {
+            "status": "confirmation_required",
+            "message": "Set confirm=true to archive a finding.",
+        }
+
+    from .maintenance import MaintenanceEngine
+
+    settings = load_settings(settings_path)
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+
+    engine = MaintenanceEngine(conn)
+    result = engine.archive_finding(finding_id, reason=reason)
+
+    conn.close()
+    return result
+
+
+def restore_finding(
+    settings_path: Path,
+    finding_id: str,
+) -> Dict[str, Any]:
+    """Restore an archived finding."""
+    from .maintenance import MaintenanceEngine
+
+    settings = load_settings(settings_path)
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+
+    engine = MaintenanceEngine(conn)
+    result = engine.restore_finding(finding_id)
+
+    conn.close()
+    return result
+
+
+def get_maintenance_summary(
+    settings_path: Path,
+    validity_days: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Get a summary of library health and maintenance status."""
+    from .maintenance import MaintenanceEngine, MaintenanceSettings
+
+    settings = load_settings(settings_path)
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+
+    maint_settings = MaintenanceSettings(
+        validity_days=validity_days or settings.retrieval.validity_days,
+    )
+    engine = MaintenanceEngine(conn, settings=maint_settings)
+    summary = engine.get_maintenance_summary(validity_days=validity_days)
+
+    conn.close()
+    return summary
+
+
+def generate_cluster_summary(
+    findings: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Generate a summary for a cluster of findings."""
+    from .summary_gen import SummaryGenerator
+
+    generator = SummaryGenerator()
+    return generator.generate_cluster_summary(findings)

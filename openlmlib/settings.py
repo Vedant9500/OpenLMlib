@@ -29,6 +29,44 @@ class RetrievalSettings:
 
 
 @dataclass
+class RerankingSettings:
+    model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    top_k: int = 10
+    enabled: bool = True
+    batch_size: int = 32
+    alpha: float = 0.7
+
+
+@dataclass
+class QueryExpansionSettings:
+    enabled: bool = False
+    max_variants: int = 3
+    strategy: str = "rule_based"
+
+
+@dataclass
+class DecompositionSettings:
+    enabled: bool = True
+    min_relevance_threshold: float = 0.3
+    include_caveats: bool = True
+    max_evidence_items: int = 3
+
+
+@dataclass
+class PackingSettings:
+    max_tokens: int = 4000
+    enabled: bool = True
+
+
+@dataclass
+class Phase4Settings:
+    reranking: RerankingSettings
+    query_expansion: QueryExpansionSettings
+    decomposition: DecompositionSettings
+    packing: PackingSettings
+
+
+@dataclass
 class Settings:
     data_root: Path
     db_path: Path
@@ -42,6 +80,7 @@ class Settings:
     write_gate: WriteGateSettings
     novelty: NoveltySettings
     retrieval: RetrievalSettings
+    phase4: Phase4Settings
 
     @classmethod
     def from_dict(cls, data: dict, base_dir: Path) -> "Settings":
@@ -55,6 +94,12 @@ class Settings:
         write_gate_data = data.get("write_gate", {})
         novelty_data = data.get("novelty", {})
         retrieval_data = data.get("retrieval", {})
+        phase4_data = data.get("phase4", {})
+
+        reranking_data = phase4_data.get("reranking", {})
+        expansion_data = phase4_data.get("query_expansion", {})
+        decomposition_data = phase4_data.get("decomposition", {})
+        packing_data = phase4_data.get("packing", {})
 
         return cls(
             data_root=resolve_path("data_root", "data"),
@@ -81,6 +126,30 @@ class Settings:
                 final_k=int(retrieval_data.get("final_k", 5)),
                 semantic_oversample_factor=int(retrieval_data.get("semantic_oversample_factor", 3)),
                 validity_days=int(retrieval_data.get("validity_days", 90)),
+            ),
+            phase4=Phase4Settings(
+                reranking=RerankingSettings(
+                    model_name=reranking_data.get("model_name", "cross-encoder/ms-marco-MiniLM-L-6-v2"),
+                    top_k=int(reranking_data.get("top_k", 10)),
+                    enabled=bool(reranking_data.get("enabled", True)),
+                    batch_size=int(reranking_data.get("batch_size", 32)),
+                    alpha=float(reranking_data.get("alpha", 0.7)),
+                ),
+                query_expansion=QueryExpansionSettings(
+                    enabled=bool(expansion_data.get("enabled", False)),
+                    max_variants=int(expansion_data.get("max_variants", 3)),
+                    strategy=expansion_data.get("strategy", "rule_based"),
+                ),
+                decomposition=DecompositionSettings(
+                    enabled=bool(decomposition_data.get("enabled", True)),
+                    min_relevance_threshold=float(decomposition_data.get("min_relevance_threshold", 0.3)),
+                    include_caveats=bool(decomposition_data.get("include_caveats", True)),
+                    max_evidence_items=int(decomposition_data.get("max_evidence_items", 3)),
+                ),
+                packing=PackingSettings(
+                    max_tokens=int(packing_data.get("max_tokens", 4000)),
+                    enabled=bool(packing_data.get("enabled", True)),
+                ),
             ),
         )
 
@@ -110,6 +179,30 @@ DEFAULT_SETTINGS_DATA = {
         "final_k": 5,
         "semantic_oversample_factor": 3,
         "validity_days": 90,
+    },
+    "phase4": {
+        "reranking": {
+            "model_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+            "top_k": 10,
+            "enabled": True,
+            "batch_size": 32,
+            "alpha": 0.7,
+        },
+        "query_expansion": {
+            "enabled": False,
+            "max_variants": 3,
+            "strategy": "rule_based",
+        },
+        "decomposition": {
+            "enabled": True,
+            "min_relevance_threshold": 0.3,
+            "include_caveats": True,
+            "max_evidence_items": 3,
+        },
+        "packing": {
+            "max_tokens": 4000,
+            "enabled": True,
+        },
     },
 }
 

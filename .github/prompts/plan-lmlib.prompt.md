@@ -262,6 +262,7 @@ Status: Complete (Apr 2026)
 ---
 
 ### Phase 4: Reranking & Advanced Retrieval (Week 5)
+Status: Complete (Apr 2026)
 **Goal:** Improve ranking accuracy for larger corpus; filter noise; handle edge cases.
 
 **Steps:**
@@ -279,19 +280,25 @@ Status: Complete (Apr 2026)
 - Limit to top-20 chunks postranking to control context size
 
 **Relevant Files:**
-- `lmlib/reranking.py`
-- `lmlib/query_rewrite.py`
-- `lmlib/decomposition.py` — **[NEW]** document decomposition (claim/evidence/caveats filtering)
-- `lmlib/packing.py` — context window optimization (position-aware)
+- `openlmlib/reranking.py` — **[NEW]** cross-encoder reranking + hybrid scoring
+- `openlmlib/query_expansion.py` — **[NEW]** rule-based query expansion (Rewrite-Retrieve-Read)
+- `openlmlib/decomposition.py` — **[NEW]** document decomposition (claim/evidence/caveats filtering)
+- `openlmlib/packing.py` — **[NEW]** context window optimization (position-aware)
+- `openlmlib/retrieval.py` — updated with `search_enhanced()`, deduplication, reasoning traces
+- `openlmlib/settings.py` — updated with `Phase4Settings` dataclass
+- `openlmlib/library.py` — updated with `retrieve_findings_enhanced()`
+- `openlmlib/cli.py` — updated with `query-enhanced` command
 
 **Verification:**
 - Reranked results should score higher on eval metrics
 - Compare latency: phase 2 vs. phase 4
 - Manual spot-check: verify reasoning traces are sensible
+- ✅ 55 new tests across 4 test files; 87 total tests passing
 
 ---
 
 ### Phase 5: Maintenance & Rot Prevention (Week 6)
+Status: **Incomplete** — Not yet implemented
 **Goal:** Keep library fresh and accurate over time; learn from task feedback.
 
 **Steps:**
@@ -317,10 +324,13 @@ Status: Complete (Apr 2026)
 - Hot tier: last 30 days findings; warm: 30–90 days; cold: >90 days (if tiering implemented)
 
 **Relevant Files:**
-- `lmlib/maintenance.py` — staleness, consolidation, archiving
-- `lmlib/summary_gen.py` — auto-summarization
-- `lmlib/refresh_agent.py` — re-validation workflow + **[NEW]** feedback incorporation
-- `lmlib/memory_tiers.py` — **[NEW, OPTIONAL]** hot/warm/cold caching
+- `openlmlib/maintenance.py` — **[NEW, NOT YET CREATED]** staleness, consolidation, archiving
+- `openlmlib/summary_gen.py` — **[NEW, NOT YET CREATED]** auto-summarization
+- `openlmlib/refresh_agent.py` — **[NEW, NOT YET CREATED]** re-validation workflow + feedback incorporation
+- `openlmlib/memory_tiers.py` — **[NEW, NOT YET CREATED, OPTIONAL]** hot/warm/cold caching
+- `openlmlib/settings.py` — **[NEEDS UPDATE]** Phase5Settings dataclass
+- `openlmlib/library.py` — **[NEEDS UPDATE]** maintenance functions
+- `openlmlib/cli.py` — **[NEEDS UPDATE]** maintenance CLI commands
 
 **Verification:**
 - Create findings with 4-month-old timestamps → mark as stale
@@ -328,6 +338,9 @@ Status: Complete (Apr 2026)
 - **[NEW] Simulate failure feedback:** Mark 1 finding as "led_to_failure" 3 times → verify confidence reduced and finding archived with reason
 - **[NEW] Verify failure ledger:** Spot-check 5 entries in failure ledger; confirm (finding_id, failure_reason, timestamp, confidence_delta) captured correctly
 - Verify archive is queryable if needed
+
+**Changes Made So Far:**
+- None — Phase 5 has not been started yet. All files listed above need to be created/updated.
 
 ---
 

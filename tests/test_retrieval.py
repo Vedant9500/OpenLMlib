@@ -3,9 +3,16 @@ import unittest
 from pathlib import Path
 
 from openlmlib import db
-from openlmlib.retrieval import RetrievalEngine, RetrievalFilters
+from openlmlib.retrieval import RetrievalEngine, RetrievalFilters, Phase4Options
 from openlmlib.schema import Finding, FindingAudit, FindingText, compute_content_hash
-from openlmlib.settings import RetrievalSettings
+from openlmlib.settings import (
+    DecompositionSettings,
+    PackingSettings,
+    Phase4Settings,
+    QueryExpansionSettings,
+    RerankingSettings,
+    RetrievalSettings,
+)
 from openlmlib.vector_store import NumpyVectorStore
 
 
@@ -28,6 +35,12 @@ class DummySettings:
             lexical_k=10,
             final_k=5,
             semantic_oversample_factor=3,
+        )
+        self.phase4 = Phase4Settings(
+            reranking=RerankingSettings(enabled=False),
+            query_expansion=QueryExpansionSettings(enabled=False),
+            decomposition=DecompositionSettings(enabled=True),
+            packing=PackingSettings(enabled=False),
         )
 
 
@@ -183,6 +196,98 @@ class TestRetrieval(unittest.TestCase):
 
             self.assertEqual(result["items"][0]["id"], "f-old")
             self.assertTrue(result["items"][0]["pending_review"])
+
+    def test_lexical_scores_are_normalized_in_fusion(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "findings.db"
+            conn = db.connect(db_path)
+            db.init_db(conn)
+
+            _insert_finding(
+                conn,
+                finding_id="f-1",
+                embedding_id=101,
+                project="glassbox",
+                claim="Redis cache reduced API latency",
+                tags=["perf", "cache"],
+                confidence=0.9,
+                created_at="2026-03-30T00:00:00Z",
+            )
+            _insert_finding(
+                conn,
+                finding_id="f-2",
+                embedding_id=202,
+                project="glassbox",
+                claim="Latency investigations and error budgets",
+                tags=["perf"],
+                confidence=0.9,
+                created_at="2026-03-30T00:00:00Z",
+            )
+
+            store = NumpyVectorStore(dim=2, metric="cosine")
+            store.add([101, 202], [[1.0, 0.0], [0.0, 1.0]])
+
+            engine = RetrievalEngine(
+                conn=conn,
+                embedder=DummyEmbedder(),
+                vector_store=store,
+                settings=DummySettings(),
+            )
+
+            result = engine.search("cache api latency")
+            conn.close()
+
+            lexical_scores = [item.get("lexical_score") for item in result["items"] if "lexical_score" in item]
+            self.assertTrue(lexical_scores)
+            for score in lexical_scores:
+                self.assertGreaterEqual(score, 0.0)
+                self.assertLessEqual(score, 1.0)
+
+    def test_enhanced_decomposition_preserves_metadata(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "findings.db"
+            conn = db.connect(db_path)
+            db.init_db(conn)
+
+            _insert_finding(
+                conn,
+                finding_id="f-1",
+                embedding_id=101,
+                project="glassbox",
+                claim="Redis cache reduced API latency",
+                tags=["perf", "cache"],
+                confidence=0.9,
+                created_at="2026-03-30T00:00:00Z",
+            )
+
+            store = NumpyVectorStore(dim=2, metric="cosine")
+            store.add([101], [[1.0, 0.0]])
+
+            engine = RetrievalEngine(
+                conn=conn,
+                embedder=DummyEmbedder(),
+                vector_store=store,
+                settings=DummySettings(),
+            )
+
+            result = engine.search_enhanced(
+                "cache latency",
+                options=Phase4Options(
+                    rerank=False,
+                    decompose=True,
+                    deduplicate=False,
+                    reasoning_trace=False,
+                    pack_context=False,
+                ),
+            )
+            conn.close()
+
+            self.assertEqual(len(result["items"]), 1)
+            item = result["items"][0]
+            self.assertEqual(item["id"], "f-1")
+            self.assertEqual(item["project"], "glassbox")
+            self.assertIn("confidence", item)
+            self.assertIn("pending_review", item)
 
 
 if __name__ == "__main__":
