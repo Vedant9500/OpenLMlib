@@ -1,8 +1,10 @@
 #!/usr/bin/env node
-import { execFileSync } from 'child_process';
-import os from 'os';
-import path from 'path';
-import fs from 'fs';
+'use strict';
+
+const { execFileSync } = require('child_process');
+const os = require('os');
+const path = require('path');
+const fs = require('fs');
 
 const OPENLMLIB_HOME = process.env.OPENLMLIB_HOME || path.join(os.homedir(), '.openlmlib');
 const VENV_PYTHON = os.platform() === 'win32'
@@ -15,8 +17,23 @@ if (!fs.existsSync(VENV_PYTHON)) {
   process.exit(1);
 }
 
+const args = process.argv.slice(2);
+
+if (args[0] === 'setup' || args[0] === 'wizard') {
+  const installerDir = path.dirname(path.dirname(__filename));
+  const runSetup = path.join(installerDir, 'src', 'run-setup.mjs');
+  if (fs.existsSync(runSetup)) {
+    try {
+      execFileSync(process.execPath, [runSetup], { stdio: 'inherit' });
+    } catch (err) {
+      process.exit(err.status || 1);
+    }
+    process.exit(0);
+  }
+}
+
 try {
-  execFileSync(VENV_PYTHON, ['-m', 'openlmlib.cli', ...process.argv.slice(2)], {
+  execFileSync(VENV_PYTHON, ['-m', 'openlmlib', ...args], {
     stdio: 'inherit',
   });
 } catch (err) {

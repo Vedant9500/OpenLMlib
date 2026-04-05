@@ -52,7 +52,7 @@ function Complete({ success, checks, pythonInstallStatus }) {
         React.createElement(Text, { color: 'white' }, '  openlmlib query "your search query"'),
         React.createElement(Box, { marginTop: 1 }),
         React.createElement(Text, { color: 'gray' }, '  # Start MCP server for IDE integration'),
-        React.createElement(Text, { color: 'white' }, '  openlmlib mcp'),
+        React.createElement(Text, { color: 'white' }, '  openlmlib setup'),
         React.createElement(Box, { marginTop: 1 }),
         React.createElement(Text, { color: 'gray' }, '  # Check library health'),
         React.createElement(Text, { color: 'white' }, '  openlmlib doctor'),

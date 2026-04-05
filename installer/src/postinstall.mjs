@@ -260,13 +260,12 @@ print("ok")`;
   console.log(chalk.green.bold('  ✔  OpenLMlib installed successfully!'));
   console.log('');
   console.log(chalk.bold.cyan('  Quick Start:'));
-  console.log(chalk.gray('    openlmlib init'));
+  console.log(chalk.gray('    openlmlib setup'));
   console.log(chalk.gray('    openlmlib add --project myproj --claim "..." --confidence 0.8'));
   console.log(chalk.gray('    openlmlib query "your search query"'));
-  console.log(chalk.gray('    openlmlib mcp'));
   console.log(chalk.gray('    openlmlib doctor'));
   console.log('');
-  console.log(chalk.gray('  Restart VS Code / Cursor / Claude Desktop to activate MCP.'));
+  console.log(chalk.gray('  Run "openlmlib setup" to configure MCP clients for your IDEs.'));
   console.log('');
 }
 

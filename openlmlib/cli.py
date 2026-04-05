@@ -155,6 +155,14 @@ def cmd_setup(args) -> int:
         print(f"ERROR: {exc}")
         return 1
 
+    if _interactive_terminal():
+        from .tui_setup import run_interactive_setup
+        result = run_interactive_setup(settings_path)
+        if result.get("status") == "ok":
+            return 0
+        print(f"ERROR: {result.get('message', 'unknown error')}")
+        return 1
+
     init_result = init_library(settings_path)
     if init_result.get("status") != "ok":
         print("ERROR: initialization failed")
@@ -194,10 +202,7 @@ def cmd_setup(args) -> int:
         "health": health_result,
         "mcp_config": mcp_result,
     }
-    if _interactive_terminal():
-        _print_setup_summary(output)
-    else:
-        print(json.dumps(output, indent=2))
+    print(json.dumps(output, indent=2))
 
     mcp_ok = mcp_result.get("status") in {"ok", "skipped"}
     return 0 if model_result.get("status") in {"ok", "skipped"} and mcp_ok else 1

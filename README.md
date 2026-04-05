@@ -15,15 +15,18 @@ npm install -g openlmlib
 The npm installer will automatically:
 - Detect your system and install Python 3.10+ if needed
 - Create an isolated virtual environment at `~/.openlmlib/venv`
-- Guide you through embedding model and IDE/client selection
-- Download the embedding model
-- Configure MCP clients for VS Code, Cursor, Claude Desktop, and more
+- Install the OpenLMlib Python package
 
 After installation, run:
 
 ```bash
-openlmlib doctor
+openlmlib setup
 ```
+
+`openlmlib setup` will:
+- Initialize your library storage
+- Configure MCP clients for VS Code, Cursor, Claude Desktop, and more
+- Download the embedding model on first use
 
 **Alternative: Install via pipx**
 
