@@ -5,7 +5,7 @@
   "type": "module",
   "main": "src/cli.js",
   "bin": {
-    "openlmlib": "./bin/openlmlib.js"
+    "openlmlib": "bin/openlmlib.js"
   },
   "preferGlobal": true,
   "scripts": {
@@ -27,7 +27,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Vedant9500/OpenLMlib.git"
+    "url": "git+https://github.com/Vedant9500/OpenLMlib.git"
   },
   "homepage": "https://github.com/Vedant9500/OpenLMlib#readme",
   "bugs": {
