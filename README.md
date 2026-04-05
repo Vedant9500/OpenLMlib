@@ -4,13 +4,36 @@ Local knowledge and research library for LLM workflows: SQLite metadata + JSON f
 
 ## Quickstart
 
-The smoothest global install is via `pipx`:
+### Global Installation
+
+The smoothest global install is via npm (includes interactive installer):
+
+```bash
+npm install -g openlmlib
+```
+
+The npm installer will automatically:
+- Detect your system and install Python 3.10+ if needed
+- Create an isolated virtual environment at `~/.openlmlib/venv`
+- Guide you through embedding model and IDE/client selection
+- Download the embedding model
+- Configure MCP clients for VS Code, Cursor, Claude Desktop, and more
+
+After installation, run:
+
+```bash
+openlmlib doctor
+```
+
+**Alternative: Install via pipx**
+
+If you prefer using `pipx`:
 
 ```bash
 pipx install openlmlib
 ```
 
-Then initialize OpenLMlib, optionally warm the embedding model, and install the MCP server into one or more IDEs/clients:
+Then initialize and configure:
 
 ```bash
 openlmlib setup
@@ -19,25 +42,11 @@ openlmlib doctor
 
 `openlmlib setup` creates a real settings file, initializes the global library under `~/.openlmlib/`, and prompts for the IDEs/clients you use. You can select multiple targets in one run.
 
-### Advanced Installation (From Source)
+### Development & Source Installation
 
-If you'd like to install directly from the source code or set up a local development environment, you have two options:
+If you'd like to install directly from the source code or set up a local development environment:
 
-**Option A: One-command Installer**
-
-*Windows (PowerShell):*
-```powershell
-./install.ps1
-```
-
-*macOS/Linux:*
-```bash
-chmod +x install.sh
-./install.sh
-```
-*(The installer will automatically install dependencies via pipx and run the `setup` commands for you.)*
-
-**Option B: Manual Local Dev Setup**
+**Option A: From Source (Recommended for Developers)**
 
 ```bash
 git clone https://github.com/Vedant9500/LMlib.git
@@ -49,16 +58,33 @@ openlmlib setup
 openlmlib doctor
 ```
 
+**Option B: Legacy One-command Installer**
+
+*Windows (PowerShell):*
+```powershell
+./install.ps1
+```
+
+*macOS/Linux:*
+```bash
+chmod +x install.sh
+./install.sh
+```
+*(The installer will automatically install dependencies and run the setup commands for you.)*
+
 ### Uninstallation
 
 Depending on how you installed OpenLMlib, you can remove it by running:
 
 ```bash
-# If installed via pip or Manual Dev Setup
-pip uninstall openlmlib
+# If installed via npm
+npm uninstall -g openlmlib
 
-# If installed via Option A One-command installer (which uses pipx)
+# If installed via pipx
 pipx uninstall openlmlib
+
+# If installed from source (pip)
+pip uninstall openlmlib
 ```
 
 *(Note: Uninstalling the package will not automatically delete your OpenLMlib data. Remove `~/.openlmlib/` for the global install, or your local `data/` directory if you were using a project-local configuration.)*

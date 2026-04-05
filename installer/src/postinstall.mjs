@@ -172,7 +172,7 @@ async function runNonInteractive() {
   // Step 3: Install openlmlib
   const spinner2 = ora('Installing openlmlib...').start();
   execSync(`"${VENV_PYTHON}" -m pip install --upgrade pip`, { stdio: 'pipe' });
-  execSync(`"${VENV_PYTHON}" -m pip install -e "${path.resolve(__dirname, '..', '..')}"`, { stdio: 'pipe' });
+  execSync(`"${VENV_PYTHON}" -m pip install -e "${path.resolve(__dirname, '..')}"`, { stdio: 'pipe' });
   spinner2.succeed('openlmlib installed.');
 
   // Step 4: Download model

@@ -1,11 +1,11 @@
 {
   "name": "openlmlib",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "AI-powered knowledge library for LLM agents — install, manage, and retrieve findings via CLI and MCP",
   "type": "module",
   "main": "src/cli.js",
   "bin": {
-    "openlmlib": "./bin/openlmlib"
+    "openlmlib": "./bin/openlmlib.js"
   },
   "preferGlobal": true,
   "scripts": {
