@@ -64,7 +64,7 @@ function Complete({ success, checks, pythonInstallStatus }) {
       React.createElement(Text, { color: 'gray' }, '  Restart VS Code / Cursor / Claude Desktop to activate.'),
     ),
     React.createElement(Box, { marginTop: 2 },
-      React.createElement(Text, { color: 'gray' }, '  Docs: https://github.com/user/openlmlib'),
+      React.createElement(Text, { color: 'gray' }, '  Docs: https://github.com/Vedant9500/OpenLMlib'),
     ),
   );
 }

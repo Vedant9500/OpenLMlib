@@ -48,10 +48,41 @@ function installPackage(packageName, onProgress) {
 }
 
 function installFromLocal(localPath, onProgress) {
-  onProgress('Installing openlmlib from local source...');
+  onProgress('Installing openlmlib...');
   execSync(`"${VENV_PYTHON}" -m pip install --upgrade pip`, { stdio: 'pipe' });
-  execSync(`"${VENV_PYTHON}" -m pip install -e "${localPath}"`, { stdio: 'pipe' });
-  onProgress('openlmlib installed from local source.');
+
+  const hasLocalProject = !!localPath && (
+    fs.existsSync(path.join(localPath, 'pyproject.toml')) ||
+    fs.existsSync(path.join(localPath, 'setup.py'))
+  );
+
+  const candidates = [];
+  if (hasLocalProject) {
+    candidates.push({ kind: 'editable', value: localPath, label: `local source (${localPath})` });
+  }
+  if (process.env.npm_package_version) {
+    candidates.push({ kind: 'package', value: `openlmlib==${process.env.npm_package_version}`, label: `openlmlib==${process.env.npm_package_version}` });
+  }
+  candidates.push({ kind: 'package', value: 'openlmlib', label: 'openlmlib (latest from PyPI)' });
+  candidates.push({ kind: 'package', value: 'git+https://github.com/Vedant9500/OpenLMlib.git', label: 'OpenLMlib from GitHub' });
+
+  let lastErr = null;
+  for (const candidate of candidates) {
+    try {
+      onProgress(`Installing openlmlib (${candidate.label})...`);
+      if (candidate.kind === 'editable') {
+        execSync(`"${VENV_PYTHON}" -m pip install -e "${candidate.value}"`, { stdio: 'pipe' });
+      } else {
+        execSync(`"${VENV_PYTHON}" -m pip install "${candidate.value}"`, { stdio: 'pipe' });
+      }
+      onProgress('openlmlib installed.');
+      return;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+
+  throw lastErr || new Error('Unable to install openlmlib.');
 }
 
 function downloadModel(modelName, onProgress) {

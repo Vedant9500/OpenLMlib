@@ -3,6 +3,8 @@
 import path from 'path';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
+import os from 'os';
+import fs from 'fs';
 import chalk from 'chalk';
 import ora from 'ora';
 
@@ -105,6 +107,54 @@ function detectPackageManager() {
   }
 }
 
+function hasPythonProject(dirPath) {
+  return fs.existsSync(path.join(dirPath, 'pyproject.toml')) || fs.existsSync(path.join(dirPath, 'setup.py'));
+}
+
+function installOpenLMlib(VENV_PYTHON, spinner) {
+  execSync(`"${VENV_PYTHON}" -m pip install --upgrade pip`, { stdio: 'pipe' });
+
+  const candidateSpecs = [];
+  const localSourceCandidates = [
+    path.resolve(__dirname, '..', '..'),
+    path.resolve(__dirname, '..'),
+  ];
+
+  for (const localPath of localSourceCandidates) {
+    if (hasPythonProject(localPath)) {
+      candidateSpecs.push({
+        kind: 'editable',
+        value: localPath,
+        label: `local source (${localPath})`,
+      });
+      break;
+    }
+  }
+
+  if (process.env.npm_package_version) {
+    candidateSpecs.push({ kind: 'package', value: `openlmlib==${process.env.npm_package_version}`, label: `openlmlib==${process.env.npm_package_version}` });
+  }
+  candidateSpecs.push({ kind: 'package', value: 'openlmlib', label: 'openlmlib (latest from PyPI)' });
+  candidateSpecs.push({ kind: 'package', value: 'git+https://github.com/Vedant9500/OpenLMlib.git', label: 'OpenLMlib from GitHub' });
+
+  let lastError = null;
+  for (const spec of candidateSpecs) {
+    try {
+      spinner.text = `Installing openlmlib (${spec.label})...`;
+      if (spec.kind === 'editable') {
+        execSync(`"${VENV_PYTHON}" -m pip install -e "${spec.value}"`, { stdio: 'pipe' });
+      } else {
+        execSync(`"${VENV_PYTHON}" -m pip install "${spec.value}"`, { stdio: 'pipe' });
+      }
+      return;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('Unable to install openlmlib.');
+}
+
 async function runNonInteractive() {
   const LOGO = [
     chalk.cyan('    ███████    ███████████  ██████████ ██████   █████ █████       ██████   ██████ █████       █████ ███████████'),
@@ -154,16 +204,14 @@ async function runNonInteractive() {
   // Step 2: Create venv
   console.log('');
   const spinner1 = ora('Creating virtual environment...').start();
-  const os = await import('os');
-  const fs = await import('fs');
-  const OPENLMLIB_HOME = process.env.OPENLMLIB_HOME || path.join(os.default.homedir(), '.openlmlib');
+  const OPENLMLIB_HOME = process.env.OPENLMLIB_HOME || path.join(os.homedir(), '.openlmlib');
   const VENV_DIR = path.join(OPENLMLIB_HOME, 'venv');
-  const VENV_PYTHON = os.default.platform() === 'win32'
+  const VENV_PYTHON = os.platform() === 'win32'
     ? path.join(VENV_DIR, 'Scripts', 'python.exe')
     : path.join(VENV_DIR, 'bin', 'python');
 
-  if (!fs.default.existsSync(OPENLMLIB_HOME)) {
-    fs.default.mkdirSync(OPENLMLIB_HOME, { recursive: true });
+  if (!fs.existsSync(OPENLMLIB_HOME)) {
+    fs.mkdirSync(OPENLMLIB_HOME, { recursive: true });
   }
 
   execSync(`${getActivePythonCmd()} -m venv "${VENV_DIR}"`, { stdio: 'pipe' });
@@ -171,14 +219,13 @@ async function runNonInteractive() {
 
   // Step 3: Install openlmlib
   const spinner2 = ora('Installing openlmlib...').start();
-  execSync(`"${VENV_PYTHON}" -m pip install --upgrade pip`, { stdio: 'pipe' });
-  execSync(`"${VENV_PYTHON}" -m pip install -e "${path.resolve(__dirname, '..')}"`, { stdio: 'pipe' });
+  installOpenLMlib(VENV_PYTHON, spinner2);
   spinner2.succeed('openlmlib installed.');
 
   // Step 4: Download model
   const spinner3 = ora('Downloading embedding model (this may take a moment)...').start();
   const modelScriptPath = path.join(OPENLMLIB_HOME, '_download_model.py');
-  fs.default.writeFileSync(modelScriptPath, 'from sentence_transformers import SentenceTransformer\nSentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")\nprint("ok")');
+  fs.writeFileSync(modelScriptPath, 'from sentence_transformers import SentenceTransformer\nSentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")\nprint("ok")');
   try {
     execSync(`"${VENV_PYTHON}" "${modelScriptPath}"`, {
       stdio: 'pipe',
@@ -189,7 +236,7 @@ async function runNonInteractive() {
   } catch {
     spinner3.warn('Model download skipped (will download on first use).');
   } finally {
-    try { fs.default.unlinkSync(modelScriptPath); } catch {}
+    try { fs.unlinkSync(modelScriptPath); } catch {}
   }
 
   // Step 5: Configure
@@ -202,7 +249,7 @@ settings_path = Path(r"${OPENLMLIB_HOME}") / "config" / "settings.json"
 write_default_settings(settings_path, force=False)
 install_or_refresh_default_client_configs(settings_path=settings_path)
 print("ok")`;
-  fs.default.writeFileSync(configScriptPath, configScript);
+  fs.writeFileSync(configScriptPath, configScript);
 
   try {
     execSync(`"${VENV_PYTHON}" "${configScriptPath}"`, { stdio: 'pipe', encoding: 'utf-8' });
@@ -210,7 +257,7 @@ print("ok")`;
   } catch {
     spinner4.warn('MCP config skipped (run "openlmlib mcp-config" later).');
   } finally {
-    try { fs.default.unlinkSync(configScriptPath); } catch {}
+    try { fs.unlinkSync(configScriptPath); } catch {}
   }
 
   // Done
