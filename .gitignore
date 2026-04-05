@@ -48,3 +48,7 @@ data/**
 # OS files
 .DS_Store
 Thumbs.db
+
+# Installer
+installer/node_modules/
+installer/package-lock.json

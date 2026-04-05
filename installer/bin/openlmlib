@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# OpenLMlib — cross-platform entry point
+# Finds the vendored Python venv and delegates to the openlmlib module.
+
+OPENLMLIB_HOME="${OPENLMLIB_HOME:-$HOME/.openlmlib}"
+VENV_PYTHON="$OPENLMLIB_HOME/venv/bin/python"
+
+if [ ! -f "$VENV_PYTHON" ]; then
+  echo "error: OpenLMlib is not installed." >&2
+  echo "Run: npm install -g openlmlib" >&2
+  exit 1
+fi
+
+exec "$VENV_PYTHON" -m openlmlib "$@"
