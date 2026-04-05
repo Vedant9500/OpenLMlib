@@ -89,7 +89,34 @@ def rebuild_vector_index(settings_path: Path) -> Dict[str, Any]:
         store.add([finding.embedding_id], [vec])
         rebuilt += 1
 
-    save_vector_store(store, settings.vector_index_path, settings.vector_meta_path)
+    # Back up existing index files before overwriting, in case of save failure
+    index_backup = None
+    meta_backup = None
+    if settings.vector_index_path.exists():
+        index_backup = settings.vector_index_path.with_suffix(settings.vector_index_path.suffix + ".bak")
+        shutil.copy2(settings.vector_index_path, index_backup)
+    if settings.vector_meta_path.exists():
+        meta_backup = settings.vector_meta_path.with_suffix(settings.vector_meta_path.suffix + ".bak")
+        shutil.copy2(settings.vector_meta_path, meta_backup)
+
+    try:
+        save_vector_store(store, settings.vector_index_path, settings.vector_meta_path)
+    except Exception:
+        # Restore backups on failure
+        if index_backup and index_backup.exists():
+            shutil.copy2(index_backup, settings.vector_index_path)
+            index_backup.unlink()
+        if meta_backup and meta_backup.exists():
+            shutil.copy2(meta_backup, settings.vector_meta_path)
+            meta_backup.unlink()
+        raise
+    finally:
+        # Clean up backup files on success
+        if index_backup and index_backup.exists():
+            index_backup.unlink()
+        if meta_backup and meta_backup.exists():
+            meta_backup.unlink()
+
     cache.save()
     conn.close()
 
@@ -757,27 +784,24 @@ def delete_finding(settings_path: Path, finding_id: str, confirm: bool = False) 
             "message": "Set confirm=true to delete a finding.",
         }
 
-    settings = load_settings(settings_path)
-    conn = db.connect(settings.db_path)
-    db.init_db(conn)
+    runtime = get_runtime(settings_path)
+    settings = runtime.settings
+    conn = runtime.conn
     finding = db.get_finding(conn, finding_id)
     if finding is None:
-        conn.close()
         return {"status": "not_found"}
 
     json_path = settings.findings_dir / f"{finding.id}.json"
     try:
-        db.delete_finding(conn, finding.id)
+        with runtime.write_lock:
+            db.delete_finding(conn, finding.id)
+            runtime.store.delete([finding.embedding_id])
+            mark_dirty(runtime, vector=True)
+            maybe_flush(runtime, force=True)
         if json_path.exists():
             json_path.unlink()
-        store = _load_store(settings)
-        store.delete([finding.embedding_id])
-        save_vector_store(store, settings.vector_index_path, settings.vector_meta_path)
     except Exception as exc:
-        conn.close()
         return {"status": "error", "message": f"failed to delete finding: {exc}"}
-    finally:
-        conn.close()
 
     return {"status": "ok", "id": finding.id}
 

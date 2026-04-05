@@ -26,14 +26,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install numpy mcp
+          python -m pip install numpy mcp sentence-transformers rich
 
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
@@ -47,7 +47,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
@@ -61,7 +61,7 @@ jobs:
         run: python -m pip install --no-deps dist/*.whl
 
       - name: Install minimal runtime deps for smoke checks
-        run: python -m pip install numpy mcp
+        run: python -m pip install numpy mcp sentence-transformers rich
 
       - name: Verify CLI entrypoint
         run: openlmlib --help
