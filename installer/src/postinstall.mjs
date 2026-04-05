@@ -132,10 +132,18 @@ function installOpenLMlib(VENV_PYTHON, spinner) {
   }
 
   if (process.env.npm_package_version) {
+    candidateSpecs.push({
+      kind: 'package',
+      value: `git+https://github.com/Vedant9500/OpenLMlib.git@v${process.env.npm_package_version}`,
+      label: `OpenLMlib GitHub tag v${process.env.npm_package_version}`,
+    });
+  }
+  candidateSpecs.push({ kind: 'package', value: 'git+https://github.com/Vedant9500/OpenLMlib.git', label: 'OpenLMlib from GitHub (main branch)' });
+
+  if (process.env.npm_package_version) {
     candidateSpecs.push({ kind: 'package', value: `openlmlib==${process.env.npm_package_version}`, label: `openlmlib==${process.env.npm_package_version}` });
   }
   candidateSpecs.push({ kind: 'package', value: 'openlmlib', label: 'openlmlib (latest from PyPI)' });
-  candidateSpecs.push({ kind: 'package', value: 'git+https://github.com/Vedant9500/OpenLMlib.git', label: 'OpenLMlib from GitHub' });
 
   let lastError = null;
   for (const spec of candidateSpecs) {
@@ -222,22 +230,10 @@ async function runNonInteractive() {
   installOpenLMlib(VENV_PYTHON, spinner2);
   spinner2.succeed('openlmlib installed.');
 
-  // Step 4: Download model
-  const spinner3 = ora('Downloading embedding model (this may take a moment)...').start();
-  const modelScriptPath = path.join(OPENLMLIB_HOME, '_download_model.py');
-  fs.writeFileSync(modelScriptPath, 'from sentence_transformers import SentenceTransformer\nSentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")\nprint("ok")');
-  try {
-    execSync(`"${VENV_PYTHON}" "${modelScriptPath}"`, {
-      stdio: 'pipe',
-      encoding: 'utf-8',
-      timeout: 600000,
-    });
-    spinner3.succeed('Embedding model downloaded.');
-  } catch {
-    spinner3.warn('Model download skipped (will download on first use).');
-  } finally {
-    try { fs.unlinkSync(modelScriptPath); } catch {}
-  }
+  // Step 4: Skip model warmup during npm install to keep install time reasonable.
+  // The model will download lazily on first retrieval/query call.
+  const spinner3 = ora('Preparing embedding model setup...').start();
+  spinner3.succeed('Model warmup skipped (will download on first use).');
 
   // Step 5: Configure
   const spinner4 = ora('Configuring MCP clients...').start();

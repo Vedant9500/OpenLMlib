@@ -61,10 +61,17 @@ function installFromLocal(localPath, onProgress) {
     candidates.push({ kind: 'editable', value: localPath, label: `local source (${localPath})` });
   }
   if (process.env.npm_package_version) {
+    candidates.push({
+      kind: 'package',
+      value: `git+https://github.com/Vedant9500/OpenLMlib.git@v${process.env.npm_package_version}`,
+      label: `OpenLMlib GitHub tag v${process.env.npm_package_version}`,
+    });
+  }
+  candidates.push({ kind: 'package', value: 'git+https://github.com/Vedant9500/OpenLMlib.git', label: 'OpenLMlib from GitHub (main branch)' });
+  if (process.env.npm_package_version) {
     candidates.push({ kind: 'package', value: `openlmlib==${process.env.npm_package_version}`, label: `openlmlib==${process.env.npm_package_version}` });
   }
   candidates.push({ kind: 'package', value: 'openlmlib', label: 'openlmlib (latest from PyPI)' });
-  candidates.push({ kind: 'package', value: 'git+https://github.com/Vedant9500/OpenLMlib.git', label: 'OpenLMlib from GitHub' });
 
   let lastErr = null;
   for (const candidate of candidates) {

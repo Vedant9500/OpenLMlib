@@ -16,4 +16,4 @@ if not exist "%VENV_PYTHON%" (
   exit /b 1
 )
 
-"%VENV_PYTHON%" -m openlmlib %*
+"%VENV_PYTHON%" -m openlmlib.cli %*
