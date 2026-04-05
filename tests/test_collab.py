@@ -685,5 +685,158 @@ class TestSessionLifecycle(unittest.TestCase):
             )
 
 
+class TestRulesEngine(unittest.TestCase):
+    """Test session rules engine."""
+
+    def setUp(self):
+        from openlmlib.collab.rules_engine import RulesEngine, DEFAULT_RULES
+        self.RulesEngine = RulesEngine
+        self.DEFAULT_RULES = DEFAULT_RULES
+
+    def test_default_rules(self):
+        engine = self.RulesEngine()
+        self.assertEqual(engine.rules["max_agents"], 10)
+        self.assertEqual(engine.rules["max_message_length"], 8000)
+
+    def test_custom_rules_override(self):
+        engine = self.RulesEngine({"max_agents": 5})
+        self.assertEqual(engine.rules["max_agents"], 5)
+        self.assertEqual(engine.rules["max_message_length"], 8000)
+
+    def test_validate_join(self):
+        engine = self.RulesEngine({"max_agents": 3})
+        ok, err = engine.validate_join(2)
+        self.assertTrue(ok)
+        self.assertIsNone(err)
+
+        ok, err = engine.validate_join(3)
+        self.assertFalse(ok)
+        self.assertIn("full", err)
+
+    def test_validate_message_length(self):
+        engine = self.RulesEngine({"max_message_length": 100})
+        ok, warnings = engine.validate_message("x" * 50, "task")
+        self.assertTrue(ok)
+
+        ok, warnings = engine.validate_message("x" * 200, "task")
+        self.assertFalse(ok)
+        self.assertTrue(len(warnings) > 0)
+
+    def test_validate_message_artifact_required(self):
+        engine = self.RulesEngine({"require_artifact_for_results": True})
+        ok, warnings = engine.validate_message("result without artifact", "result")
+        self.assertTrue(ok)
+        self.assertTrue(len(warnings) > 0)
+
+        ok, warnings = engine.validate_message("result with artifact", "result", has_artifact_ref=True)
+        self.assertTrue(ok)
+        self.assertEqual(len(warnings), 0)
+
+    def test_should_compact(self):
+        engine = self.RulesEngine({"auto_compact_after_messages": 10})
+        self.assertFalse(engine.should_compact(5, 0))
+        self.assertTrue(engine.should_compact(15, 0))
+        self.assertFalse(engine.should_compact(15, 10))
+        self.assertTrue(engine.should_compact(20, 10))
+
+    def test_is_idle(self):
+        engine = self.RulesEngine({"auto_archive_after_idle_minutes": 30})
+        is_idle, minutes = engine.is_idle(
+            "2026-04-05T10:00:00+00:00",
+            "2026-04-05T10:20:00+00:00",
+        )
+        self.assertFalse(is_idle)
+        self.assertAlmostEqual(minutes, 20, delta=1)
+
+        is_idle, minutes = engine.is_idle(
+            "2026-04-05T10:00:00+00:00",
+            "2026-04-05T11:00:00+00:00",
+        )
+        self.assertTrue(is_idle)
+        self.assertAlmostEqual(minutes, 60, delta=1)
+
+    def test_rules_summary(self):
+        engine = self.RulesEngine({"max_agents": 5})
+        summary = engine.get_rules_summary()
+        self.assertIn("max_agents: 5 (custom)", summary)
+        self.assertIn("max_message_length: 8000", summary)
+
+
+class TestSessionCompactor(unittest.TestCase):
+    """Test session summarization and compaction."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.sessions_dir = Path(self.tmp.name) / "sessions"
+        self.sessions_dir.mkdir(parents=True)
+        self.db_path = Path(self.tmp.name) / "test.db"
+        self.conn = connect_collab_db(self.db_path)
+        init_collab_db(self.conn)
+        self.bus = MessageBus(self.conn, self.sessions_dir)
+        self.store = ArtifactStore(self.conn, self.sessions_dir)
+        self.sm = StateManager(self.conn)
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def _make_session(self):
+        create_session(
+            self.conn,
+            session_id="sess_001",
+            title="Research",
+            created_by="opus-4.6",
+            created_at="2026-04-05T10:00:00Z",
+        )
+        for i in range(5):
+            self.bus.send(
+                session_id="sess_001",
+                from_agent="agent_001",
+                msg_type="task" if i == 0 else "result",
+                content=f"Message {i}: {'Start research' if i == 0 else f'Found {i * 3} papers'}",
+                created_at=f"2026-04-05T10:0{i}:00Z",
+            )
+
+    def test_generate_summary(self):
+        from openlmlib.collab.compactor import SessionCompactor
+        self._make_session()
+        compactor = SessionCompactor(self.conn, self.sessions_dir, self.bus, self.store, self.sm)
+        summary = compactor.generate_summary("sess_001")
+        self.assertIsNotNone(summary)
+        self.assertIn("Session Overview", summary)
+        self.assertIn("Message types:", summary)
+        self.assertIn("Activity by agent:", summary)
+
+    def test_compact_session(self):
+        from openlmlib.collab.compactor import SessionCompactor
+        self._make_session()
+        compactor = SessionCompactor(self.conn, self.sessions_dir, self.bus, self.store, self.sm)
+        result = compactor.compact_session("sess_001")
+        self.assertIsNotNone(result)
+        self.assertIn("file_path", result)
+        self.assertIn("compacted_at", result)
+
+        summaries = self.store.list_summaries("sess_001")
+        self.assertEqual(len(summaries), 1)
+
+    def test_check_and_compact_below_threshold(self):
+        from openlmlib.collab.compactor import SessionCompactor
+        self._make_session()
+        compactor = SessionCompactor(self.conn, self.sessions_dir, self.bus, self.store, self.sm)
+        result = compactor.check_and_compact("sess_001", auto_compact_threshold=50)
+        self.assertIsNone(result)
+
+    def test_check_and_compact_above_threshold(self):
+        from openlmlib.collab.compactor import SessionCompactor
+        self._make_session()
+        state = self.sm.get_state("sess_001")
+        state["state"]["message_count"] = 60
+        self.sm.update_state("sess_001", state["state"], "system", "2026-04-05T10:10:00Z", state["version"])
+
+        compactor = SessionCompactor(self.conn, self.sessions_dir, self.bus, self.store, self.sm)
+        result = compactor.check_and_compact("sess_001", auto_compact_threshold=50)
+        self.assertIsNotNone(result)
+
+
 if __name__ == "__main__":
     unittest.main()

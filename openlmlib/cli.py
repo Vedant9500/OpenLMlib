@@ -483,6 +483,293 @@ def cmd_eval(args) -> int:
     return 0 if result.get("status") == "ok" else 1
 
 
+# ── CollabSessions CLI commands ──────────────────────────────────────────
+
+def _get_collab_paths(settings_path: Path) -> tuple:
+    """Get collab DB path and sessions directory from settings."""
+    if settings_path.exists():
+        with open(settings_path) as f:
+            cfg = json.load(f)
+        data_root = Path(cfg.get("data_root", "data"))
+    else:
+        data_root = Path("data")
+    return data_root / "collab_sessions.db", data_root / "sessions"
+
+
+def _collab_connection(settings_path: Path):
+    """Get an initialized collab DB connection."""
+    from openlmlib.collab.db import connect_collab_db, init_collab_db
+    db_path, sessions_dir = _get_collab_paths(settings_path)
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+    conn = connect_collab_db(db_path)
+    existing = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'"
+    ).fetchone()
+    if existing is None:
+        init_collab_db(conn)
+    return conn, sessions_dir
+
+
+def cmd_collab_create(args) -> int:
+    from openlmlib.collab.session import create_collab_session
+    conn, sessions_dir = _collab_connection(Path(args.settings))
+    try:
+        plan = None
+        if args.plan:
+            with open(args.plan) as f:
+                plan = json.load(f)
+        rules = None
+        if args.rules:
+            with open(args.rules) as f:
+                rules = json.load(f)
+        result = create_collab_session(
+            conn, sessions_dir,
+            title=args.title,
+            created_by=args.by,
+            description=args.task,
+            plan=plan,
+            rules=rules,
+        )
+        print(json.dumps(result, indent=2))
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_collab_list(args) -> int:
+    from openlmlib.collab.db import list_sessions
+    conn, _ = _collab_connection(Path(args.settings))
+    try:
+        sessions = list_sessions(conn, status=args.status, limit=args.limit)
+        print(json.dumps({"sessions": sessions, "count": len(sessions)}, indent=2))
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_collab_join(args) -> int:
+    from openlmlib.collab.session import join_collab_session
+    conn, sessions_dir = _collab_connection(Path(args.settings))
+    try:
+        result = join_collab_session(
+            conn, sessions_dir,
+            session_id=args.session_id,
+            model=args.model,
+            capabilities=args.capabilities,
+        )
+        print(json.dumps(result, indent=2))
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_collab_state(args) -> int:
+    from openlmlib.collab.db import get_session, get_session_state, get_session_tasks, get_session_agents
+    conn, _ = _collab_connection(Path(args.settings))
+    try:
+        session = get_session(conn, args.session_id)
+        if session is None:
+            print(f"Session {args.session_id} not found")
+            return 1
+        state = get_session_state(conn, args.session_id)
+        tasks = get_session_tasks(conn, args.session_id)
+        agents = get_session_agents(conn, args.session_id)
+        output = {
+            "session": session,
+            "state": state["state"] if state else {},
+            "tasks": tasks,
+            "agents": agents,
+        }
+        print(json.dumps(output, indent=2))
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_collab_messages(args) -> int:
+    from openlmlib.collab.db import get_messages
+    conn, _ = _collab_connection(Path(args.settings))
+    try:
+        msg_types = [args.msg_type] if args.msg_type else None
+        messages = get_messages(
+            conn, args.session_id,
+            limit=args.limit,
+            msg_types=msg_types,
+            from_agent=args.from_agent,
+        )
+        for msg in messages:
+            to = msg.get("to_agent") or "all"
+            print(f"[{msg['seq']}] [{msg['from_agent']} → {to}] [{msg['msg_type']}] {msg['content']}")
+        print(f"\n{len(messages)} messages")
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_collab_tail(args) -> int:
+    from openlmlib.collab.db import get_messages_tail
+    conn, _ = _collab_connection(Path(args.settings))
+    try:
+        messages = get_messages_tail(conn, args.session_id, args.lines)
+        for msg in messages:
+            to = msg.get("to_agent") or "all"
+            print(f"[{msg['seq']}] [{msg['from_agent']} → {to}] [{msg['msg_type']}] {msg['content']}")
+        print(f"\n{len(messages)} messages")
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_collab_grep(args) -> int:
+    from openlmlib.collab.db import grep_messages
+    conn, _ = _collab_connection(Path(args.settings))
+    try:
+        messages = grep_messages(conn, args.session_id, args.pattern, args.limit)
+        for msg in messages:
+            to = msg.get("to_agent") or "all"
+            print(f"[{msg['seq']}] [{msg['from_agent']} → {to}] [{msg['msg_type']}] {msg['content']}")
+        print(f"\n{len(messages)} matches")
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_collab_artifacts(args) -> int:
+    from openlmlib.collab.db import get_session_artifacts
+    conn, _ = _collab_connection(Path(args.settings))
+    try:
+        artifacts = get_session_artifacts(
+            conn, args.session_id,
+            created_by=args.agent,
+            artifact_type=args.type,
+        )
+        for art in artifacts:
+            tags = f" [{', '.join(art['tags'])}]" if art.get("tags") else ""
+            print(f"  {art['artifact_id']}: {art['title']} "
+                  f"(by {art['created_by']}, {art.get('word_count', '?')} words){tags}")
+        print(f"\n{len(artifacts)} artifacts")
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_collab_timeline(args) -> int:
+    from openlmlib.collab.db import get_messages
+    conn, _ = _collab_connection(Path(args.settings))
+    try:
+        messages = get_messages(conn, args.session_id, limit=args.limit)
+        for msg in messages:
+            to = msg.get("to_agent") or "all"
+            ts = msg.get("created_at", "")[:19]
+            print(f"{ts} [{msg['from_agent']} → {to}] [{msg['msg_type']}]")
+            print(f"  {msg['content'][:120]}")
+            print()
+        print(f"{len(messages)} messages in timeline")
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_collab_compact(args) -> int:
+    from openlmlib.collab.db import get_session_state, get_max_seq
+    from openlmlib.collab.message_bus import MessageBus
+    from openlmlib.collab.artifact_store import ArtifactStore
+    from openlmlib.collab.state_manager import StateManager
+    from openlmlib.collab.compactor import SessionCompactor
+    conn, sessions_dir = _collab_connection(Path(args.settings))
+    try:
+        state = get_session_state(conn, args.session_id)
+        if state is None:
+            print(f"Session {args.session_id} not found")
+            return 1
+        last_seq = state["state"].get("last_compact_seq", 0)
+        bus = MessageBus(conn, sessions_dir)
+        store = ArtifactStore(conn, sessions_dir)
+        sm = StateManager(conn)
+        compactor = SessionCompactor(conn, sessions_dir, bus, store, sm)
+        result = compactor.compact_session(args.session_id, last_seq)
+        if result:
+            print(json.dumps(result, indent=2))
+        else:
+            print("No messages to summarize")
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_collab_terminate(args) -> int:
+    from openlmlib.collab.session import terminate_collab_session
+    conn, sessions_dir = _collab_connection(Path(args.settings))
+    try:
+        result = terminate_collab_session(
+            conn, sessions_dir,
+            session_id=args.session_id,
+            summary=args.summary,
+        )
+        print(json.dumps(result, indent=2))
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_collab_export(args) -> int:
+    import shutil
+    from openlmlib.collab.db import get_session
+    conn, sessions_dir = _collab_connection(Path(args.settings))
+    try:
+        session = get_session(conn, args.session_id)
+        if session is None:
+            print(f"Session {args.session_id} not found")
+            return 1
+        src = sessions_dir / args.session_id
+        dst = Path(args.output_dir) / args.session_id
+        if src.exists():
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+            print(f"Exported session to {dst}")
+            return 0
+        else:
+            print(f"Session directory not found: {src}")
+            return 1
+    finally:
+        conn.close()
+
+
+def cmd_collab_inspect(args) -> int:
+    from openlmlib.collab.db import (
+        get_session, get_session_state, get_session_tasks,
+        get_session_agents, get_session_artifacts, get_max_seq,
+    )
+    conn, _ = _collab_connection(Path(args.settings))
+    try:
+        session = get_session(conn, args.session_id)
+        if session is None:
+            print(f"Session {args.session_id} not found")
+            return 1
+        state = get_session_state(conn, args.session_id)
+        tasks = get_session_tasks(conn, args.session_id)
+        agents = get_session_agents(conn, args.session_id)
+        artifacts = get_session_artifacts(conn, args.session_id)
+        msg_count = get_max_seq(conn, args.session_id)
+
+        print(f"Session: {session['title']}")
+        print(f"ID: {session['session_id']}")
+        print(f"Status: {session['status']}")
+        print(f"Orchestrator: {session['orchestrator']}")
+        print(f"Created: {session['created_at']}")
+        print(f"Messages: {msg_count}")
+        print(f"Agents: {len(agents)} ({len([a for a in agents if a['status'] == 'active'])} active)")
+        print(f"Tasks: {len(tasks)} ({len([t for t in tasks if t['status'] == 'completed'])} completed)")
+        print(f"Artifacts: {len(artifacts)}")
+        if state:
+            s = state["state"]
+            print(f"Phase: {s.get('current_phase', 'unknown')}")
+            print(f"Last activity: {s.get('last_activity', 'unknown')}")
+        return 0
+    finally:
+        conn.close()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="OpenLMlib CLI")
     parser.add_argument("--version", action="version", version=f"openlmlib {__version__}")
@@ -776,6 +1063,95 @@ def build_parser() -> argparse.ArgumentParser:
         help="Restore an archived finding instead of archiving",
     )
     archive_parser.set_defaults(func=cmd_archive)
+
+    # ── CollabSessions sub-commands ──────────────────────────────────────
+    collab_parser = subparsers.add_parser(
+        "collab", help="Multi-agent collaboration sessions"
+    )
+    collab_sub = collab_parser.add_subparsers(dest="collab_command", required=True)
+
+    # collab create
+    collab_create_p = collab_sub.add_parser("create", help="Create a new collaboration session")
+    collab_create_p.add_argument("--title", required=True, help="Session title")
+    collab_create_p.add_argument("--task", required=True, help="Task description")
+    collab_create_p.add_argument("--plan", help="JSON file with task plan")
+    collab_create_p.add_argument("--rules", help="JSON file with session rules")
+    collab_create_p.add_argument("--by", default="user", help="Creator identifier")
+    collab_create_p.set_defaults(func=cmd_collab_create)
+
+    # collab list
+    collab_list_p = collab_sub.add_parser("list", help="List collaboration sessions")
+    collab_list_p.add_argument("--status", help="Filter by status (active, completed, terminated)")
+    collab_list_p.add_argument("--limit", type=int, default=20, help="Max sessions to show")
+    collab_list_p.set_defaults(func=cmd_collab_list)
+
+    # collab join
+    collab_join_p = collab_sub.add_parser("join", help="Join an existing session")
+    collab_join_p.add_argument("session_id", help="Session ID to join")
+    collab_join_p.add_argument("--model", required=True, help="Your model identifier")
+    collab_join_p.add_argument("--capabilities", action="append", help="Capabilities (repeatable)")
+    collab_join_p.set_defaults(func=cmd_collab_join)
+
+    # collab state
+    collab_state_p = collab_sub.add_parser("state", help="Get session state")
+    collab_state_p.add_argument("session_id", help="Session ID")
+    collab_state_p.set_defaults(func=cmd_collab_state)
+
+    # collab messages
+    collab_msgs_p = collab_sub.add_parser("messages", help="View session messages")
+    collab_msgs_p.add_argument("session_id", help="Session ID")
+    collab_msgs_p.add_argument("--limit", type=int, default=20, help="Max messages")
+    collab_msgs_p.add_argument("--type", dest="msg_type", help="Filter by message type")
+    collab_msgs_p.add_argument("--from", dest="from_agent", help="Filter by sender")
+    collab_msgs_p.set_defaults(func=cmd_collab_messages)
+
+    # collab tail
+    collab_tail_p = collab_sub.add_parser("tail", help="View last N messages")
+    collab_tail_p.add_argument("session_id", help="Session ID")
+    collab_tail_p.add_argument("--lines", type=int, default=20, help="Number of messages")
+    collab_tail_p.set_defaults(func=cmd_collab_tail)
+
+    # collab grep
+    collab_grep_p = collab_sub.add_parser("grep", help="Search session messages")
+    collab_grep_p.add_argument("session_id", help="Session ID")
+    collab_grep_p.add_argument("pattern", help="Search pattern")
+    collab_grep_p.add_argument("--limit", type=int, default=50, help="Max results")
+    collab_grep_p.set_defaults(func=cmd_collab_grep)
+
+    # collab artifacts
+    collab_artifacts_p = collab_sub.add_parser("artifacts", help="List session artifacts")
+    collab_artifacts_p.add_argument("session_id", help="Session ID")
+    collab_artifacts_p.add_argument("--agent", help="Filter by creator")
+    collab_artifacts_p.add_argument("--type", help="Filter by type")
+    collab_artifacts_p.set_defaults(func=cmd_collab_artifacts)
+
+    # collab timeline
+    collab_timeline_p = collab_sub.add_parser("timeline", help="Chronological session view")
+    collab_timeline_p.add_argument("session_id", help="Session ID")
+    collab_timeline_p.add_argument("--limit", type=int, default=50, help="Max messages")
+    collab_timeline_p.set_defaults(func=cmd_collab_timeline)
+
+    # collab compact
+    collab_compact_p = collab_sub.add_parser("compact", help="Force session summarization")
+    collab_compact_p.add_argument("session_id", help="Session ID")
+    collab_compact_p.set_defaults(func=cmd_collab_compact)
+
+    # collab terminate
+    collab_term_p = collab_sub.add_parser("terminate", help="End a session")
+    collab_term_p.add_argument("session_id", help="Session ID")
+    collab_term_p.add_argument("--summary", help="Final summary text")
+    collab_term_p.set_defaults(func=cmd_collab_terminate)
+
+    # collab export
+    collab_export_p = collab_sub.add_parser("export", help="Export session artifacts")
+    collab_export_p.add_argument("session_id", help="Session ID")
+    collab_export_p.add_argument("--output-dir", required=True, help="Output directory")
+    collab_export_p.set_defaults(func=cmd_collab_export)
+
+    # collab inspect
+    collab_inspect_p = collab_sub.add_parser("inspect", help="Full session overview")
+    collab_inspect_p.add_argument("session_id", help="Session ID")
+    collab_inspect_p.set_defaults(func=cmd_collab_inspect)
 
     return parser
 

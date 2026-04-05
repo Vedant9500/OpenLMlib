@@ -33,6 +33,8 @@ from .message_bus import MessageBus
 from .context_compiler import ContextCompiler
 from .artifact_store import ArtifactStore
 from .state_manager import StateManager
+from .rules_engine import RulesEngine, DEFAULT_RULES
+from .compactor import SessionCompactor
 
 __all__ = [
     "connect_collab_db",
@@ -45,6 +47,9 @@ __all__ = [
     "ContextCompiler",
     "ArtifactStore",
     "StateManager",
+    "RulesEngine",
+    "DEFAULT_RULES",
+    "SessionCompactor",
     "create_session",
     "get_session",
     "list_sessions",
