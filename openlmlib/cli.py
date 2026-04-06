@@ -770,6 +770,88 @@ def cmd_collab_inspect(args) -> int:
         conn.close()
 
 
+def cmd_collab_templates(args) -> int:
+    from openlmlib.collab.templates import list_templates, get_template
+    if args.template:
+        tpl = get_template(args.template)
+        if tpl is None:
+            print(f"Template '{args.template}' not found")
+            return 1
+        print(json.dumps(tpl, indent=2))
+    else:
+        templates = list_templates()
+        print(json.dumps({"templates": templates, "count": len(templates)}, indent=2))
+    return 0
+
+
+def cmd_collab_create_from_template(args) -> int:
+    from openlmlib.collab.templates import get_template
+    from openlmlib.collab.session import create_collab_session
+    template = get_template(args.template_id)
+    if template is None:
+        print(f"Template '{args.template_id}' not found")
+        return 1
+    conn, sessions_dir = _collab_connection(Path(args.settings))
+    try:
+        result = create_collab_session(
+            conn, sessions_dir,
+            title=args.title,
+            created_by=args.by,
+            description=args.task,
+            plan=template["plan"],
+            rules=template["rules"],
+        )
+        print(json.dumps(result, indent=2))
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_collab_export_library(args) -> int:
+    from openlmlib.collab.export_bridge import export_session_to_library
+    conn, sessions_dir = _collab_connection(Path(args.settings))
+    try:
+        result = export_session_to_library(
+            settings_path=Path(args.settings),
+            session_id=args.session_id,
+            collab_conn=conn,
+            sessions_dir=sessions_dir,
+            project=args.project,
+            confidence=args.confidence,
+            tags=args.tags,
+            artifact_ids=args.artifacts,
+        )
+        print(json.dumps(result, indent=2))
+        return 0 if result.get("failed", 0) == 0 else 1
+    finally:
+        conn.close()
+
+
+def cmd_collab_search(args) -> int:
+    from openlmlib.collab.db import list_sessions, grep_messages, get_session_artifacts
+    conn, sessions_dir = _collab_connection(Path(args.settings))
+    try:
+        sessions = list_sessions(conn, status=args.status, limit=args.limit)
+        results = []
+        for session in sessions:
+            sid = session["session_id"]
+            msgs = grep_messages(conn, sid, args.query, limit=5)
+            arts = get_session_artifacts(conn, sid)
+            art_matches = [a for a in arts if args.query.lower() in a["title"].lower()]
+            if msgs or art_matches:
+                results.append({
+                    "session_id": sid,
+                    "title": session["title"],
+                    "status": session["status"],
+                    "message_matches": len(msgs),
+                    "artifact_matches": len(art_matches),
+                })
+        print(json.dumps({"results": results, "count": len(results)}, indent=2))
+        return 0
+    finally:
+        conn.close()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="OpenLMlib CLI")
     parser.add_argument("--version", action="version", version=f"openlmlib {__version__}")
@@ -1152,6 +1234,35 @@ def build_parser() -> argparse.ArgumentParser:
     collab_inspect_p = collab_sub.add_parser("inspect", help="Full session overview")
     collab_inspect_p.add_argument("session_id", help="Session ID")
     collab_inspect_p.set_defaults(func=cmd_collab_inspect)
+
+    # collab templates
+    collab_tpl_p = collab_sub.add_parser("templates", help="List session templates")
+    collab_tpl_p.add_argument("--template", help="Show details of a specific template")
+    collab_tpl_p.set_defaults(func=cmd_collab_templates)
+
+    # collab create-from-template
+    collab_cft_p = collab_sub.add_parser("create-from-template", help="Create session from template")
+    collab_cft_p.add_argument("template_id", help="Template ID")
+    collab_cft_p.add_argument("--title", required=True, help="Session title")
+    collab_cft_p.add_argument("--task", required=True, help="Task description")
+    collab_cft_p.add_argument("--by", default="user", help="Creator identifier")
+    collab_cft_p.set_defaults(func=cmd_collab_create_from_template)
+
+    # collab export-library
+    collab_expl_p = collab_sub.add_parser("export-library", help="Export session to main library")
+    collab_expl_p.add_argument("session_id", help="Session ID")
+    collab_expl_p.add_argument("--project", help="Project name")
+    collab_expl_p.add_argument("--confidence", type=float, default=0.8, help="Confidence score")
+    collab_expl_p.add_argument("--tags", action="append", help="Tags (repeatable)")
+    collab_expl_p.add_argument("--artifacts", nargs="*", help="Specific artifact IDs")
+    collab_expl_p.set_defaults(func=cmd_collab_export_library)
+
+    # collab search
+    collab_search_p = collab_sub.add_parser("search", help="Search across all sessions")
+    collab_search_p.add_argument("query", help="Search query")
+    collab_search_p.add_argument("--status", help="Filter sessions by status")
+    collab_search_p.add_argument("--limit", type=int, default=20, help="Max results")
+    collab_search_p.set_defaults(func=cmd_collab_search)
 
     return parser
 

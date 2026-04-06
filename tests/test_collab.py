@@ -838,5 +838,75 @@ class TestSessionCompactor(unittest.TestCase):
         self.assertIsNotNone(result)
 
 
+class TestSessionTemplates(unittest.TestCase):
+    """Test session templates."""
+
+    def test_list_templates(self):
+        from openlmlib.collab.templates import list_templates
+        templates = list_templates()
+        self.assertGreater(len(templates), 0)
+        self.assertIn("deep_research", [t["template_id"] for t in templates])
+
+    def test_get_template(self):
+        from openlmlib.collab.templates import get_template
+        tpl = get_template("deep_research")
+        self.assertIsNotNone(tpl)
+        self.assertEqual(tpl["name"], "Deep Research")
+        self.assertIn("plan", tpl)
+        self.assertIn("rules", tpl)
+
+    def test_get_nonexistent_template(self):
+        from openlmlib.collab.templates import get_template
+        tpl = get_template("nonexistent")
+        self.assertIsNone(tpl)
+
+
+class TestMultiSession(unittest.TestCase):
+    """Test multi-session support."""
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        from openlmlib.collab.db import connect_collab_db, init_collab_db, create_session
+        from openlmlib.collab.session import create_collab_session, join_collab_session
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.sessions_dir = Path(self.tmp.name) / "sessions"
+        self.sessions_dir.mkdir(parents=True)
+        self.db_path = Path(self.tmp.name) / "test.db"
+        self.conn = connect_collab_db(self.db_path)
+        init_collab_db(self.conn)
+
+        r1 = create_collab_session(self.conn, self.sessions_dir, "Research 1", "opus", "Task 1")
+        r2 = create_collab_session(self.conn, self.sessions_dir, "Research 2", "opus", "Task 2")
+        join_collab_session(self.conn, self.sessions_dir, r1["session_id"], "codex", capabilities=["code"])
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def test_get_agent_sessions(self):
+        from openlmlib.collab.multi_session import get_agent_sessions
+        from openlmlib.collab.db import get_session_agents
+        all_agents = get_session_agents(self.conn, "sess_")
+        if all_agents:
+            agent_id = all_agents[0]["agent_id"]
+            sessions = get_agent_sessions(self.conn, agent_id)
+            self.assertGreaterEqual(len(sessions), 1)
+
+    def test_get_session_participants(self):
+        from openlmlib.collab.multi_session import get_session_relationships
+        result = get_session_relationships(self.conn, "sess_")
+        self.assertIn("by_shared_agents", result)
+
+
+class TestExportBridge(unittest.TestCase):
+    """Test export bridge."""
+
+    def test_export_bridge_imports(self):
+        from openlmlib.collab.export_bridge import export_session_to_library
+        self.assertTrue(callable(export_session_to_library))
+
+
 if __name__ == "__main__":
     unittest.main()
