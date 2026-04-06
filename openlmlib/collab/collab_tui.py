@@ -121,7 +121,7 @@ def call_llm(api_key: str, model: str, system_prompt: str, user_prompt: str, max
 
 def init_collab_data():
     """Initialize collab data directory."""
-    settings = global_settings_path()
+    settings = resolve_global_settings_path()
     if settings.exists():
         with open(settings) as f:
             cfg = json.load(f)
