@@ -31,6 +31,10 @@ def _settings_path() -> Path:
 
 mcp = FastMCP("OpenLMlib")
 
+from .collab.collab_mcp import collab_mcp
+for tool_name, tool_func in collab_mcp._tool_manager._tools.items():
+    mcp._tool_manager._tools[tool_name] = tool_func
+
 
 def _ensure_runtime() -> None:
     """Pre-initialize the runtime so the first tool call isn't slow.
