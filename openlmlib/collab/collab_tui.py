@@ -19,16 +19,20 @@ import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Change to project root and add to path
+os.chdir(Path(__file__).parent.parent.parent)
+sys.path.insert(0, ".")
+
 try:
     from openlmlib.collab.db import connect_collab_db, init_collab_db, list_sessions
     from openlmlib.collab.session import create_collab_session, join_collab_session
     from openlmlib.collab.message_bus import MessageBus
     from openlmlib.collab.artifact_store import ArtifactStore
     from openlmlib.collab.context_compiler import ContextCompiler
-    from openlmlib.collab.templates import list_templates
-    from openlmlib.settings import global_settings_path
-except ImportError:
-    print("Error: Run from OpenLMlib project directory")
+    from openlmlib.settings import resolve_global_settings_path
+except ImportError as e:
+    print(f"Import error: {e}")
+    print("Make sure you're running from the OpenLMlib directory")
     sys.exit(1)
 
 
