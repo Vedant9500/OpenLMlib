@@ -47,6 +47,15 @@ def _get_collab_paths() -> tuple[Path, Path]:
     return db_path, sessions_dir
 
 
+def _get_settings_path() -> Path:
+    """Get the OpenLMLib settings path."""
+    settings_path_str = os.environ.get("OPENLMLIB_SETTINGS")
+    if settings_path_str:
+        return Path(settings_path_str)
+    from .settings import resolve_global_settings_path
+    return resolve_global_settings_path()
+
+
 def _get_collab_connection():
     """Get a connection to the collab database, initializing if needed."""
     db_path, sessions_dir = _get_collab_paths()
@@ -227,6 +236,60 @@ def collab_get_session_state(session_id: str) -> Dict:
 
 
 @collab_mcp.tool()
+def collab_update_session_state(
+    session_id: str,
+    state: Dict,
+    orchestrator_id: str,
+) -> Dict:
+    """Update the session state (orchestrator only).
+
+    This is the only way to modify session state. Only the orchestrator
+    can call this. The state is versioned with optimistic concurrency.
+
+    Args:
+        session_id: Target session
+        state: New state dict (will be merged with existing state)
+        orchestrator_id: The orchestrator's agent ID (for authorization)
+
+    Returns:
+        Dict with updated state and version info
+    """
+    from datetime import datetime, timezone
+    conn, sessions_dir = _get_collab_connection()
+    try:
+        session = collab_db.get_session(conn, session_id)
+        if session is None:
+            return {"error": f"Session {session_id} not found"}
+
+        if orchestrator_id != session["orchestrator"]:
+            return {"error": "Only the orchestrator can update session state"}
+
+        sm = StateManager(conn)
+        current = sm.get_state(session_id)
+        if current is None:
+            return {"error": "Session state not found"}
+
+        merged = {**current["state"], **state}
+        now = datetime.now(timezone.utc).isoformat()
+
+        success = sm.update_state(
+            session_id, merged, orchestrator_id, now, current["version"]
+        )
+        if not success:
+            return {"error": "State was modified by another process, retry with updated state"}
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "version": current["version"] + 1,
+            "updated_at": now,
+            "state": merged,
+        }
+    finally:
+        conn.close()
+
+
+@collab_mcp.tool()
 def collab_send_message(
     session_id: str,
     msg_type: str,
@@ -356,6 +419,40 @@ def collab_tail_messages(
         return {
             "messages": messages,
             "count": len(messages),
+        }
+    finally:
+        conn.close()
+
+
+
+@collab_mcp.tool()
+def collab_read_message_range(
+    session_id: str,
+    start_seq: int,
+    end_seq: int,
+) -> Dict:
+    """Read messages in a specific sequence range.
+
+    Use this to zoom into a specific part of the conversation
+    when you need more context than tail provides.
+
+    Args:
+        session_id: Session to read from
+        start_seq: Starting sequence number (inclusive)
+        end_seq: Ending sequence number (inclusive)
+
+    Returns:
+        Dict with messages in the specified range
+    """
+    conn, sessions_dir = _get_collab_connection()
+    try:
+        bus = MessageBus(conn, sessions_dir)
+        messages = bus.read_range(session_id, start_seq, end_seq)
+        return {
+            "messages": messages,
+            "count": len(messages),
+            "start_seq": start_seq,
+            "end_seq": end_seq,
         }
     finally:
         conn.close()
@@ -647,9 +744,413 @@ def collab_terminate_session(
             "terminated_at": result["terminated_at"],
             "summary_saved": result["summary_saved"],
             "next_steps": [
-                "Use openlmlib_add_finding to export important artifacts to the main library",
+                "Use collab_export_to_library to export artifacts to the main library",
                 f"Session files are preserved at: data/sessions/{session_id}/",
             ],
+        }
+    finally:
+        conn.close()
+
+
+@collab_mcp.tool()
+def collab_export_to_library(
+    session_id: str,
+    project: Optional[str] = None,
+    confidence: float = 0.8,
+    tags: Optional[List[str]] = None,
+    artifact_ids: Optional[List[str]] = None,
+    include_summary: bool = True,
+) -> Dict:
+    """Export session artifacts as findings in the main OpenLMLib library.
+
+    After a session completes, use this to permanently store the
+    research outputs in the main library for future retrieval.
+
+    Args:
+        session_id: Completed session to export
+        project: Project name for findings (defaults to session title)
+        confidence: Default confidence score (default 0.8)
+        tags: Additional tags to apply to all findings
+        artifact_ids: Specific artifacts to export (None = all)
+        include_summary: Also export the session summary as a finding
+
+    Returns:
+        Dict with export results (exported count, failures, finding IDs)
+    """
+    conn, sessions_dir = _get_collab_connection()
+    try:
+        settings_path = _get_settings_path()
+        from .export_bridge import export_session_to_library, export_session_summary_as_finding
+
+        result = export_session_to_library(
+            settings_path=settings_path,
+            session_id=session_id,
+            collab_conn=conn,
+            sessions_dir=sessions_dir,
+            project=project,
+            confidence=confidence,
+            tags=tags,
+            artifact_ids=artifact_ids,
+        )
+
+        summary_result = None
+        if include_summary and result.get("exported", 0) > 0:
+            summary_result = export_session_summary_as_finding(
+                settings_path=settings_path,
+                session_id=session_id,
+                collab_conn=conn,
+                sessions_dir=sessions_dir,
+                project=project,
+            )
+
+        result["summary_exported"] = summary_result
+        return result
+    finally:
+        conn.close()
+
+
+@collab_mcp.tool()
+def collab_list_templates() -> Dict:
+    """List available session templates for quick session creation.
+
+    Templates provide predefined plans and rules for common research
+    patterns like deep research, code review, market analysis, etc.
+
+    Returns:
+        Dict with list of templates
+    """
+    from .templates import list_templates
+    return {
+        "templates": list_templates(),
+        "count": len(list_templates()),
+    }
+
+
+@collab_mcp.tool()
+def collab_get_template(template_id: str) -> Dict:
+    """Get details of a specific session template.
+
+    Args:
+        template_id: Template identifier (e.g., 'deep_research', 'code_review')
+
+    Returns:
+        Dict with template details including plan and rules
+    """
+    from .templates import get_template
+    template = get_template(template_id)
+    if template is None:
+        return {"error": f"Template '{template_id}' not found"}
+    return template
+
+
+@collab_mcp.tool()
+def collab_create_session_from_template(
+    template_id: str,
+    title: str,
+    task_description: str,
+    created_by: str = "orchestrator",
+) -> Dict:
+    """Create a session from a predefined template.
+
+    The template provides the plan (tasks) and rules for the session.
+
+    Args:
+        template_id: Template to use (e.g., 'deep_research', 'code_review')
+        title: Session title
+        task_description: Specific task description for this session
+        created_by: Creator identifier
+
+    Returns:
+        Dict with session info
+    """
+    from .templates import get_template
+    template = get_template(template_id)
+    if template is None:
+        return {"error": f"Template '{template_id}' not found"}
+
+    conn, sessions_dir = _get_collab_connection()
+    try:
+        result = create_collab_session(
+            conn=conn,
+            sessions_dir=sessions_dir,
+            title=title,
+            created_by=created_by,
+            description=task_description,
+            plan=template["plan"],
+            rules=template["rules"],
+        )
+        return {
+            "success": True,
+            "session_id": result["session_id"],
+            "your_agent_id": result["agent_id"],
+            "template": template_id,
+            "title": result["title"],
+            "plan_steps": len(template["plan"]),
+            "next_steps": [
+                "Use collab_get_session_context to understand the plan",
+                "Use collab_send_message to assign tasks to agents",
+                "Agents can join using collab_join_session",
+            ],
+        }
+    finally:
+        conn.close()
+
+
+@collab_mcp.tool()
+def collab_get_agent_sessions(
+    agent_id: str,
+    status: Optional[str] = None,
+) -> Dict:
+    """Get all sessions an agent has participated in.
+
+    Useful for tracking an agent's work across multiple sessions.
+
+    Args:
+        agent_id: Agent identifier
+        status: Filter by session status (optional)
+
+    Returns:
+        Dict with list of sessions and participation info
+    """
+    conn, _ = _get_collab_connection()
+    try:
+        from .multi_session import get_agent_sessions
+        sessions = get_agent_sessions(conn, agent_id, status)
+        return {
+            "agent_id": agent_id,
+            "sessions": sessions,
+            "count": len(sessions),
+        }
+    finally:
+        conn.close()
+
+
+@collab_mcp.tool()
+def collab_get_active_sessions_summary() -> Dict:
+    """Get a summary of all active sessions.
+
+    Returns counts of active sessions, agents, and messages.
+    """
+    conn, _ = _get_collab_connection()
+    try:
+        from .multi_session import get_active_sessions_summary
+        return get_active_sessions_summary(conn)
+    finally:
+        conn.close()
+
+
+@collab_mcp.tool()
+def collab_search_sessions(
+    query: str,
+    status: Optional[str] = None,
+    limit: int = 20,
+) -> Dict:
+    """Search across all sessions by message content.
+
+    Uses FTS5 full-text search to find sessions matching the query.
+
+    Args:
+        query: Search query (supports FTS5 syntax)
+        status: Filter by session status (optional)
+        limit: Max results (default 20)
+
+    Returns:
+        Dict with matching sessions ranked by relevance
+    """
+    conn, _ = _get_collab_connection()
+    try:
+        from .multi_session import search_sessions_by_content
+        results = search_sessions_by_content(conn, query, limit, status)
+        return {
+            "query": query,
+            "results": results,
+            "count": len(results),
+        }
+    finally:
+        conn.close()
+
+
+@collab_mcp.tool()
+def collab_get_session_relationships(session_id: str) -> Dict:
+    """Find sessions related to a given session.
+
+    Identifies related sessions based on shared agents or same orchestrator.
+
+    Args:
+        session_id: Base session to find relationships for
+
+    Returns:
+        Dict with related sessions grouped by relationship type
+    """
+    conn, _ = _get_collab_connection()
+    try:
+        from .multi_session import get_session_relationships
+        return get_session_relationships(conn, session_id)
+    finally:
+        conn.close()
+
+
+@collab_mcp.tool()
+def collab_get_session_statistics(session_id: str) -> Dict:
+    """Get detailed statistics for a session.
+
+    Includes message counts, breakdown by type and agent,
+    artifact count, and time range.
+
+    Args:
+        session_id: Session to get statistics for
+
+    Returns:
+        Dict with session statistics
+    """
+    conn, _ = _get_collab_connection()
+    try:
+        from .multi_session import get_session_statistics
+        return get_session_statistics(conn, session_id)
+    finally:
+        conn.close()
+
+
+@collab_mcp.tool()
+def collab_list_openrouter_models(
+    search: Optional[str] = None,
+    provider: Optional[str] = None,
+    max_price_per_million: Optional[float] = None,
+    context_length_min: Optional[int] = None,
+    is_free: bool = False,
+    force_refresh: bool = False,
+) -> Dict:
+    """List available models from OpenRouter API.
+
+    Fetches the current model catalog and optionally filters by criteria.
+    Results are cached for 1 hour to avoid excessive API calls.
+    Requires OPENROUTER_API_KEY environment variable.
+
+    Args:
+        search: Search term in model name or description
+        provider: Filter by provider (e.g., 'openai', 'anthropic', 'google')
+        max_price_per_million: Max combined input+output price per 1M tokens
+        context_length_min: Minimum context length in tokens
+        is_free: Only include free models
+        force_refresh: Force fresh API call, ignoring cache
+
+    Returns:
+        Dict with list of available models and their details
+    """
+    conn, sessions_dir = _get_collab_connection()
+    try:
+        from .openrouter_client import fetch_openrouter_models, filter_models, format_model_summary
+
+        result = fetch_openrouter_models(sessions_dir, force_refresh)
+        if result.get("error"):
+            return result
+
+        models = result["models"]
+        if search or provider or max_price_per_million is not None or context_length_min is not None or is_free:
+            models = filter_models(
+                models,
+                search=search,
+                provider=provider,
+                max_price_per_million=max_price_per_million,
+                context_length_min=context_length_min,
+                is_free=is_free,
+            )
+
+        return {
+            "models": [
+                {
+                    "id": m.get("id"),
+                    "name": m.get("name"),
+                    "pricing": m.get("pricing", {}),
+                    "context_length": m.get("context_length"),
+                    "top_provider": m.get("top_provider"),
+                }
+                for m in models
+            ],
+            "count": len(models),
+            "source": result.get("source", "unknown"),
+        }
+    finally:
+        conn.close()
+
+
+@collab_mcp.tool()
+def collab_get_openrouter_model_details(model_id: str) -> Dict:
+    """Get detailed information about a specific OpenRouter model.
+
+    Args:
+        model_id: Full model ID (e.g., 'anthropic/claude-sonnet-4')
+
+    Returns:
+        Dict with model details including pricing, context, and description
+    """
+    conn, sessions_dir = _get_collab_connection()
+    try:
+        from .openrouter_client import fetch_openrouter_models, format_model_summary
+
+        result = fetch_openrouter_models(sessions_dir, force_refresh=False)
+        if result.get("error"):
+            return result
+
+        models = result["models"]
+        model = next((m for m in models if m.get("id") == model_id), None)
+        if model is None:
+            return {"error": f"Model '{model_id}' not found. Use collab_list_openrouter_models to see available models."}
+
+        return {
+            "model": model,
+            "summary": format_model_summary(model),
+        }
+    finally:
+        conn.close()
+
+
+@collab_mcp.tool()
+def collab_get_recommended_models(task_type: str) -> Dict:
+    """Get recommended OpenRouter models for a specific task type.
+
+    Recommendations are based on model capabilities and typical use cases.
+
+    Args:
+        task_type: Task type (research, coding, analysis, writing, summarization, orchestrator, worker)
+
+    Returns:
+        Dict with recommended model IDs and their details
+    """
+    conn, sessions_dir = _get_collab_connection()
+    try:
+        from .openrouter_client import get_recommended_models_for_task, fetch_openrouter_models, format_model_summary
+
+        recommended_ids = get_recommended_models_for_task(task_type)
+        result = fetch_openrouter_models(sessions_dir, force_refresh=False)
+
+        if result.get("error"):
+            return {
+                "task_type": task_type,
+                "recommended_ids": recommended_ids,
+                "error": result.get("error"),
+                "note": "Set OPENROUTER_API_KEY to get live model details",
+            }
+
+        models_map = {m.get("id"): m for m in result.get("models", [])}
+        recommendations = []
+        for model_id in recommended_ids:
+            model = models_map.get(model_id)
+            if model:
+                recommendations.append({
+                    "id": model_id,
+                    "name": model.get("name"),
+                    "pricing": model.get("pricing", {}),
+                    "context_length": model.get("context_length"),
+                    "summary": format_model_summary(model),
+                })
+            else:
+                recommendations.append({"id": model_id, "note": "Not found in current catalog"})
+
+        return {
+            "task_type": task_type,
+            "recommended_models": recommendations,
+            "count": len(recommendations),
         }
     finally:
         conn.close()
