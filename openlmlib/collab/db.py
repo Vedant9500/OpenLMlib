@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS messages (
     to_agent TEXT,
     content TEXT NOT NULL,
     metadata_json TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    UNIQUE(session_id, seq)
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
@@ -151,6 +152,13 @@ def _json_load(value: Optional[str], default=None):
     return json.loads(value)
 
 
+def _row_to_message(row: sqlite3.Row) -> Dict:
+    """Convert a message row to a dict with parsed metadata."""
+    d = dict(row)
+    d["metadata"] = _json_load(d.pop("metadata_json"), {})
+    return d
+
+
 # ── Session CRUD ──────────────────────────────────────────────────────
 
 def create_session(
@@ -220,29 +228,18 @@ def list_sessions(
     offset: int = 0,
 ) -> List[Dict]:
     """List sessions with optional status filter."""
+    sql = """
+        SELECT session_id, title, description, created_by, created_at,
+               status, orchestrator, updated_at
+        FROM sessions
+    """
+    params: list = []
     if status:
-        rows = conn.execute(
-            """
-            SELECT session_id, title, description, created_by, created_at,
-                   status, orchestrator, updated_at
-            FROM sessions
-            WHERE status = ?
-            ORDER BY updated_at DESC
-            LIMIT ? OFFSET ?
-            """,
-            (status, limit, offset),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            """
-            SELECT session_id, title, description, created_by, created_at,
-                   status, orchestrator, updated_at
-            FROM sessions
-            ORDER BY updated_at DESC
-            LIMIT ? OFFSET ?
-            """,
-            (limit, offset),
-        ).fetchall()
+        sql += " WHERE status = ?"
+        params.append(status)
+    sql += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+    rows = conn.execute(sql, params).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -334,7 +331,7 @@ def insert_message(
     conn: sqlite3.Connection,
     msg_id: str,
     session_id: str,
-    seq: int,
+    seq: Optional[int],
     from_agent: str,
     msg_type: str,
     content: str,
@@ -343,18 +340,40 @@ def insert_message(
     to_agent: Optional[str] = None,
     metadata: Optional[Dict] = None,
 ) -> None:
-    """Append a message to the session (append-only)."""
+    """Append a message to the session (append-only).
+    
+    If seq is None, automatically assigns the next sequence number.
+    """
     metadata_json = _json_dump(metadata) if metadata else None
     with conn:
-        conn.execute(
-            """
-            INSERT INTO messages (msg_id, session_id, seq, from_agent, from_model,
-                                  msg_type, to_agent, content, metadata_json, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (msg_id, session_id, seq, from_agent, from_model,
-             msg_type, to_agent, content, metadata_json, created_at),
-        )
+        if seq is None:
+            # Atomic seq assignment via subquery to avoid TOCTOU race
+            conn.execute(
+                """
+                INSERT INTO messages (msg_id, session_id, seq, from_agent, from_model,
+                                      msg_type, to_agent, content, metadata_json, created_at)
+                VALUES (?, ?,
+                        (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE session_id = ?),
+                        ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (msg_id, session_id, session_id, from_agent, from_model,
+                 msg_type, to_agent, content, metadata_json, created_at),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO messages (msg_id, session_id, seq, from_agent, from_model,
+                                      msg_type, to_agent, content, metadata_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (msg_id, session_id, seq, from_agent, from_model,
+                 msg_type, to_agent, content, metadata_json, created_at),
+            )
+    # Return the actual assigned seq
+    assigned = conn.execute(
+        "SELECT seq FROM messages WHERE msg_id = ?", (msg_id,)
+    ).fetchone()
+    return int(assigned["seq"]) if assigned else (seq or 0)
 
 
 def get_messages(
@@ -390,12 +409,7 @@ def get_messages(
     params.extend([limit, offset])
 
     rows = conn.execute(sql, params).fetchall()
-    result = []
-    for r in rows:
-        d = dict(r)
-        d["metadata"] = _json_load(d.pop("metadata_json"), {})
-        result.append(d)
-    return result
+    return [_row_to_message(r) for r in rows]
 
 
 def get_messages_since(
@@ -427,12 +441,7 @@ def get_messages_since(
     params.append(limit)
 
     rows = conn.execute(sql, params).fetchall()
-    result = []
-    for r in rows:
-        d = dict(r)
-        d["metadata"] = _json_load(d.pop("metadata_json"), {})
-        result.append(d)
-    return result
+    return [_row_to_message(r) for r in rows]
 
 
 def get_messages_tail(
@@ -452,13 +461,7 @@ def get_messages_tail(
         """,
         (session_id, n),
     ).fetchall()
-    rows = list(reversed(rows))
-    result = []
-    for r in rows:
-        d = dict(r)
-        d["metadata"] = _json_load(d.pop("metadata_json"), {})
-        result.append(d)
-    return result
+    return [_row_to_message(r) for r in reversed(rows)]
 
 
 def get_message_range(
@@ -478,12 +481,7 @@ def get_message_range(
         """,
         (session_id, start_seq, end_seq),
     ).fetchall()
-    result = []
-    for r in rows:
-        d = dict(r)
-        d["metadata"] = _json_load(d.pop("metadata_json"), {})
-        result.append(d)
-    return result
+    return [_row_to_message(r) for r in rows]
 
 
 def grep_messages(
@@ -512,12 +510,7 @@ def grep_messages(
     params.append(limit)
 
     rows = conn.execute(sql, params).fetchall()
-    result = []
-    for r in rows:
-        d = dict(r)
-        d["metadata"] = _json_load(d.pop("metadata_json"), {})
-        result.append(d)
-    return result
+    return [_row_to_message(r) for r in rows]
 
 
 def get_max_seq(conn: sqlite3.Connection, session_id: str) -> int:
@@ -584,24 +577,13 @@ def get_session_tasks(
     status: Optional[str] = None,
 ) -> List[Dict]:
     """Get tasks for a session."""
+    sql = "SELECT * FROM tasks WHERE session_id = ?"
+    params: list = [session_id]
     if status:
-        rows = conn.execute(
-            """
-            SELECT * FROM tasks
-            WHERE session_id = ? AND status = ?
-            ORDER BY step_num ASC
-            """,
-            (session_id, status),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            """
-            SELECT * FROM tasks
-            WHERE session_id = ?
-            ORDER BY step_num ASC
-            """,
-            (session_id,),
-        ).fetchall()
+        sql += " AND status = ?"
+        params.append(status)
+    sql += " ORDER BY step_num ASC"
+    rows = conn.execute(sql, params).fetchall()
     return [dict(r) for r in rows]
 
 

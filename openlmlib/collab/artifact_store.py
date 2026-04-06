@@ -138,13 +138,8 @@ class ArtifactStore:
         self, session_id: str, artifact_id: str
     ) -> Optional[str]:
         """Read artifact content by artifact_id within a session."""
-        artifacts = db.get_session_artifacts(self.conn, session_id)
-        for art in artifacts:
-            if art["artifact_id"] == artifact_id:
-                file_path = Path(art["file_path"])
-                if file_path.exists():
-                    return file_path.read_text(encoding="utf-8")
-        return None
+        # Delegate to get_content which does a direct SQL lookup
+        return self.get_content(artifact_id, session_id)
 
     def list_artifacts(
         self,
@@ -176,10 +171,12 @@ class ArtifactStore:
         session_id: str,
         pattern: str,
         created_by: Optional[str] = None,
+        limit: int = 20,
     ) -> List[Dict]:
         """Search artifact content for a pattern.
 
         Returns matching artifacts with the matching lines.
+        Stops after `limit` matches to avoid excessive disk I/O.
         """
         artifacts = db.get_session_artifacts(self.conn, session_id, created_by)
         matches = []
@@ -202,6 +199,8 @@ class ArtifactStore:
                     "created_by": art["created_by"],
                     "matching_lines": matching_lines,
                 })
+                if len(matches) >= limit:
+                    break
         return matches
 
     @staticmethod

@@ -10,10 +10,6 @@ import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Change to project root and add to path
-os.chdir(Path(__file__).parent.parent.parent)
-sys.path.insert(0, ".")
-
 try:
     from openlmlib.collab.db import connect_collab_db, init_collab_db
     from openlmlib.collab.session import create_collab_session, join_collab_session
@@ -188,7 +184,6 @@ def call_llm(api_key: str, model: str, system_prompt: str, user_prompt: str, max
         return f"Error: {e.code} - {e.reason}"
     except Exception as e:
         return f"Error: {str(e)}"
-    return "Error: Unknown"
 
 
 def _extract_json_object(text: str) -> dict:
@@ -523,4 +518,7 @@ def main():
 
 
 if __name__ == "__main__":
+    # Only change CWD when running as a standalone script
+    os.chdir(Path(__file__).parent.parent.parent)
+    sys.path.insert(0, ".")
     main()

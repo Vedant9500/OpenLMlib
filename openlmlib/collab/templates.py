@@ -119,10 +119,10 @@ def _get_custom_templates_dir() -> Path:
     if settings_path_str:
         settings_path = Path(settings_path_str)
     else:
-        try:
-            from .settings import resolve_global_settings_path
-            settings_path = resolve_global_settings_path()
-        except ImportError:
+         try:
+             from openlmlib.settings import resolve_global_settings_path
+             settings_path = resolve_global_settings_path()
+         except ImportError:
             settings_path = Path("settings.json")
 
     if settings_path.exists():

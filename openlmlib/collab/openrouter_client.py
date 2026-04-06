@@ -37,7 +37,6 @@ def _is_cache_valid(cache_path: Path) -> bool:
     """Check if the cache file exists and is not expired."""
     if not cache_path.exists():
         return False
-    import time
     mtime = cache_path.stat().st_mtime
     return (time.time() - mtime) < MODELS_CACHE_TTL_SECONDS
 

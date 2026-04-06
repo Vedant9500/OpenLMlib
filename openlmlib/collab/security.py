@@ -7,6 +7,7 @@ and prevents path traversal attacks.
 
 from __future__ import annotations
 
+import os
 import re
 import sqlite3
 from pathlib import Path
@@ -187,7 +188,16 @@ def validate_safe_path(base: Path, target: str) -> Path:
     """
     resolved = (base / target).resolve()
     base_resolved = base.resolve()
-    if not str(resolved).startswith(str(base_resolved)):
+    try:
+        # Python 3.9+: resolved.is_relative_to(base_resolved)
+        # Fallback for older Python
+        common = os.path.commonpath([resolved, base_resolved])
+        if common != str(base_resolved):
+            raise SecurityError(
+                f"Path traversal detected: {target} resolves outside {base}"
+            )
+    except ValueError:
+        # Paths are on different drives (Windows) or no common path
         raise SecurityError(
             f"Path traversal detected: {target} resolves outside {base}"
         )

@@ -158,8 +158,8 @@ class SessionCompactor:
             session_id, summary, compacted_at
         )
 
-        bus = MessageBus(self.conn, self.sessions_dir)
-        bus.send(
+        # Use existing message_bus rather than creating a new one
+        self.message_bus.send(
             session_id=session_id,
             from_agent="system",
             msg_type="summary",
@@ -171,6 +171,9 @@ class SessionCompactor:
                 "file_path": file_path,
             },
         )
+
+        # Get actual current max seq from DB instead of undefined 'messages'
+        current_max_seq = db.get_max_seq(self.conn, session_id)
 
         state_row = self.state_manager.get_state(session_id)
         if state_row:
@@ -184,7 +187,7 @@ class SessionCompactor:
         return {
             "session_id": session_id,
             "from_seq": from_seq,
-            "to_seq": from_seq + 1,
+            "to_seq": current_max_seq,
             "file_path": file_path,
             "compacted_at": compacted_at,
             "summary_length": len(summary),

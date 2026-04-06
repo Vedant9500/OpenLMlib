@@ -311,7 +311,7 @@ def terminate_collab_session(
         metadata={"summary": summary},
     )
 
-    db.update_agent_status(conn, orchestrator, "left", terminated_at)
+    db.update_agent_status(conn, orchestrator, "inactive", terminated_at)
 
     other_agents = db.get_session_agents(conn, session_id)
     for agent in other_agents:

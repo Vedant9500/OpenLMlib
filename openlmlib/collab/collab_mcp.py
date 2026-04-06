@@ -12,10 +12,12 @@ from __future__ import annotations
 
 import logging
 import os
+import sqlite3
 import traceback
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
 
@@ -63,15 +65,33 @@ from .security import (
 
 logger = logging.getLogger(__name__)
 
+# Cached settings resolution to avoid re-parsing settings.json on every call
+_cached_paths: Optional[tuple] = None
+_cached_paths_mtime: float = 0.0
+
 
 def _get_collab_paths() -> tuple[Path, Path]:
-    """Get the collab DB path and sessions directory from settings."""
+    """Get the collab DB path and sessions directory from settings.
+
+    Caches the result and invalidates when the settings file changes.
+    """
+    global _cached_paths, _cached_paths_mtime
+
     settings_path_str = os.environ.get("OPENLMLIB_SETTINGS")
     if settings_path_str:
         settings_path = Path(settings_path_str)
     else:
         from openlmlib.settings import resolve_global_settings_path
         settings_path = resolve_global_settings_path()
+
+    # Check cache validity
+    try:
+        current_mtime = settings_path.stat().st_mtime if settings_path.exists() else 0.0
+    except OSError:
+        current_mtime = 0.0
+
+    if _cached_paths is not None and current_mtime == _cached_paths_mtime:
+        return _cached_paths
 
     if settings_path.exists():
         import json
@@ -83,7 +103,16 @@ def _get_collab_paths() -> tuple[Path, Path]:
 
     db_path = data_root / "collab_sessions.db"
     sessions_dir = data_root / "sessions"
-    return db_path, sessions_dir
+    _cached_paths = (db_path, sessions_dir)
+    _cached_paths_mtime = current_mtime
+    return _cached_paths
+
+
+def _get_sessions_dir() -> Path:
+    """Get just the sessions directory (no DB connection needed)."""
+    _, sessions_dir = _get_collab_paths()
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+    return sessions_dir
 
 
 def _get_settings_path() -> Path:
@@ -95,8 +124,38 @@ def _get_settings_path() -> Path:
     return resolve_global_settings_path()
 
 
+@contextmanager
+def _collab_connection():
+    """Context manager for collab DB connections with auto-init and cleanup."""
+    db_path, sessions_dir = _get_collab_paths()
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        conn = connect_collab_db(db_path)
+    except Exception as e:
+        raise DatabaseError(f"Failed to connect to collab database: {e}")
+
+    try:
+        existing = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'"
+        ).fetchone()
+        if existing is None:
+            try:
+                init_collab_db(conn)
+                logger.info("Initialized collab database schema at %s", db_path)
+            except Exception as e:
+                raise DatabaseError(f"Failed to initialize collab database: {e}")
+        yield conn, sessions_dir
+    finally:
+        conn.close()
+
+
 def _get_collab_connection():
-    """Get a connection to the collab database, initializing if needed."""
+    """Get a connection to the collab database, initializing if needed.
+
+    DEPRECATED: Use _collab_connection() context manager instead for new tools.
+    Kept for backward compatibility during migration.
+    """
     db_path, sessions_dir = _get_collab_paths()
     sessions_dir.mkdir(parents=True, exist_ok=True)
 
@@ -151,10 +210,7 @@ def _handle_tool_error(func_name: str, exc: Exception) -> Dict:
         }
 
 
-import sqlite3
-
 collab_mcp = FastMCP("OpenLMlib CollabSessions")
-
 
 @collab_mcp.tool()
 def collab_create_session(
@@ -414,6 +470,7 @@ def collab_send_message(
     metadata: Optional[Dict] = None,
     from_agent: str = "",
 ) -> Dict:
+    # NOTE: from_agent should ideally be required for non-system calls
     """Send a message to a collaboration session.
 
     Message types:
@@ -443,9 +500,10 @@ def collab_send_message(
         validate_message_type(msg_type)
         safe_content = validate_message_content(content)
 
-        if from_agent:
-            validate_agent_id(from_agent)
-        if to_agent:
+        if not from_agent:
+            return {"success": False, "error": "from_agent is required", "error_type": "validation_error"}
+        validate_agent_id(from_agent)
+        if to_agent is not None and to_agent != "":
             validate_agent_id(to_agent)
 
         conn, sessions_dir = _get_collab_connection()
@@ -510,7 +568,10 @@ def collab_read_messages(
 
         conn, sessions_dir = _get_collab_connection()
         try:
-            verify_session_exists_and_active(conn, session_id)
+            # Read-only: allow reading from completed/terminated sessions
+            session = collab_db.get_session(conn, session_id)
+            if session is None:
+                raise SessionNotFoundError(f"Session {session_id} not found")
 
             if agent_id:
                 validate_agent_id(agent_id)
@@ -562,7 +623,10 @@ def collab_tail_messages(
 
         conn, sessions_dir = _get_collab_connection()
         try:
-            verify_session_exists_and_active(conn, session_id)
+            # Read-only: allow reading from completed/terminated sessions
+            session = collab_db.get_session(conn, session_id)
+            if session is None:
+                raise SessionNotFoundError(f"Session {session_id} not found")
 
             bus = MessageBus(conn, sessions_dir)
             messages = bus.tail(session_id, n)
@@ -590,7 +654,7 @@ def collab_read_message_range(
     Args:
         session_id: Session to read from
         start_seq: Starting sequence number (inclusive)
-        end_seq: Ending sequence number (inclusive)
+        end_seq: Ending sequence number (exclusive)
 
     Returns:
         Dict with messages in the specified range
@@ -647,7 +711,15 @@ def collab_grep_messages(
         conn, sessions_dir = _get_collab_connection()
         try:
             bus = MessageBus(conn, sessions_dir)
-            messages = bus.grep(session_id, pattern, limit, msg_types)
+            try:
+                messages = bus.grep(session_id, pattern, limit, msg_types)
+            except sqlite3.OperationalError as fts_err:
+                # FTS5 syntax error from malformed user input
+                return {
+                    "success": False,
+                    "error": f"Invalid search pattern: {fts_err}. Use simple keywords or quote phrases.",
+                    "error_type": "validation_error",
+                }
             return {
                 "messages": messages,
                 "count": len(messages),
@@ -680,13 +752,16 @@ def collab_get_session_context(
     """
     try:
         validate_session_id(session_id)
-        validate_agent_id(agent_id)
-        max_messages = max(1, min(max_messages, 100))
+        max_messages = max(1, min(max_messages, 200))
 
         conn, sessions_dir = _get_collab_connection()
+
         try:
             verify_session_exists_and_active(conn, session_id)
-            verify_agent_in_session(conn, agent_id, session_id)
+
+            if agent_id is not None and agent_id != "":
+                validate_agent_id(agent_id)
+                verify_agent_in_session(conn, agent_id, session_id)
 
             bus = MessageBus(conn, sessions_dir)
             artifact_store = ArtifactStore(conn, sessions_dir)
@@ -811,7 +886,10 @@ def collab_list_artifacts(
         validate_session_id(session_id)
         conn, sessions_dir = _get_collab_connection()
         try:
-            verify_session_exists_and_active(conn, session_id)
+            # Read-only: allow listing artifacts from completed sessions
+            session = collab_db.get_session(conn, session_id)
+            if session is None:
+                raise SessionNotFoundError(f"Session {session_id} not found")
 
             store = ArtifactStore(conn, sessions_dir)
             artifacts = store.list_artifacts(session_id, created_by, artifact_type)
@@ -943,6 +1021,7 @@ def collab_leave_session(
 @collab_mcp.tool()
 def collab_terminate_session(
     session_id: str,
+    orchestrator_id: str,
     summary: Optional[str] = None,
 ) -> Dict:
     """Terminate and complete a collaboration session.
@@ -959,9 +1038,11 @@ def collab_terminate_session(
     """
     try:
         validate_session_id(session_id)
+        validate_agent_id(orchestrator_id)
 
         conn, sessions_dir = _get_collab_connection()
         try:
+            verify_orchestrator(conn, session_id, orchestrator_id)
             result = terminate_collab_session(conn, sessions_dir, session_id, summary)
             logger.info("Session terminated: %s", session_id)
             return {
@@ -1057,9 +1138,10 @@ def collab_list_templates() -> Dict:
     """
     try:
         from .templates import list_templates
+        templates = list_templates()
         return {
-            "templates": list_templates(),
-            "count": len(list_templates()),
+            "templates": templates,
+            "count": len(templates),
         }
     except Exception as e:
         return _handle_tool_error("collab_list_templates", e)
@@ -1312,41 +1394,38 @@ def collab_list_openrouter_models(
         Dict with list of available models and their details
     """
     try:
-        conn, sessions_dir = _get_collab_connection()
-        try:
-            from .openrouter_client import fetch_openrouter_models, filter_models, format_model_summary
+        sessions_dir = _get_sessions_dir()
+        from .openrouter_client import fetch_openrouter_models, filter_models, format_model_summary
 
-            result = fetch_openrouter_models(sessions_dir, force_refresh)
-            if result.get("error"):
-                return result
+        result = fetch_openrouter_models(sessions_dir, force_refresh)
+        if result.get("error"):
+            return result
 
-            models = result["models"]
-            if search or provider or max_price_per_million is not None or context_length_min is not None or is_free:
-                models = filter_models(
-                    models,
-                    search=search,
-                    provider=provider,
-                    max_price_per_million=max_price_per_million,
-                    context_length_min=context_length_min,
-                    is_free=is_free,
-                )
+        models = result["models"]
+        if search or provider or max_price_per_million is not None or context_length_min is not None or is_free:
+            models = filter_models(
+                models,
+                search=search,
+                provider=provider,
+                max_price_per_million=max_price_per_million,
+                context_length_min=context_length_min,
+                is_free=is_free,
+            )
 
-            return {
-                "models": [
-                    {
-                        "id": m.get("id"),
-                        "name": m.get("name"),
-                        "pricing": m.get("pricing", {}),
-                        "context_length": m.get("context_length"),
-                        "top_provider": m.get("top_provider"),
-                    }
-                    for m in models
-                ],
-                "count": len(models),
-                "source": result.get("source", "unknown"),
-            }
-        finally:
-            conn.close()
+        return {
+            "models": [
+                {
+                    "id": m.get("id"),
+                    "name": m.get("name"),
+                    "pricing": m.get("pricing", {}),
+                    "context_length": m.get("context_length"),
+                    "top_provider": m.get("top_provider"),
+                }
+                for m in models
+            ],
+            "count": len(models),
+            "source": result.get("source", "unknown"),
+        }
     except Exception as e:
         return _handle_tool_error("collab_list_openrouter_models", e)
 
@@ -1362,25 +1441,22 @@ def collab_get_openrouter_model_details(model_id: str) -> Dict:
         Dict with model details including pricing, context, and description
     """
     try:
-        conn, sessions_dir = _get_collab_connection()
-        try:
-            from .openrouter_client import fetch_openrouter_models, format_model_summary
+        sessions_dir = _get_sessions_dir()
+        from .openrouter_client import fetch_openrouter_models, format_model_summary
 
-            result = fetch_openrouter_models(sessions_dir, force_refresh=False)
-            if result.get("error"):
-                return result
+        result = fetch_openrouter_models(sessions_dir, force_refresh=False)
+        if result.get("error"):
+            return result
 
-            models = result["models"]
-            model = next((m for m in models if m.get("id") == model_id), None)
-            if model is None:
-                return {"error": f"Model '{model_id}' not found. Use collab_list_openrouter_models to see available models.", "error_type": "model_not_found", "success": False}
+        models = result["models"]
+        model = next((m for m in models if m.get("id") == model_id), None)
+        if model is None:
+            return {"error": f"Model '{model_id}' not found. Use collab_list_openrouter_models to see available models.", "error_type": "model_not_found", "success": False}
 
-            return {
-                "model": model,
-                "summary": format_model_summary(model),
-            }
-        finally:
-            conn.close()
+        return {
+            "model": model,
+            "summary": format_model_summary(model),
+        }
     except Exception as e:
         return _handle_tool_error("collab_get_openrouter_model_details", e)
 
@@ -1398,42 +1474,39 @@ def collab_get_recommended_models(task_type: str) -> Dict:
         Dict with recommended model IDs and their details
     """
     try:
-        conn, sessions_dir = _get_collab_connection()
-        try:
-            from .openrouter_client import get_recommended_models_for_task, fetch_openrouter_models, format_model_summary
+        sessions_dir = _get_sessions_dir()
+        from .openrouter_client import get_recommended_models_for_task, fetch_openrouter_models, format_model_summary
 
-            recommended_ids = get_recommended_models_for_task(task_type)
-            result = fetch_openrouter_models(sessions_dir, force_refresh=False)
+        recommended_ids = get_recommended_models_for_task(task_type)
+        result = fetch_openrouter_models(sessions_dir, force_refresh=False)
 
-            if result.get("error"):
-                return {
-                    "task_type": task_type,
-                    "recommended_ids": recommended_ids,
-                    "error": result.get("error"),
-                    "note": "Set OPENROUTER_API_KEY to get live model details",
-                }
-
-            models_map = {m.get("id"): m for m in result.get("models", [])}
-            recommendations = []
-            for model_id in recommended_ids:
-                model = models_map.get(model_id)
-                if model:
-                    recommendations.append({
-                        "id": model_id,
-                        "name": model.get("name"),
-                        "pricing": model.get("pricing", {}),
-                        "context_length": model.get("context_length"),
-                        "summary": format_model_summary(model),
-                    })
-                else:
-                    recommendations.append({"id": model_id, "note": "Not found in current catalog"})
-
+        if result.get("error"):
             return {
                 "task_type": task_type,
-                "recommended_models": recommendations,
-                "count": len(recommendations),
+                "recommended_ids": recommended_ids,
+                "error": result.get("error"),
+                "note": "Set OPENROUTER_API_KEY to get live model details",
             }
-        finally:
-            conn.close()
+
+        models_map = {m.get("id"): m for m in result.get("models", [])}
+        recommendations = []
+        for model_id in recommended_ids:
+            model = models_map.get(model_id)
+            if model:
+                recommendations.append({
+                    "id": model_id,
+                    "name": model.get("name"),
+                    "pricing": model.get("pricing", {}),
+                    "context_length": model.get("context_length"),
+                    "summary": format_model_summary(model),
+                })
+            else:
+                recommendations.append({"id": model_id, "note": "Not found in current catalog"})
+
+        return {
+            "task_type": task_type,
+            "recommended_models": recommendations,
+            "count": len(recommendations),
+        }
     except Exception as e:
         return _handle_tool_error("collab_get_recommended_models", e)

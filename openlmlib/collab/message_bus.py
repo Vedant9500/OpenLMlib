@@ -66,13 +66,12 @@ class MessageBus:
             content = json.dumps(content, ensure_ascii=False)
 
         msg_id = msg_id or f"msg_{uuid.uuid4().hex[:12]}"
-        seq = db.get_max_seq(self.conn, session_id) + 1
 
-        db.insert_message(
+        seq = db.insert_message(
             self.conn,
             msg_id=msg_id,
             session_id=session_id,
-            seq=seq,
+            seq=None,  # Auto-assigned atomically by db.insert_message
             from_agent=from_agent,
             from_model=from_model,
             msg_type=msg_type,

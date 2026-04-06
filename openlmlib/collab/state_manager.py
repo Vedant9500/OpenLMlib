@@ -6,11 +6,14 @@ management with optimistic concurrency control.
 
 from __future__ import annotations
 
+import logging
 from typing import Dict, Optional
 
 import sqlite3
 
 from . import db
+
+logger = logging.getLogger(__name__)
 
 
 class StateManager:
@@ -56,4 +59,9 @@ class StateManager:
         if current:
             state = current["state"]
             state["last_activity"] = updated_at
-            self.update_state(session_id, state, "system", updated_at, current["version"])
+            success = self.update_state(session_id, state, "system", updated_at, current["version"])
+            if not success:
+                logger.warning(
+                    "bump_activity version conflict for session %s (version %d)",
+                    session_id, current["version"],
+                )

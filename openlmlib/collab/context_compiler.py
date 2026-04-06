@@ -179,11 +179,17 @@ class ContextCompiler:
             from_label = msg["from_agent"]
             to_label = msg.get("to_agent") or "all"
             msg_type = msg["msg_type"]
+            timestamp = msg.get("created_at", "")
+            # Extract time portion for compact display
+            if "T" in timestamp:
+                time_part = timestamp.split("T")[1][:8]  # HH:MM:SS
+            else:
+                time_part = timestamp
 
             if from_label == "system":
-                prefix = f"[system]"
+                prefix = f"[{time_part}] [system]"
             else:
-                prefix = f"[{from_label} → {to_label}]"
+                prefix = f"[{time_part}] [{from_label} → {to_label}]"
 
             content = msg["content"]
             if len(content) > 500:
