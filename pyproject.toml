@@ -25,6 +25,9 @@ faiss = ["faiss-cpu>=1.7.4"]
 [project.scripts]
 openlmlib = "openlmlib.cli:main"
 openlmlib-mcp = "openlmlib.mcp_server:main"
+openlmlib-collab-tui = "openlmlib.collab.collab_tui:main"
 
 [tool.setuptools]
-packages = ["openlmlib"]
+
+[tool.setuptools.packages.find]
+include = ["openlmlib*"]

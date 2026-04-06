@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.request
 import urllib.error
 from pathlib import Path
@@ -59,6 +60,33 @@ def _save_cache(cache_path: Path, models: List[Dict]) -> None:
         json.dump(models, f, indent=2, ensure_ascii=False)
 
 
+def _request_json_with_retry(req: urllib.request.Request, timeout: int, operation: str, max_attempts: int = 5, base_delay: float = 1.0) -> Dict:
+    last_error = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            last_error = e
+            if e.code in {429, 500, 502, 503, 504} and attempt < max_attempts:
+                retry_after = None
+                if getattr(e, "headers", None):
+                    retry_after = e.headers.get("Retry-After")
+                delay = base_delay * (2 ** (attempt - 1))
+                if retry_after:
+                    try:
+                        delay = max(delay, float(retry_after))
+                    except ValueError:
+                        pass
+                time.sleep(delay)
+                continue
+            raise
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError(f"{operation} failed")
+
+
 def fetch_openrouter_models(
     sessions_dir: Optional[Path] = None,
     force_refresh: bool = False,
@@ -102,8 +130,7 @@ def fetch_openrouter_models(
         req.add_header("Content-Type", "application/json")
         req.add_header("HTTP-Referer", "https://github.com/openlmlib")
 
-        with urllib.request.urlopen(req, timeout=30) as response:
-            data = json.loads(response.read().decode("utf-8"))
+        data = _request_json_with_retry(req, timeout=30, operation="Fetching OpenRouter models")
 
         models = data.get("data", [])
         _save_cache(cache_path, models)

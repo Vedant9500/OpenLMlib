@@ -51,6 +51,11 @@ class MessageBus:
         Atomically inserts into SQLite and appends to JSONL shadow log.
         Auto-assigns the next sequence number.
         """
+        if content is None:
+            content = ""
+        elif not isinstance(content, str):
+            content = json.dumps(content, ensure_ascii=False)
+
         msg_id = msg_id or f"msg_{uuid.uuid4().hex[:12]}"
         seq = db.get_max_seq(self.conn, session_id) + 1
 

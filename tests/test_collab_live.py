@@ -24,6 +24,8 @@ from openlmlib.collab.session import create_collab_session, join_collab_session
 from openlmlib.collab.message_bus import MessageBus
 from openlmlib.collab.artifact_store import ArtifactStore
 from openlmlib.collab.context_compiler import ContextCompiler
+from openlmlib.collab.state_manager import StateManager
+from openlmlib.collab.session import terminate_collab_session
 
 
 def init_test_environment():
@@ -146,10 +148,45 @@ def test_message_exchange(session_id, orchestrator_id, worker_id, sessions_dir):
     conn.close()
 
 
+def test_state_update(session_id, orchestrator_id, sessions_dir):
+    """Test session state initialization and orchestrator-only updates."""
+    print("\n" + "=" * 60)
+    print("TEST 4: State Update")
+    print("=" * 60)
+
+    db_path = sessions_dir.parent / "collab_sessions.db"
+    conn = connect_collab_db(db_path)
+    state_manager = StateManager(conn)
+
+    current = state_manager.get_state(session_id)
+    print(f"Initial version: {current['version']}")
+    print(f"Initial phase: {current['state'].get('current_phase')}")
+
+    next_state = dict(current["state"])
+    next_state["current_phase"] = "research"
+    next_state["active_tasks"] = ["Collect sources", "Draft analysis"]
+    next_state["last_activity"] = "2026-04-06T10:15:00Z"
+
+    ok = state_manager.update_state(
+        session_id=session_id,
+        state=next_state,
+        updated_by=orchestrator_id,
+        updated_at="2026-04-06T10:15:00Z",
+        expected_version=current["version"],
+    )
+    print(f"Update applied: {ok}")
+
+    updated = state_manager.get_state(session_id)
+    print(f"Updated version: {updated['version']}")
+    print(f"Updated phase: {updated['state'].get('current_phase')}")
+
+    conn.close()
+
+
 def test_context_compilation(session_id, agent_id, sessions_dir):
     """Test context compilation for an agent."""
     print("\n" + "=" * 60)
-    print("TEST 4: Context Compilation")
+    print("TEST 5: Context Compilation")
     print("=" * 60)
     
     db_path = sessions_dir.parent / "collab_sessions.db"
@@ -171,7 +208,7 @@ def test_context_compilation(session_id, agent_id, sessions_dir):
 def test_artifact_creation(session_id, agent_id, sessions_dir):
     """Test saving an artifact."""
     print("\n" + "=" * 60)
-    print("TEST 5: Artifact Creation")
+    print("TEST 6: Artifact Creation")
     print("=" * 60)
     
     db_path = sessions_dir.parent / "collab_sessions.db"
@@ -203,6 +240,9 @@ Continue monitoring these developments for practical applications.
     print(f"Artifact saved: {result['artifact_id']}")
     print(f"Path: {result['file_path']}")
     print(f"Word count: {result['word_count']}")
+
+    retrieved = store.get_content_by_id(session_id, result["artifact_id"])
+    print(f"Retrieved content length: {len(retrieved) if retrieved else 0}")
     
     # List artifacts
     artifacts = store.list_artifacts(session_id)
@@ -210,6 +250,31 @@ Continue monitoring these developments for practical applications.
     for art in artifacts:
         print(f"  - {art['artifact_id']}: {art['title']}")
     
+    conn.close()
+
+
+def test_session_termination(session_id, orchestrator_id, sessions_dir):
+    """Test terminating the session and persisting a summary."""
+    print("\n" + "=" * 60)
+    print("TEST 7: Session Termination")
+    print("=" * 60)
+
+    db_path = sessions_dir.parent / "collab_sessions.db"
+    conn = connect_collab_db(db_path)
+
+    result = terminate_collab_session(
+        conn=conn,
+        sessions_dir=sessions_dir,
+        session_id=session_id,
+        summary="Session completed successfully after research, analysis, and artifact creation.",
+    )
+
+    print(f"Termination status: {result['status']}")
+    print(f"Summary saved: {result['summary_saved']}")
+
+    session = get_session(conn, session_id)
+    print(f"Final session status: {session['status']}")
+
     conn.close()
 
 
@@ -226,11 +291,17 @@ def main():
     # Test 3: Exchange messages
     test_message_exchange(session_id, orchestrator_id, worker_id, sessions_dir)
     
-    # Test 4: Compile context for worker
+    # Test 4: Update session state
+    test_state_update(session_id, orchestrator_id, sessions_dir)
+
+    # Test 5: Compile context for worker
     test_context_compilation(session_id, worker_id, sessions_dir)
     
-    # Test 5: Save artifact
+    # Test 6: Save artifact
     test_artifact_creation(session_id, worker_id, sessions_dir)
+
+    # Test 7: Terminate session
+    test_session_termination(session_id, orchestrator_id, sessions_dir)
     
     print("\n" + "=" * 60)
     print("ALL TESTS PASSED!")

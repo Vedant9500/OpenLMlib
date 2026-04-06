@@ -30,7 +30,8 @@ class ArtifactStore:
         return self.sessions_dir / session_id
 
     def _agent_dir(self, session_id: str, agent_id: str) -> Path:
-        d = self._session_dir(session_id) / "artifacts" / agent_id
+        safe_id = agent_id.replace(":", "_").replace("/", "_").replace("\\", "_")
+        d = self._session_dir(session_id) / "artifacts" / safe_id
         d.mkdir(parents=True, exist_ok=True)
         return d
 
@@ -111,9 +112,21 @@ class ArtifactStore:
         file_path.write_text(summary, encoding="utf-8")
         return str(file_path)
 
-    def get_content(self, artifact_id: str) -> Optional[str]:
+    def get_content(self, artifact_id: str, session_id: Optional[str] = None) -> Optional[str]:
         """Read the full content of an artifact."""
-        artifacts = db.get_session_artifacts(self.conn, "")
+        if session_id is None:
+            row = self.conn.execute(
+                "SELECT file_path FROM artifacts WHERE artifact_id = ?",
+                (artifact_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            file_path = Path(row["file_path"])
+            if file_path.exists():
+                return file_path.read_text(encoding="utf-8")
+            return None
+
+        artifacts = db.get_session_artifacts(self.conn, session_id)
         for art in artifacts:
             if art["artifact_id"] == artifact_id:
                 file_path = Path(art["file_path"])

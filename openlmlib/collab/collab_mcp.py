@@ -31,7 +31,7 @@ def _get_collab_paths() -> tuple[Path, Path]:
     if settings_path_str:
         settings_path = Path(settings_path_str)
     else:
-        from .settings import resolve_global_settings_path
+        from openlmlib.settings import resolve_global_settings_path
         settings_path = resolve_global_settings_path()
 
     if settings_path.exists():
@@ -52,7 +52,7 @@ def _get_settings_path() -> Path:
     settings_path_str = os.environ.get("OPENLMLIB_SETTINGS")
     if settings_path_str:
         return Path(settings_path_str)
-    from .settings import resolve_global_settings_path
+    from openlmlib.settings import resolve_global_settings_path
     return resolve_global_settings_path()
 
 
