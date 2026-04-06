@@ -660,7 +660,8 @@ class TestSessionLifecycle(unittest.TestCase):
         self.assertEqual(session["status"], "completed")
 
     def test_join_nonexistent_session(self):
-        with self.assertRaises(ValueError):
+        from openlmlib.collab.errors import SessionNotFoundError
+        with self.assertRaises(SessionNotFoundError):
             join_collab_session(
                 self.conn, self.sessions_dir,
                 session_id="nonexistent",
@@ -677,7 +678,8 @@ class TestSessionLifecycle(unittest.TestCase):
             self.conn, self.sessions_dir,
             session_id=result["session_id"],
         )
-        with self.assertRaises(ValueError):
+        from openlmlib.collab.errors import SessionNotActiveError
+        with self.assertRaises(SessionNotActiveError):
             join_collab_session(
                 self.conn, self.sessions_dir,
                 session_id=result["session_id"],

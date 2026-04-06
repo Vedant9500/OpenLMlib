@@ -8,6 +8,7 @@ offset-based reading for efficient polling.
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -15,6 +16,9 @@ from typing import Dict, List, Optional
 import sqlite3
 
 from . import db
+from .errors import VALID_MESSAGE_TYPES, InvalidMessageTypeError
+
+logger = logging.getLogger(__name__)
 
 
 class MessageBus:
@@ -51,6 +55,11 @@ class MessageBus:
         Atomically inserts into SQLite and appends to JSONL shadow log.
         Auto-assigns the next sequence number.
         """
+        if msg_type not in VALID_MESSAGE_TYPES:
+            raise InvalidMessageTypeError(
+                f"Invalid message type: {msg_type}. Allowed: {sorted(VALID_MESSAGE_TYPES)}"
+            )
+
         if content is None:
             content = ""
         elif not isinstance(content, str):
@@ -85,6 +94,11 @@ class MessageBus:
             "content": content,
             "metadata": metadata or {},
         })
+
+        logger.debug(
+            "Message sent: session=%s seq=%d type=%s from=%s",
+            session_id, seq, msg_type, from_agent,
+        )
 
         return {
             "msg_id": msg_id,

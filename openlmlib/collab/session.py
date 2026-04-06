@@ -7,6 +7,7 @@ joining, leaving, and termination.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,14 @@ from .message_bus import MessageBus
 from .artifact_store import ArtifactStore
 from .state_manager import StateManager
 from .context_compiler import ContextCompiler
+from .errors import (
+    AgentNotFoundError,
+    SessionFullError,
+    SessionNotActiveError,
+    SessionNotFoundError,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def _now_iso() -> str:
@@ -160,15 +169,19 @@ def join_collab_session(
     """
     session = db.get_session(conn, session_id)
     if session is None:
-        raise ValueError(f"Session {session_id} not found")
+        raise SessionNotFoundError(f"Session {session_id} not found")
     if session["status"] != "active":
-        raise ValueError(f"Session {session_id} is not active (status: {session['status']})")
+        raise SessionNotActiveError(
+            f"Session {session_id} is not active (status: {session['status']})"
+        )
 
     rules = session.get("rules", {})
     max_agents = rules.get("max_agents", 10)
     current_agents = len(db.get_session_agents(conn, session_id))
     if current_agents >= max_agents:
-        raise ValueError(f"Session is full ({current_agents}/{max_agents} agents)")
+        raise SessionFullError(
+            f"Session is full ({current_agents}/{max_agents} agents)"
+        )
 
     joined_at = joined_at or _now_iso()
     agent_id = _generate_agent_id(model)
@@ -231,7 +244,7 @@ def leave_collab_session(
         (agent_id,),
     ).fetchone()
     if agents is None:
-        raise ValueError(f"Agent {agent_id} not found")
+        raise AgentNotFoundError(f"Agent {agent_id} not found")
 
     session_id = agents["session_id"]
     model = agents["model"]
@@ -273,12 +286,14 @@ def terminate_collab_session(
     """
     session = db.get_session(conn, session_id)
     if session is None:
-        raise ValueError(f"Session {session_id} not found")
+        raise SessionNotFoundError(f"Session {session_id} not found")
 
     terminated_at = terminated_at or _now_iso()
 
     if not db.update_session_status(conn, session_id, "completed", terminated_at):
-        raise ValueError(f"Session {session_id} cannot be terminated (status: {session['status']})")
+        raise SessionNotActiveError(
+            f"Session {session_id} cannot be terminated (status: {session['status']})"
+        )
 
     bus = MessageBus(conn, sessions_dir)
     orchestrator = session["orchestrator"]
