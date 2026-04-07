@@ -81,9 +81,9 @@ def export_session_to_library(
                 evidence=[content],
                 reasoning=f"Generated in collaboration session '{session['title']}'. "
                           f"Created by {artifact['created_by']}.",
-                source=f"session:{session_id}",
                 tags=art_tags,
                 proposed_by=artifact["created_by"],
+                confirm=True,
             )
             if result.get("status") == "ok":
                 exported.append({
@@ -151,9 +151,9 @@ def export_session_summary_as_finding(
             confidence=0.9,
             evidence=[summary],
             reasoning=f"Complete summary of collaboration session '{session['title']}'.",
-            source=f"session:{session_id}",
             tags=["collab_session", f"session:{session_id}", "summary"],
             proposed_by=session.get("orchestrator", "unknown"),
+            confirm=True,
         )
         if result.get("status") == "ok":
             return {

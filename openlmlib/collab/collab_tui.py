@@ -327,19 +327,43 @@ def run_real_session(
             created_at=datetime.now(timezone.utc).isoformat(),
         )
 
-        # Call each worker
+        # Call each worker with session context and differentiated roles
         for i, (worker_model, worker_id) in enumerate(zip(worker_models, worker_ids)):
             print(f"\n[4.{round_num}.{i+1}] Worker {i+1}: {worker_model['id']}")
 
-            worker_system = (
-                f"You are worker {i+1} of {len(worker_models)} in round {round_num} of a collaboration."
-            )
-            worker_user = (
-                f"Task: {current_task}\n\n"
-                f"Respond in 2-3 sentences. Include your worker number and round number."
+            # Compile context so the worker can see session history
+            worker_context = compiler.format_context_for_prompt(
+                compiler.compile_context(session_id, worker_id, max_messages=20)
             )
 
-            worker_response = call_llm(api_key, worker_model["id"], worker_system, worker_user, max_tokens=200)
+            # Differentiate worker roles to avoid duplicate responses
+            focus_areas = [
+                "methodology, approach design, and technical implementation",
+                "literature review, comparative analysis, and validation",
+                "benchmarking, experiments, and results interpretation",
+                "integration, documentation, and code quality",
+            ]
+            worker_focus = focus_areas[i % len(focus_areas)]
+
+            worker_system = (
+                f"You are Worker {i+1} of {len(worker_models)} in a multi-agent research collaboration.\n"
+                f"Your designated focus: {worker_focus}.\n"
+                f"DO NOT repeat what other workers have already contributed. "
+                f"Build on their work and add your unique expertise.\n"
+                f"Be concrete and specific. Provide actual code, data, or analysis — not plans.\n\n"
+                f"=== SESSION CONTEXT ===\n{worker_context}"
+            )
+            worker_user = (
+                f"Round {round_num} of {max_rounds}.\n"
+                f"Current task: {current_task}\n\n"
+                f"Provide your contribution focusing on: {worker_focus}."
+            )
+
+            try:
+                worker_response = call_llm(api_key, worker_model["id"], worker_system, worker_user, max_tokens=800)
+            except Exception as net_err:
+                worker_response = f"Error: Network failure - {net_err}"
+
             worker_response = worker_response if worker_response else "Error: Empty model response"
             if not worker_response or worker_response.startswith("Error:"):
                 print(f"    Response: {worker_response}")
@@ -352,7 +376,7 @@ def run_real_session(
                 msg_type="result",
                 content=worker_response,
                 to_agent=orchestrator_id,
-                metadata={"round": round_num, "worker_num": i+1},
+                metadata={"round": round_num, "worker_num": i+1, "focus": worker_focus},
                 created_at=datetime.now(timezone.utc).isoformat(),
             )
 
@@ -362,7 +386,7 @@ def run_real_session(
                 title=f"Round {round_num} Worker {i+1} Response",
                 content=worker_response,
                 created_at=datetime.now(timezone.utc).isoformat(),
-                artifact_type="test_response",
+                artifact_type="research_contribution",
                 tags=[f"round-{round_num}", f"worker-{i+1}"],
                 shared=True,
             )
@@ -376,13 +400,20 @@ def run_real_session(
         compiled_context = compiler.format_context_for_prompt(
             compiler.compile_context(session_id, orchestrator_id, max_messages=40)
         )
-        decision = ask_orchestrator_for_next_step(
-            api_key=api_key,
-            orchestrator_model=orchestrator_model,
-            compiled_context=compiled_context,
-            round_num=round_num,
-            max_rounds=max_rounds,
-        )
+        try:
+            decision = ask_orchestrator_for_next_step(
+                api_key=api_key,
+                orchestrator_model=orchestrator_model,
+                compiled_context=compiled_context,
+                round_num=round_num,
+                max_rounds=max_rounds,
+            )
+        except Exception as net_err:
+            print(f"\n    Orchestrator call failed: {net_err}. Retrying next round...")
+            round_num += 1
+            if round_delay > 0:
+                time.sleep(round_delay)
+            continue
 
         print(f"\n[5.{round_num}] Orchestrator decision: {decision['status']}")
         if decision.get("reason"):

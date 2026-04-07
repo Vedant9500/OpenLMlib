@@ -170,11 +170,28 @@ def verify_orchestrator(
         AgentNotAuthorizedError: If agent is not the orchestrator
     """
     session = verify_session_exists_and_active(conn, session_id)
-    if session["orchestrator"] != agent_id:
-        raise AgentNotAuthorizedError(
-            f"Only the orchestrator can perform this action. "
-            f"Orchestrator: {session['orchestrator']}, Requested by: {agent_id}"
-        )
+    if session["orchestrator"] == agent_id:
+        return session
+
+    agent = conn.execute(
+        """
+        SELECT agent_id, model, role
+        FROM agents
+        WHERE agent_id = ? AND session_id = ?
+        """,
+        (agent_id, session_id),
+    ).fetchone()
+    if agent is not None and agent["role"] == "orchestrator":
+        # Backward compatibility for sessions created before the orchestrator
+        # column stored the real agent_id.
+        if session["orchestrator"] == agent["model"]:
+            return session
+
+    resolved_orchestrator = db.get_orchestrator_agent_id(conn, session_id) or session["orchestrator"]
+    raise AgentNotAuthorizedError(
+        f"Only the orchestrator can perform this action. "
+        f"Orchestrator: {resolved_orchestrator}, Requested by: {agent_id}"
+    )
     return session
 
 

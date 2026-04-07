@@ -38,6 +38,25 @@ class MessageBus:
     def _jsonl_path(self, session_id: str) -> Path:
         return self._session_dir(session_id) / "messages.jsonl"
 
+    def _increment_message_count(self, session_id: str, created_at: str) -> None:
+        """Keep message counters aligned with the persisted session state."""
+        for _ in range(5):
+            state_row = db.get_session_state(self.conn, session_id)
+            if state_row is None:
+                return
+            state = dict(state_row["state"])
+            state["message_count"] = int(state.get("message_count", 0)) + 1
+            state["last_activity"] = created_at
+            if db.update_session_state(
+                self.conn,
+                session_id=session_id,
+                state=state,
+                updated_by="system",
+                updated_at=created_at,
+                expected_version=state_row["version"],
+            ):
+                return
+
     def send(
         self,
         session_id: str,
@@ -93,6 +112,7 @@ class MessageBus:
             "content": content,
             "metadata": metadata or {},
         })
+        self._increment_message_count(session_id, created_at)
 
         logger.debug(
             "Message sent: session=%s seq=%d type=%s from=%s",

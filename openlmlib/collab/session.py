@@ -81,6 +81,7 @@ def create_collab_session(
     """
     created_at = created_at or _now_iso()
     session_id = _generate_session_id()
+    agent_id = _generate_agent_id(created_by)
 
     _ensure_session_dirs(sessions_dir, session_id)
 
@@ -91,11 +92,10 @@ def create_collab_session(
         created_by=created_by,
         created_at=created_at,
         description=description,
-        orchestrator=created_by,
+        orchestrator=agent_id,
         rules=rules,
     )
 
-    agent_id = _generate_agent_id(created_by)
     db.insert_agent(
         conn,
         agent_id=agent_id,
@@ -119,6 +119,9 @@ def create_collab_session(
     if plan:
         for step in plan:
             task_id = f"task_{uuid.uuid4().hex[:6]}"
+            assigned_to = step.get("assigned_to")
+            if assigned_to == "orchestrator":
+                assigned_to = agent_id
             db.insert_task(
                 conn,
                 task_id=task_id,
@@ -126,7 +129,7 @@ def create_collab_session(
                 step_num=step.get("step", 0),
                 description=step.get("task", ""),
                 created_at=created_at,
-                assigned_to=step.get("assigned_to"),
+                assigned_to=assigned_to,
             )
             bus.send(
                 session_id=session_id,
@@ -296,7 +299,7 @@ def terminate_collab_session(
         )
 
     bus = MessageBus(conn, sessions_dir)
-    orchestrator = session["orchestrator"]
+    orchestrator = db.get_orchestrator_agent_id(conn, session_id) or session["orchestrator"]
 
     if summary:
         artifact_store = ArtifactStore(conn, sessions_dir)
@@ -310,8 +313,6 @@ def terminate_collab_session(
         created_at=terminated_at,
         metadata={"summary": summary},
     )
-
-    db.update_agent_status(conn, orchestrator, "inactive", terminated_at)
 
     other_agents = db.get_session_agents(conn, session_id)
     for agent in other_agents:

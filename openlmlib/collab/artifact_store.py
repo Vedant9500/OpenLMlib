@@ -45,6 +45,25 @@ class ArtifactStore:
         d.mkdir(parents=True, exist_ok=True)
         return d
 
+    def _increment_artifact_count(self, session_id: str, created_at: str) -> None:
+        """Keep artifact counters aligned with the persisted session state."""
+        for _ in range(5):
+            state_row = db.get_session_state(self.conn, session_id)
+            if state_row is None:
+                return
+            state = dict(state_row["state"])
+            state["artifact_count"] = int(state.get("artifact_count", 0)) + 1
+            state["last_activity"] = created_at
+            if db.update_session_state(
+                self.conn,
+                session_id=session_id,
+                state=state,
+                updated_by="system",
+                updated_at=created_at,
+                expected_version=state_row["version"],
+            ):
+                return
+
     def save(
         self,
         session_id: str,
@@ -85,6 +104,7 @@ class ArtifactStore:
             word_count=word_count,
             referenced_in_messages=referenced_in_messages,
         )
+        self._increment_artifact_count(session_id, created_at)
 
         return {
             "artifact_id": artifact_id,
@@ -114,31 +134,22 @@ class ArtifactStore:
 
     def get_content(self, artifact_id: str, session_id: Optional[str] = None) -> Optional[str]:
         """Read the full content of an artifact."""
-        if session_id is None:
-            row = self.conn.execute(
-                "SELECT file_path FROM artifacts WHERE artifact_id = ?",
-                (artifact_id,),
-            ).fetchone()
-            if row is None:
-                return None
-            file_path = Path(row["file_path"])
-            if file_path.exists():
-                return file_path.read_text(encoding="utf-8")
+        artifact = db.get_artifact(self.conn, artifact_id, session_id)
+        if artifact is None:
             return None
-
-        artifacts = db.get_session_artifacts(self.conn, session_id)
-        for art in artifacts:
-            if art["artifact_id"] == artifact_id:
-                file_path = Path(art["file_path"])
-                if file_path.exists():
-                    return file_path.read_text(encoding="utf-8")
+        file_path = Path(artifact["file_path"])
+        if file_path.exists():
+            return file_path.read_text(encoding="utf-8")
         return None
+
+    def get_artifact(self, session_id: str, artifact_id: str) -> Optional[Dict]:
+        """Read artifact metadata by id within a session."""
+        return db.get_artifact(self.conn, artifact_id, session_id)
 
     def get_content_by_id(
         self, session_id: str, artifact_id: str
     ) -> Optional[str]:
         """Read artifact content by artifact_id within a session."""
-        # Delegate to get_content which does a direct SQL lookup
         return self.get_content(artifact_id, session_id)
 
     def list_artifacts(

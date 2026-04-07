@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from openlmlib.collab.db import (
     connect_collab_db,
@@ -324,6 +326,8 @@ class TestMessageBus(unittest.TestCase):
 
         msgs = self.bus.read_new("sess_001", last_seq=0)
         self.assertEqual(len(msgs), 2)
+        state = get_session_state(self.conn, "sess_001")
+        self.assertEqual(state["state"]["message_count"], 2)
 
     def test_jsonl_shadow_log(self):
         create_session(
@@ -442,6 +446,8 @@ class TestArtifactStore(unittest.TestCase):
 
         content = self.store.get_content_by_id("sess_001", result["artifact_id"])
         self.assertIn("Quantum Computing Research", content)
+        state = get_session_state(self.conn, "sess_001")
+        self.assertEqual(state["state"]["artifact_count"], 1)
 
     def test_shared_artifact(self):
         create_session(
@@ -624,6 +630,8 @@ class TestSessionLifecycle(unittest.TestCase):
         session_id = result["session_id"]
         self.assertIsNotNone(session_id)
         self.assertTrue(session_id.startswith("sess_"))
+        session = get_session(self.conn, session_id)
+        self.assertEqual(session["orchestrator"], result["agent_id"])
 
         join_result = join_collab_session(
             self.conn, self.sessions_dir,
@@ -658,6 +666,23 @@ class TestSessionLifecycle(unittest.TestCase):
 
         session = get_session(self.conn, session_id)
         self.assertEqual(session["status"], "completed")
+
+    def test_orchestrator_assignments_use_real_agent_id(self):
+        result = create_collab_session(
+            self.conn, self.sessions_dir,
+            title="Template Session",
+            created_by="opus-4.6",
+            plan=[
+                {"step": 1, "task": "Write final synthesis", "assigned_to": "orchestrator"},
+            ],
+        )
+        context = ContextCompiler(
+            self.conn,
+            MessageBus(self.conn, self.sessions_dir),
+            ArtifactStore(self.conn, self.sessions_dir),
+        ).compile_context(result["session_id"], result["agent_id"])
+        self.assertEqual(len(context["my_tasks"]), 1)
+        self.assertEqual(context["my_tasks"][0]["assigned_to"], result["agent_id"])
 
     def test_join_nonexistent_session(self):
         from openlmlib.collab.errors import SessionNotFoundError
@@ -820,6 +845,8 @@ class TestSessionCompactor(unittest.TestCase):
 
         summaries = self.store.list_summaries("sess_001")
         self.assertEqual(len(summaries), 1)
+        state = self.sm.get_state("sess_001")
+        self.assertEqual(state["state"]["last_compact_seq"], get_max_seq(self.conn, "sess_001"))
 
     def test_check_and_compact_below_threshold(self):
         from openlmlib.collab.compactor import SessionCompactor
@@ -879,9 +906,15 @@ class TestMultiSession(unittest.TestCase):
         self.conn = connect_collab_db(self.db_path)
         init_collab_db(self.conn)
 
-        r1 = create_collab_session(self.conn, self.sessions_dir, "Research 1", "opus", "Task 1")
-        r2 = create_collab_session(self.conn, self.sessions_dir, "Research 2", "opus", "Task 2")
-        join_collab_session(self.conn, self.sessions_dir, r1["session_id"], "codex", capabilities=["code"])
+        self.r1 = create_collab_session(self.conn, self.sessions_dir, "Research 1", "opus", "Task 1")
+        self.r2 = create_collab_session(self.conn, self.sessions_dir, "Research 2", "opus", "Task 2")
+        self.worker = join_collab_session(
+            self.conn,
+            self.sessions_dir,
+            self.r1["session_id"],
+            "codex",
+            capabilities=["code"],
+        )
 
     def tearDown(self):
         self.conn.close()
@@ -889,17 +922,15 @@ class TestMultiSession(unittest.TestCase):
 
     def test_get_agent_sessions(self):
         from openlmlib.collab.multi_session import get_agent_sessions
-        from openlmlib.collab.db import get_session_agents
-        all_agents = get_session_agents(self.conn, "sess_")
-        if all_agents:
-            agent_id = all_agents[0]["agent_id"]
-            sessions = get_agent_sessions(self.conn, agent_id)
-            self.assertGreaterEqual(len(sessions), 1)
+        sessions = get_agent_sessions(self.conn, self.worker["agent_id"])
+        self.assertEqual(len(sessions), 1)
+        self.assertEqual(sessions[0]["session_id"], self.r1["session_id"])
 
     def test_get_session_participants(self):
         from openlmlib.collab.multi_session import get_session_relationships
-        result = get_session_relationships(self.conn, "sess_")
+        result = get_session_relationships(self.conn, self.r1["session_id"])
         self.assertIn("by_shared_agents", result)
+        self.assertGreaterEqual(len(result["by_orchestrator"]), 1)
 
 
 class TestExportBridge(unittest.TestCase):
@@ -908,6 +939,176 @@ class TestExportBridge(unittest.TestCase):
     def test_export_bridge_imports(self):
         from openlmlib.collab.export_bridge import export_session_to_library
         self.assertTrue(callable(export_session_to_library))
+
+    def test_export_bridge_uses_supported_add_finding_args(self):
+        from openlmlib.collab.export_bridge import export_session_to_library
+
+        tmp = tempfile.TemporaryDirectory()
+        conn = None
+        try:
+            sessions_dir = Path(tmp.name) / "sessions"
+            sessions_dir.mkdir(parents=True)
+            conn = connect_collab_db(Path(tmp.name) / "test.db")
+            init_collab_db(conn)
+
+            result = create_collab_session(
+                conn,
+                sessions_dir,
+                title="Export Test",
+                created_by="orch",
+            )
+            store = ArtifactStore(conn, sessions_dir)
+            artifact = store.save(
+                session_id=result["session_id"],
+                created_by=result["agent_id"],
+                title="Summary",
+                content="Exportable content",
+                created_at="2026-04-05T10:01:00Z",
+            )
+
+            with patch("openlmlib.collab.export_bridge.add_finding") as add_finding_mock:
+                add_finding_mock.return_value = {"status": "ok", "id": "finding_001"}
+                export_result = export_session_to_library(
+                    settings_path=Path(tmp.name) / "settings.json",
+                    session_id=result["session_id"],
+                    collab_conn=conn,
+                    sessions_dir=sessions_dir,
+                )
+
+            self.assertEqual(export_result["exported"], 1)
+            add_finding_mock.assert_called_once()
+            kwargs = add_finding_mock.call_args.kwargs
+            self.assertTrue(kwargs["confirm"])
+            self.assertNotIn("source", kwargs)
+            self.assertEqual(kwargs["claim"], "Summary")
+        finally:
+            if conn is not None:
+                conn.close()
+            tmp.cleanup()
+
+
+class TestCollabMCP(unittest.TestCase):
+    """Test MCP tool integrations that enforce auth and state invariants."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.settings_path = Path(self.tmp.name) / "config" / "settings.json"
+        self.settings_path.parent.mkdir(parents=True, exist_ok=True)
+        data_root = Path(self.tmp.name) / "data"
+        data_root.mkdir(parents=True, exist_ok=True)
+        self.settings_path.write_text(json.dumps({"data_root": str(data_root)}), encoding="utf-8")
+        self.prev_settings = os.environ.get("OPENLMLIB_SETTINGS")
+        os.environ["OPENLMLIB_SETTINGS"] = str(self.settings_path)
+
+        import openlmlib.collab.collab_mcp as collab_mcp_module
+
+        collab_mcp_module._cached_paths = None
+        collab_mcp_module._cached_paths_mtime = 0.0
+        self.collab_mcp_module = collab_mcp_module
+
+    def tearDown(self):
+        if self.prev_settings is None:
+            os.environ.pop("OPENLMLIB_SETTINGS", None)
+        else:
+            os.environ["OPENLMLIB_SETTINGS"] = self.prev_settings
+        self.tmp.cleanup()
+
+    def test_orchestrator_can_update_state_with_returned_agent_id(self):
+        create_resp = self.collab_mcp_module.collab_create_session(
+            title="MCP Session",
+            task_description="Validate orchestrator auth",
+            created_by="orch-model",
+        )
+        self.assertTrue(create_resp["success"])
+
+        update_resp = self.collab_mcp_module.collab_update_session_state(
+            session_id=create_resp["session_id"],
+            state={"current_phase": "running"},
+            orchestrator_id=create_resp["your_agent_id"],
+        )
+        self.assertTrue(update_resp["success"])
+        self.assertEqual(update_resp["state"]["current_phase"], "running")
+
+    def test_read_messages_filtered_does_not_advance_stored_offset(self):
+        create_resp = self.collab_mcp_module.collab_create_session(
+            title="Offset Session",
+            task_description="Check filtered reads",
+            created_by="orch-model",
+        )
+        join_resp = self.collab_mcp_module.collab_join_session(
+            session_id=create_resp["session_id"],
+            model="worker-model",
+        )
+
+        self.collab_mcp_module.collab_send_message(
+            session_id=create_resp["session_id"],
+            msg_type="task",
+            content="Task message",
+            from_agent=create_resp["your_agent_id"],
+        )
+        self.collab_mcp_module.collab_send_message(
+            session_id=create_resp["session_id"],
+            msg_type="result",
+            content="Result message",
+            from_agent=join_resp["agent_id"],
+        )
+
+        filtered = self.collab_mcp_module.collab_read_messages(
+            session_id=create_resp["session_id"],
+            agent_id=join_resp["agent_id"],
+            msg_types=["result"],
+        )
+        self.assertFalse(filtered["offset_updated"])
+
+        unfiltered = self.collab_mcp_module.collab_read_messages(
+            session_id=create_resp["session_id"],
+            agent_id=join_resp["agent_id"],
+        )
+        contents = [msg["content"] for msg in unfiltered["messages"]]
+        self.assertIn("Task message", contents)
+        self.assertIn("Result message", contents)
+
+    def test_send_message_sanitizes_content(self):
+        create_resp = self.collab_mcp_module.collab_create_session(
+            title="Sanitize Session",
+            task_description="Check message sanitization",
+            created_by="orch-model",
+        )
+        send_resp = self.collab_mcp_module.collab_send_message(
+            session_id=create_resp["session_id"],
+            msg_type="update",
+            content="Unsafe <script>alert('x')</script> ```payload```",
+            from_agent=create_resp["your_agent_id"],
+        )
+        self.assertTrue(send_resp["success"])
+
+        tail_resp = self.collab_mcp_module.collab_tail_messages(
+            session_id=create_resp["session_id"],
+            agent_id=create_resp["your_agent_id"],
+            n=5,
+        )
+        stored = tail_resp["messages"][-1]["content"]
+        self.assertNotIn("<script>", stored)
+        self.assertNotIn("```", stored)
+
+    def test_session_reads_require_membership(self):
+        create_resp = self.collab_mcp_module.collab_create_session(
+            title="Auth Session",
+            task_description="Check session read auth",
+            created_by="orch-model",
+        )
+        outsider = self.collab_mcp_module.collab_create_session(
+            title="Other Session",
+            task_description="Create outsider",
+            created_by="outsider-model",
+        )
+
+        denied = self.collab_mcp_module.collab_get_session_state(
+            session_id=create_resp["session_id"],
+            agent_id=outsider["your_agent_id"],
+        )
+        self.assertFalse(denied["success"])
+        self.assertEqual(denied["error_type"], "agent_not_authorized")
 
 
 if __name__ == "__main__":

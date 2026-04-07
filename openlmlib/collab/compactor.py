@@ -153,6 +153,7 @@ class SessionCompactor:
             return None
 
         compacted_at = compacted_at or _now_iso()
+        pre_summary_max_seq = db.get_max_seq(self.conn, session_id)
 
         file_path = self.artifact_store.save_summary(
             session_id, summary, compacted_at
@@ -178,7 +179,7 @@ class SessionCompactor:
         state_row = self.state_manager.get_state(session_id)
         if state_row:
             state = state_row["state"]
-            state["last_compact_seq"] = from_seq + 1
+            state["last_compact_seq"] = current_max_seq
             state["last_compacted_at"] = compacted_at
             self.state_manager.update_state(
                 session_id, state, "system", compacted_at, state_row.get("version")
@@ -187,7 +188,7 @@ class SessionCompactor:
         return {
             "session_id": session_id,
             "from_seq": from_seq,
-            "to_seq": current_max_seq,
+            "to_seq": pre_summary_max_seq,
             "file_path": file_path,
             "compacted_at": compacted_at,
             "summary_length": len(summary),

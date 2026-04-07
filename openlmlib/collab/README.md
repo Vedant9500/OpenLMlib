@@ -46,6 +46,8 @@ When connected to the OpenLMLib MCP server, agents have access to these tools:
 | Templates | `collab_list_templates`, `collab_get_template`, `collab_create_session_from_template` |
 | Export | `collab_export_to_library` |
 
+Read APIs are membership-gated. Agents must pass their own `agent_id` to session state, message, artifact, and multi-session read tools, and those tools only return data for sessions the agent has joined.
+
 ### Programmatic Usage
 
 ```python

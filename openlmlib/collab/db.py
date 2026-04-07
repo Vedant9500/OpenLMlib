@@ -159,6 +159,48 @@ def _row_to_message(row: sqlite3.Row) -> Dict:
     return d
 
 
+def _row_to_artifact(row: sqlite3.Row) -> Dict:
+    """Convert an artifact row to a dict with parsed JSON fields."""
+    d = dict(row)
+    d["tags"] = _json_load(d.pop("tags_json"), [])
+    d["referenced_in_messages"] = _json_load(
+        d.pop("referenced_in_messages_json"), []
+    )
+    return d
+
+
+def touch_session(
+    conn: sqlite3.Connection,
+    session_id: str,
+    updated_at: str,
+) -> None:
+    """Update the session timestamp used for recency ordering."""
+    conn.execute(
+        "UPDATE sessions SET updated_at = ? WHERE session_id = ?",
+        (updated_at, session_id),
+    )
+
+
+def get_orchestrator_agent_id(
+    conn: sqlite3.Connection,
+    session_id: str,
+) -> Optional[str]:
+    """Return the agent_id for the session orchestrator if present."""
+    row = conn.execute(
+        """
+        SELECT agent_id
+        FROM agents
+        WHERE session_id = ? AND role = 'orchestrator'
+        ORDER BY joined_at ASC
+        LIMIT 1
+        """,
+        (session_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return str(row["agent_id"])
+
+
 # ── Session CRUD ──────────────────────────────────────────────────────
 
 def create_session(
@@ -283,6 +325,7 @@ def insert_agent(
             (agent_id, session_id, model, role,
              _json_dump(capabilities or []), joined_at, joined_at),
         )
+        touch_session(conn, session_id, joined_at)
 
 
 def get_session_agents(conn: sqlite3.Connection, session_id: str) -> List[Dict]:
@@ -369,6 +412,7 @@ def insert_message(
                 (msg_id, session_id, seq, from_agent, from_model,
                  msg_type, to_agent, content, metadata_json, created_at),
             )
+        touch_session(conn, session_id, created_at)
     # Return the actual assigned seq
     assigned = conn.execute(
         "SELECT seq FROM messages WHERE msg_id = ?", (msg_id,)
@@ -543,6 +587,7 @@ def insert_task(
             """,
             (task_id, session_id, step_num, description, assigned_to, created_at),
         )
+        touch_session(conn, session_id, created_at)
 
 
 def update_task_status(
@@ -615,6 +660,28 @@ def insert_artifact(
              file_path, _json_dump(tags or []), word_count, created_at,
              _json_dump(referenced_in_messages or [])),
         )
+        touch_session(conn, session_id, created_at)
+
+
+def get_artifact(
+    conn: sqlite3.Connection,
+    artifact_id: str,
+    session_id: Optional[str] = None,
+) -> Optional[Dict]:
+    """Get one artifact by id, optionally constrained to a session."""
+    if session_id is None:
+        row = conn.execute(
+            "SELECT * FROM artifacts WHERE artifact_id = ?",
+            (artifact_id,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT * FROM artifacts WHERE artifact_id = ? AND session_id = ?",
+            (artifact_id, session_id),
+        ).fetchone()
+    if row is None:
+        return None
+    return _row_to_artifact(row)
 
 
 def get_session_artifacts(
@@ -635,15 +702,7 @@ def get_session_artifacts(
     sql += " ORDER BY created_at ASC"
 
     rows = conn.execute(sql, params).fetchall()
-    result = []
-    for r in rows:
-        d = dict(r)
-        d["tags"] = _json_load(d.pop("tags_json"), [])
-        d["referenced_in_messages"] = _json_load(
-            d.pop("referenced_in_messages_json"), []
-        )
-        result.append(d)
-    return result
+    return [_row_to_artifact(r) for r in rows]
 
 
 # ── Session State ─────────────────────────────────────────────────────
@@ -687,6 +746,8 @@ def update_session_state(
                 (_json_dump(state), updated_at, updated_by,
                  session_id, expected_version),
             )
+            if cursor.rowcount > 0:
+                touch_session(conn, session_id, updated_at)
             return cursor.rowcount > 0
         else:
             conn.execute(
@@ -697,4 +758,5 @@ def update_session_state(
                 """,
                 (_json_dump(state), updated_at, updated_by, session_id),
             )
+            touch_session(conn, session_id, updated_at)
             return True

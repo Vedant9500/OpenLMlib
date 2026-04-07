@@ -12,6 +12,8 @@ Or run standalone to test session creation:
     python test_collab_live.py
 """
 
+__test__ = False
+
 import json
 import sys
 import os

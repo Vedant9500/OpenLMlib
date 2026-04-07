@@ -210,7 +210,59 @@ def _handle_tool_error(func_name: str, exc: Exception) -> Dict:
         }
 
 
+def _require_reader_access(
+    conn: sqlite3.Connection,
+    session_id: str,
+    agent_id: str,
+) -> Dict:
+    """Authorize a session-scoped read for a session member."""
+    if not agent_id:
+        raise SecurityError("agent_id is required for session reads")
+    validate_agent_id(agent_id)
+
+    session = collab_db.get_session(conn, session_id)
+    if session is None:
+        raise SessionNotFoundError(f"Session {session_id} not found")
+
+    verify_agent_in_session(conn, agent_id, session_id)
+    return session
+
+
 collab_mcp = FastMCP("OpenLMlib CollabSessions")
+
+__all__ = [
+    "collab_mcp",
+    "collab_create_session",
+    "collab_join_session",
+    "collab_list_sessions",
+    "collab_get_session_state",
+    "collab_update_session_state",
+    "collab_send_message",
+    "collab_read_messages",
+    "collab_tail_messages",
+    "collab_read_message_range",
+    "collab_grep_messages",
+    "collab_get_session_context",
+    "collab_add_artifact",
+    "collab_list_artifacts",
+    "collab_get_artifact",
+    "collab_grep_artifacts",
+    "collab_leave_session",
+    "collab_terminate_session",
+    "collab_export_to_library",
+    "collab_list_templates",
+    "collab_get_template",
+    "collab_create_session_from_template",
+    "collab_get_agent_sessions",
+    "collab_get_active_sessions_summary",
+    "collab_search_sessions",
+    "collab_get_session_relationships",
+    "collab_get_session_statistics",
+    "collab_list_openrouter_models",
+    "collab_get_openrouter_model_details",
+    "collab_get_recommended_models",
+    "collab_help",
+]
 
 @collab_mcp.tool()
 def collab_create_session(
@@ -369,7 +421,7 @@ def collab_list_sessions(
 
 
 @collab_mcp.tool()
-def collab_get_session_state(session_id: str) -> Dict:
+def collab_get_session_state(session_id: str, agent_id: str) -> Dict:
     """Get the current state of a collaboration session.
 
     Args:
@@ -382,9 +434,7 @@ def collab_get_session_state(session_id: str) -> Dict:
         validate_session_id(session_id)
         conn, sessions_dir = _get_collab_connection()
         try:
-            session = collab_db.get_session(conn, session_id)
-            if session is None:
-                return {"error": f"Session {session_id} not found", "error_type": "session_not_found", "success": False}
+            session = _require_reader_access(conn, session_id, agent_id)
 
             state = collab_db.get_session_state(conn, session_id)
             tasks = collab_db.get_session_tasks(conn, session_id)
@@ -426,12 +476,7 @@ def collab_update_session_state(
         validate_agent_id(orchestrator_id)
         conn, sessions_dir = _get_collab_connection()
         try:
-            session = collab_db.get_session(conn, session_id)
-            if session is None:
-                return {"error": f"Session {session_id} not found", "error_type": "session_not_found", "success": False}
-
-            if orchestrator_id != session["orchestrator"]:
-                return {"error": "Only the orchestrator can update session state", "error_type": "agent_not_authorized", "success": False}
+            verify_orchestrator(conn, session_id, orchestrator_id)
 
             sm = StateManager(conn)
             current = sm.get_state(session_id)
@@ -498,7 +543,7 @@ def collab_send_message(
     try:
         validate_session_id(session_id)
         validate_message_type(msg_type)
-        safe_content = validate_message_content(content)
+        safe_content = sanitize_content(validate_message_content(content))
 
         if not from_agent:
             return {"success": False, "error": "from_agent is required", "error_type": "validation_error"}
@@ -526,9 +571,6 @@ def collab_send_message(
                 created_at=now,
             )
 
-            sm = StateManager(conn)
-            sm.bump_activity(session_id, now)
-
             return {
                 "success": True,
                 "msg_id": result["msg_id"],
@@ -545,10 +587,10 @@ def collab_send_message(
 @collab_mcp.tool()
 def collab_read_messages(
     session_id: str,
+    agent_id: str,
     limit: int = 50,
     msg_types: Optional[List[str]] = None,
     from_agent: Optional[str] = None,
-    agent_id: str = "",
 ) -> Dict:
     """Read new messages from a session (offset-based, only returns unseen messages).
 
@@ -565,36 +607,34 @@ def collab_read_messages(
     try:
         validate_session_id(session_id)
         limit = max(1, min(limit, 200))
+        if not agent_id:
+            return {"success": False, "error": "agent_id is required", "error_type": "validation_error"}
 
         conn, sessions_dir = _get_collab_connection()
         try:
-            # Read-only: allow reading from completed/terminated sessions
-            session = collab_db.get_session(conn, session_id)
-            if session is None:
-                raise SessionNotFoundError(f"Session {session_id} not found")
-
-            if agent_id:
-                validate_agent_id(agent_id)
-                verify_agent_in_session(conn, agent_id, session_id)
+            _require_reader_access(conn, session_id, agent_id)
 
             bus = MessageBus(conn, sessions_dir)
-            last_seq = bus.load_offset(session_id, agent_id) if agent_id else 0
+            stored_last_seq = bus.load_offset(session_id, agent_id)
 
             messages = bus.read_new(
                 session_id=session_id,
-                last_seq=last_seq,
+                last_seq=stored_last_seq,
                 limit=limit,
                 msg_types=msg_types,
                 from_agent=from_agent,
             )
 
-            if messages and agent_id:
+            offset_updated = not msg_types and from_agent is None
+            if messages and offset_updated:
                 bus.save_offset(session_id, agent_id, messages[-1]["seq"])
 
             return {
                 "messages": messages,
                 "count": len(messages),
-                "last_seq": messages[-1]["seq"] if messages else last_seq,
+                "last_seq": messages[-1]["seq"] if messages and offset_updated else stored_last_seq,
+                "returned_last_seq": messages[-1]["seq"] if messages else stored_last_seq,
+                "offset_updated": offset_updated,
                 "has_more": len(messages) >= limit,
             }
         finally:
@@ -606,6 +646,7 @@ def collab_read_messages(
 @collab_mcp.tool()
 def collab_tail_messages(
     session_id: str,
+    agent_id: str,
     n: int = 20,
 ) -> Dict:
     """Read the last N messages from a session (quick status check).
@@ -623,10 +664,7 @@ def collab_tail_messages(
 
         conn, sessions_dir = _get_collab_connection()
         try:
-            # Read-only: allow reading from completed/terminated sessions
-            session = collab_db.get_session(conn, session_id)
-            if session is None:
-                raise SessionNotFoundError(f"Session {session_id} not found")
+            _require_reader_access(conn, session_id, agent_id)
 
             bus = MessageBus(conn, sessions_dir)
             messages = bus.tail(session_id, n)
@@ -645,6 +683,7 @@ def collab_read_message_range(
     session_id: str,
     start_seq: int,
     end_seq: int,
+    agent_id: str,
 ) -> Dict:
     """Read messages in a specific sequence range.
 
@@ -670,6 +709,7 @@ def collab_read_message_range(
 
         conn, sessions_dir = _get_collab_connection()
         try:
+            _require_reader_access(conn, session_id, agent_id)
             bus = MessageBus(conn, sessions_dir)
             messages = bus.read_range(session_id, start_seq, end_seq)
             return {
@@ -688,6 +728,7 @@ def collab_read_message_range(
 def collab_grep_messages(
     session_id: str,
     pattern: str,
+    agent_id: str,
     limit: int = 50,
     msg_types: Optional[List[str]] = None,
 ) -> Dict:
@@ -710,6 +751,7 @@ def collab_grep_messages(
 
         conn, sessions_dir = _get_collab_connection()
         try:
+            _require_reader_access(conn, session_id, agent_id)
             bus = MessageBus(conn, sessions_dir)
             try:
                 messages = bus.grep(session_id, pattern, limit, msg_types)
@@ -869,6 +911,7 @@ def collab_add_artifact(
 @collab_mcp.tool()
 def collab_list_artifacts(
     session_id: str,
+    agent_id: str,
     created_by: Optional[str] = None,
     artifact_type: Optional[str] = None,
 ) -> Dict:
@@ -886,10 +929,7 @@ def collab_list_artifacts(
         validate_session_id(session_id)
         conn, sessions_dir = _get_collab_connection()
         try:
-            # Read-only: allow listing artifacts from completed sessions
-            session = collab_db.get_session(conn, session_id)
-            if session is None:
-                raise SessionNotFoundError(f"Session {session_id} not found")
+            _require_reader_access(conn, session_id, agent_id)
 
             store = ArtifactStore(conn, sessions_dir)
             artifacts = store.list_artifacts(session_id, created_by, artifact_type)
@@ -907,6 +947,7 @@ def collab_list_artifacts(
 def collab_get_artifact(
     session_id: str,
     artifact_id: str,
+    agent_id: str,
 ) -> Dict:
     """Get the full content of a specific artifact.
 
@@ -923,15 +964,13 @@ def collab_get_artifact(
 
         conn, sessions_dir = _get_collab_connection()
         try:
+            _require_reader_access(conn, session_id, agent_id)
             store = ArtifactStore(conn, sessions_dir)
             content = store.get_content_by_id(session_id, artifact_id)
             if content is None:
                 return {"error": f"Artifact {artifact_id} not found in session {session_id}", "error_type": "artifact_not_found", "success": False}
 
-            artifacts = store.list_artifacts(session_id)
-            metadata = next(
-                (a for a in artifacts if a["artifact_id"] == artifact_id), {}
-            )
+            metadata = store.get_artifact(session_id, artifact_id) or {}
 
             return {
                 "artifact_id": artifact_id,
@@ -948,6 +987,7 @@ def collab_get_artifact(
 def collab_grep_artifacts(
     session_id: str,
     pattern: str,
+    agent_id: str,
     created_by: Optional[str] = None,
 ) -> Dict:
     """Search artifact content by keyword.
@@ -967,6 +1007,7 @@ def collab_grep_artifacts(
 
         conn, sessions_dir = _get_collab_connection()
         try:
+            _require_reader_access(conn, session_id, agent_id)
             store = ArtifactStore(conn, sessions_dir)
             matches = store.grep_artifacts(session_id, pattern, created_by)
             return {
@@ -1233,6 +1274,7 @@ def collab_create_session_from_template(
 @collab_mcp.tool()
 def collab_get_agent_sessions(
     agent_id: str,
+    requesting_agent_id: str,
     status: Optional[str] = None,
 ) -> Dict:
     """Get all sessions an agent has participated in.
@@ -1248,6 +1290,13 @@ def collab_get_agent_sessions(
     """
     try:
         validate_agent_id(agent_id)
+        validate_agent_id(requesting_agent_id)
+        if agent_id != requesting_agent_id:
+            return {
+                "success": False,
+                "error": "Agents can only inspect their own session membership",
+                "error_type": "agent_not_authorized",
+            }
         conn, _ = _get_collab_connection()
         try:
             from .multi_session import get_agent_sessions
@@ -1264,16 +1313,17 @@ def collab_get_agent_sessions(
 
 
 @collab_mcp.tool()
-def collab_get_active_sessions_summary() -> Dict:
+def collab_get_active_sessions_summary(agent_id: str) -> Dict:
     """Get a summary of all active sessions.
 
     Returns counts of active sessions, agents, and messages.
     """
     try:
+        validate_agent_id(agent_id)
         conn, _ = _get_collab_connection()
         try:
             from .multi_session import get_active_sessions_summary
-            return get_active_sessions_summary(conn)
+            return get_active_sessions_summary(conn, agent_id=agent_id)
         finally:
             conn.close()
     except Exception as e:
@@ -1283,6 +1333,7 @@ def collab_get_active_sessions_summary() -> Dict:
 @collab_mcp.tool()
 def collab_search_sessions(
     query: str,
+    agent_id: str,
     status: Optional[str] = None,
     limit: int = 20,
 ) -> Dict:
@@ -1301,12 +1352,13 @@ def collab_search_sessions(
     try:
         if not query or not isinstance(query, str):
             return {"success": False, "error": "query is required", "error_type": "validation_error"}
+        validate_agent_id(agent_id)
         limit = max(1, min(limit, 100))
 
         conn, _ = _get_collab_connection()
         try:
             from .multi_session import search_sessions_by_content
-            results = search_sessions_by_content(conn, query, limit, status)
+            results = search_sessions_by_content(conn, query, limit, status, agent_id=agent_id)
             return {
                 "query": query,
                 "results": results,
@@ -1319,7 +1371,7 @@ def collab_search_sessions(
 
 
 @collab_mcp.tool()
-def collab_get_session_relationships(session_id: str) -> Dict:
+def collab_get_session_relationships(session_id: str, agent_id: str) -> Dict:
     """Find sessions related to a given session.
 
     Identifies related sessions based on shared agents or same orchestrator.
@@ -1332,10 +1384,12 @@ def collab_get_session_relationships(session_id: str) -> Dict:
     """
     try:
         validate_session_id(session_id)
+        validate_agent_id(agent_id)
         conn, _ = _get_collab_connection()
         try:
+            _require_reader_access(conn, session_id, agent_id)
             from .multi_session import get_session_relationships
-            return get_session_relationships(conn, session_id)
+            return get_session_relationships(conn, session_id, agent_id=agent_id)
         finally:
             conn.close()
     except Exception as e:
@@ -1343,7 +1397,7 @@ def collab_get_session_relationships(session_id: str) -> Dict:
 
 
 @collab_mcp.tool()
-def collab_get_session_statistics(session_id: str) -> Dict:
+def collab_get_session_statistics(session_id: str, agent_id: str) -> Dict:
     """Get detailed statistics for a session.
 
     Includes message counts, breakdown by type and agent,
@@ -1357,8 +1411,10 @@ def collab_get_session_statistics(session_id: str) -> Dict:
     """
     try:
         validate_session_id(session_id)
+        validate_agent_id(agent_id)
         conn, _ = _get_collab_connection()
         try:
+            _require_reader_access(conn, session_id, agent_id)
             from .multi_session import get_session_statistics
             return get_session_statistics(conn, session_id)
         finally:
@@ -1510,3 +1566,373 @@ def collab_get_recommended_models(task_type: str) -> Dict:
         }
     except Exception as e:
         return _handle_tool_error("collab_get_recommended_models", e)
+
+
+@collab_mcp.tool()
+def collab_help(tool_name: Optional[str] = None) -> Dict:
+    """Get help about all collab MCP tools or a specific tool.
+
+    Call this with no arguments to see all available tools and their purposes.
+    Call with a specific tool_name to get detailed usage instructions.
+
+    Args:
+        tool_name: Optional specific tool name to get help for
+                   (e.g., 'collab_create_session')
+
+    Returns:
+        Dict with tool descriptions and usage information
+    """
+    tools_info = {
+        "collab_create_session": {
+            "description": "Create a new collaboration session for multi-agent research.",
+            "args": {
+                "title": "Short descriptive title for the session",
+                "task_description": "Detailed description of the research task",
+                "plan": "Optional list of task dicts with step, task, assigned_to",
+                "rules": "Optional session rules dict (max_agents, require_assignment)",
+                "created_by": "Identifier for the creating agent (default: 'orchestrator')",
+            },
+            "returns": "Dict with session_id, agent_id, and session info",
+        },
+        "collab_join_session": {
+            "description": "Join an existing collaboration session.",
+            "args": {
+                "session_id": "ID of the session to join",
+                "model": "Your model identifier (e.g., 'gpt-codex', 'gemini-pro')",
+                "capabilities": "Optional list of your capabilities",
+            },
+            "returns": "Dict with your agent_id and session context",
+        },
+        "collab_list_sessions": {
+            "description": "List collaboration sessions.",
+            "args": {
+                "status": "Filter by status (active, completed, terminated)",
+                "limit": "Maximum number of sessions to return (default: 20)",
+            },
+            "returns": "Dict with list of sessions",
+        },
+        "collab_get_session_state": {
+            "description": "Get the current state of a collaboration session.",
+            "args": {
+                "session_id": "ID of the session",
+                "agent_id": "Your agent ID (must belong to the session)",
+            },
+            "returns": "Dict with session state, tasks, and agents",
+        },
+        "collab_update_session_state": {
+            "description": "Update the session state (orchestrator only).",
+            "args": {
+                "session_id": "Target session",
+                "state": "New state dict (will be merged with existing state)",
+                "orchestrator_id": "The orchestrator's agent ID (for authorization)",
+            },
+            "returns": "Dict with updated state and version info",
+        },
+        "collab_send_message": {
+            "description": "Send a message to a collaboration session.",
+            "args": {
+                "session_id": "Target session",
+                "msg_type": "Type: task, result, question, answer, ack, update, artifact, complete, system",
+                "content": "Message content",
+                "to_agent": "Target agent ID (or None for broadcast)",
+                "metadata": "Optional metadata dict",
+                "from_agent": "Your agent ID (required)",
+            },
+            "returns": "Dict with message info",
+        },
+        "collab_read_messages": {
+            "description": "Read new messages from a session (offset-based, only returns unseen messages).",
+            "args": {
+                "session_id": "Session to read from",
+                "agent_id": "Your agent ID (required for authorization and offset tracking)",
+                "limit": "Max messages to return (default: 50)",
+                "msg_types": "Filter by message types (optional)",
+                "from_agent": "Filter by sender (optional)",
+            },
+            "returns": "Dict with messages and your current offset",
+        },
+        "collab_tail_messages": {
+            "description": "Read the last N messages from a session (quick status check).",
+            "args": {
+                "session_id": "Session to read from",
+                "agent_id": "Your agent ID (must belong to the session)",
+                "n": "Number of messages (default: 20)",
+            },
+            "returns": "Dict with the last N messages",
+        },
+        "collab_read_message_range": {
+            "description": "Read messages in a specific sequence range.",
+            "args": {
+                "session_id": "Session to read from",
+                "start_seq": "Starting sequence number (inclusive)",
+                "end_seq": "Ending sequence number (exclusive)",
+                "agent_id": "Your agent ID (must belong to the session)",
+            },
+            "returns": "Dict with messages in the specified range",
+        },
+        "collab_grep_messages": {
+            "description": "Search session messages by keyword.",
+            "args": {
+                "session_id": "Session to search",
+                "pattern": "Search term (supports FTS5 syntax)",
+                "agent_id": "Your agent ID (must belong to the session)",
+                "limit": "Max results (default: 50)",
+                "msg_types": "Filter by message types (optional)",
+            },
+            "returns": "Dict with matching messages",
+        },
+        "collab_get_session_context": {
+            "description": "Get a compiled context view of the session (PRIMARY tool for understanding session state).",
+            "args": {
+                "session_id": "Session to get context for",
+                "agent_id": "Your agent ID (for personalized context)",
+                "max_messages": "Max recent messages to include (default: 20)",
+            },
+            "returns": "Dict with structured context AND a prompt-ready formatted string",
+        },
+        "collab_add_artifact": {
+            "description": "Save a research artifact (finding, analysis, summary) to the session.",
+            "args": {
+                "session_id": "Target session",
+                "title": "Descriptive title for the artifact",
+                "content": "Full artifact content (markdown recommended)",
+                "created_by": "Your agent ID",
+                "artifact_type": "Optional type (research_summary, analysis, code, data, etc.)",
+                "tags": "Optional tags for categorization",
+                "shared": "If True, save to shared directory (default: False)",
+            },
+            "returns": "Dict with artifact info",
+        },
+        "collab_list_artifacts": {
+            "description": "List artifacts in a session.",
+            "args": {
+                "session_id": "Target session",
+                "agent_id": "Your agent ID (must belong to the session)",
+                "created_by": "Filter by creator agent (optional)",
+                "artifact_type": "Filter by type (optional)",
+            },
+            "returns": "Dict with list of artifacts",
+        },
+        "collab_get_artifact": {
+            "description": "Get the full content of a specific artifact.",
+            "args": {
+                "session_id": "Session containing the artifact",
+                "artifact_id": "ID of the artifact to retrieve",
+                "agent_id": "Your agent ID (must belong to the session)",
+            },
+            "returns": "Dict with artifact content and metadata",
+        },
+        "collab_grep_artifacts": {
+            "description": "Search artifact content by keyword.",
+            "args": {
+                "session_id": "Session to search",
+                "pattern": "Search term",
+                "agent_id": "Your agent ID (must belong to the session)",
+                "created_by": "Filter by creator (optional)",
+            },
+            "returns": "Dict with matching artifacts and their matching lines",
+        },
+        "collab_leave_session": {
+            "description": "Leave a collaboration session gracefully.",
+            "args": {
+                "session_id": "Session to leave",
+                "agent_id": "Your agent ID",
+                "reason": "Optional reason for leaving",
+            },
+            "returns": "Dict with confirmation",
+        },
+        "collab_terminate_session": {
+            "description": "Terminate and complete a collaboration session (orchestrator only).",
+            "args": {
+                "session_id": "Session to terminate",
+                "orchestrator_id": "The orchestrator's agent ID",
+                "summary": "Optional final summary of the session's work",
+            },
+            "returns": "Dict with termination confirmation",
+        },
+        "collab_export_to_library": {
+            "description": "Export session artifacts as findings in the main OpenLMLib library.",
+            "args": {
+                "session_id": "Completed session to export",
+                "project": "Project name for findings (defaults to session title)",
+                "confidence": "Default confidence score (default: 0.8)",
+                "tags": "Additional tags to apply to all findings",
+                "artifact_ids": "Specific artifacts to export (None = all)",
+                "include_summary": "Also export the session summary as a finding",
+            },
+            "returns": "Dict with export results",
+        },
+        "collab_list_templates": {
+            "description": "List available session templates for quick session creation.",
+            "args": {},
+            "returns": "Dict with list of templates",
+        },
+        "collab_get_template": {
+            "description": "Get details of a specific session template.",
+            "args": {
+                "template_id": "Template identifier (e.g., 'deep_research', 'code_review')",
+            },
+            "returns": "Dict with template details including plan and rules",
+        },
+        "collab_create_session_from_template": {
+            "description": "Create a session from a predefined template.",
+            "args": {
+                "template_id": "Template to use (e.g., 'deep_research', 'code_review')",
+                "title": "Session title",
+                "task_description": "Specific task description for this session",
+                "created_by": "Creator identifier",
+            },
+            "returns": "Dict with session info",
+        },
+        "collab_get_agent_sessions": {
+            "description": "Get all sessions an agent has participated in.",
+            "args": {
+                "agent_id": "Agent identifier",
+                "requesting_agent_id": "Must match agent_id",
+                "status": "Filter by session status (optional)",
+            },
+            "returns": "Dict with list of sessions and participation info",
+        },
+        "collab_get_active_sessions_summary": {
+            "description": "Get a summary of all active sessions.",
+            "args": {
+                "agent_id": "Your agent ID (summary is scoped to sessions you joined)",
+            },
+            "returns": "Dict with counts of active sessions, agents, and messages",
+        },
+        "collab_search_sessions": {
+            "description": "Search across all sessions by message content using FTS5.",
+            "args": {
+                "query": "Search query (supports FTS5 syntax)",
+                "agent_id": "Your agent ID (search is scoped to sessions you joined)",
+                "status": "Filter by session status (optional)",
+                "limit": "Max results (default: 20)",
+            },
+            "returns": "Dict with matching sessions ranked by relevance",
+        },
+        "collab_get_session_relationships": {
+            "description": "Find sessions related to a given session.",
+            "args": {
+                "session_id": "Base session to find relationships for",
+                "agent_id": "Your agent ID (must belong to the base session)",
+            },
+            "returns": "Dict with related sessions grouped by relationship type",
+        },
+        "collab_get_session_statistics": {
+            "description": "Get detailed statistics for a session.",
+            "args": {
+                "session_id": "Session to get statistics for",
+                "agent_id": "Your agent ID (must belong to the session)",
+            },
+            "returns": "Dict with session statistics",
+        },
+        "collab_list_openrouter_models": {
+            "description": "List available models from OpenRouter API.",
+            "args": {
+                "search": "Search term in model name or description",
+                "provider": "Filter by provider (e.g., 'openai', 'anthropic', 'google')",
+                "max_price_per_million": "Max combined input+output price per 1M tokens",
+                "context_length_min": "Minimum context length in tokens",
+                "is_free": "Only include free models",
+                "force_refresh": "Force fresh API call, ignoring cache",
+            },
+            "returns": "Dict with list of available models and their details",
+        },
+        "collab_get_openrouter_model_details": {
+            "description": "Get detailed information about a specific OpenRouter model.",
+            "args": {
+                "model_id": "Full model ID (e.g., 'anthropic/claude-sonnet-4')",
+            },
+            "returns": "Dict with model details including pricing, context, and description",
+        },
+        "collab_get_recommended_models": {
+            "description": "Get recommended OpenRouter models for a specific task type.",
+            "args": {
+                "task_type": "Task type (research, coding, analysis, writing, summarization, orchestrator, worker)",
+            },
+            "returns": "Dict with recommended model IDs and their details",
+        },
+        "collab_help": {
+            "description": "Get help about all collab MCP tools or a specific tool (this tool).",
+            "args": {
+                "tool_name": "Optional specific tool name to get help for",
+            },
+            "returns": "Dict with tool descriptions and usage information",
+        },
+    }
+
+    if tool_name:
+        if tool_name in tools_info:
+            return {
+                "tool": tool_name,
+                **tools_info[tool_name],
+            }
+        else:
+            return {
+                "error": f"Tool '{tool_name}' not found",
+                "available_tools": sorted(tools_info.keys()),
+            }
+
+    categories = {
+        "Session Management": [
+            "collab_create_session",
+            "collab_join_session",
+            "collab_list_sessions",
+            "collab_leave_session",
+            "collab_terminate_session",
+        ],
+        "Messaging": [
+            "collab_send_message",
+            "collab_read_messages",
+            "collab_tail_messages",
+            "collab_read_message_range",
+            "collab_grep_messages",
+        ],
+        "Context & State": [
+            "collab_get_session_context",
+            "collab_get_session_state",
+            "collab_update_session_state",
+        ],
+        "Artifacts": [
+            "collab_add_artifact",
+            "collab_list_artifacts",
+            "collab_get_artifact",
+            "collab_grep_artifacts",
+        ],
+        "Templates": [
+            "collab_list_templates",
+            "collab_get_template",
+            "collab_create_session_from_template",
+        ],
+        "Export": [
+            "collab_export_to_library",
+        ],
+        "Multi-Session": [
+            "collab_get_agent_sessions",
+            "collab_get_active_sessions_summary",
+            "collab_search_sessions",
+            "collab_get_session_relationships",
+            "collab_get_session_statistics",
+        ],
+        "Model Discovery": [
+            "collab_list_openrouter_models",
+            "collab_get_openrouter_model_details",
+            "collab_get_recommended_models",
+        ],
+        "Help": [
+            "collab_help",
+        ],
+    }
+
+    return {
+        "description": "OpenLMlib CollabSessions MCP Tools - Multi-agent collaboration tools",
+        "total_tools": len(tools_info),
+        "categories": {
+            cat: [
+                {"name": name, "description": tools_info[name]["description"]}
+                for name in names
+            ]
+            for cat, names in categories.items()
+        },
+        "usage": "Call collab_help with tool_name='<tool>' for detailed usage of a specific tool",
+    }

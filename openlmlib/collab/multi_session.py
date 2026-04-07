@@ -42,26 +42,40 @@ def get_agent_sessions(conn: sqlite3.Connection, agent_id: str, status: Optional
     return [dict(row) for row in rows]
 
 
-def get_active_sessions_summary(conn: sqlite3.Connection) -> Dict:
+def get_active_sessions_summary(
+    conn: sqlite3.Connection,
+    agent_id: Optional[str] = None,
+) -> Dict:
     """Get a summary of all active sessions.
 
     Returns:
         Dict with active session count, total agents, total messages
     """
+    session_filter = ""
+    params: list = []
+    if agent_id:
+        session_filter = (
+            " AND s.session_id IN (SELECT session_id FROM agents WHERE agent_id = ?)"
+        )
+        params.append(agent_id)
+
     active_sessions = conn.execute(
-        "SELECT COUNT(*) as count FROM sessions WHERE status = 'active'"
+        f"SELECT COUNT(*) as count FROM sessions s WHERE s.status = 'active'{session_filter}",
+        params,
     ).fetchone()["count"]
 
     total_agents = conn.execute(
         "SELECT COUNT(DISTINCT a.agent_id) FROM agents a "
         "JOIN sessions s ON a.session_id = s.session_id "
-        "WHERE s.status = 'active' AND a.status = 'active'"
+        f"WHERE s.status = 'active' AND a.status = 'active'{session_filter}",
+        params,
     ).fetchone()[0]
 
     total_messages = conn.execute(
         "SELECT COUNT(*) FROM messages m "
         "JOIN sessions s ON m.session_id = s.session_id "
-        "WHERE s.status = 'active'"
+        f"WHERE s.status = 'active'{session_filter}",
+        params,
     ).fetchone()[0]
 
     return {
@@ -71,7 +85,13 @@ def get_active_sessions_summary(conn: sqlite3.Connection) -> Dict:
     }
 
 
-def search_sessions_by_content(conn: sqlite3.Connection, query: str, limit: int = 20, status: Optional[str] = None) -> List[Dict]:
+def search_sessions_by_content(
+    conn: sqlite3.Connection,
+    query: str,
+    limit: int = 20,
+    status: Optional[str] = None,
+    agent_id: Optional[str] = None,
+) -> List[Dict]:
     """Search across all sessions by message content using FTS5.
 
     Args:
@@ -96,6 +116,9 @@ def search_sessions_by_content(conn: sqlite3.Connection, query: str, limit: int 
     if status:
         sql += " AND s.status = ?"
         params.append(status)
+    if agent_id:
+        sql += " AND s.session_id IN (SELECT session_id FROM agents WHERE agent_id = ?)"
+        params.append(agent_id)
 
     sql += " GROUP BY s.session_id ORDER BY match_count DESC LIMIT ?"
     params.append(limit)
@@ -104,7 +127,11 @@ def search_sessions_by_content(conn: sqlite3.Connection, query: str, limit: int 
     return [dict(row) for row in cursor.fetchall()]
 
 
-def get_session_relationships(conn: sqlite3.Connection, session_id: str) -> Dict:
+def get_session_relationships(
+    conn: sqlite3.Connection,
+    session_id: str,
+    agent_id: Optional[str] = None,
+) -> Dict:
     """Get related sessions based on shared agents or similar content.
 
     Args:
@@ -140,28 +167,44 @@ def get_session_relationships(conn: sqlite3.Connection, session_id: str) -> Dict
         [*agent_ids, session_id]
     ).fetchall()
 
-    orchestrator = conn.execute(
-        "SELECT orchestrator FROM sessions WHERE session_id = ?",
+    creator = conn.execute(
+        "SELECT created_by FROM sessions WHERE session_id = ?",
         (session_id,)
     ).fetchone()
 
     related_by_orchestrator = []
-    if orchestrator:
+    if creator:
         rows = conn.execute(
             """
             SELECT session_id, title, status, created_at
             FROM sessions
-            WHERE orchestrator = ? AND session_id != ?
+            WHERE created_by = ? AND session_id != ?
             ORDER BY updated_at DESC
             LIMIT 10
             """,
-            (orchestrator["orchestrator"], session_id)
+            (creator["created_by"], session_id)
         ).fetchall()
         related_by_orchestrator = [dict(row) for row in rows]
 
+    by_shared_agents = [dict(row) for row in related_by_agents]
+    by_orchestrator = related_by_orchestrator
+
+    if agent_id:
+        allowed_rows = conn.execute(
+            "SELECT session_id FROM agents WHERE agent_id = ?",
+            (agent_id,),
+        ).fetchall()
+        allowed_session_ids = {row["session_id"] for row in allowed_rows}
+        by_shared_agents = [
+            row for row in by_shared_agents if row["session_id"] in allowed_session_ids
+        ]
+        by_orchestrator = [
+            row for row in by_orchestrator if row["session_id"] in allowed_session_ids
+        ]
+
     return {
-        "by_shared_agents": [dict(row) for row in related_by_agents],
-        "by_orchestrator": related_by_orchestrator,
+        "by_shared_agents": by_shared_agents,
+        "by_orchestrator": by_orchestrator,
     }
 
 
