@@ -22,7 +22,12 @@ CLIENT_SPECS = (
     McpClientSpec(id="cursor", label="Cursor", root_key="mcpServers"),
     McpClientSpec(id="kiro", label="Kiro", root_key="mcpServers"),
     McpClientSpec(id="claude_desktop", label="Claude Desktop", root_key="mcpServers"),
+    McpClientSpec(id="claude_code", label="Claude Code", root_key="mcpServers"),
     McpClientSpec(id="antigravity", label="Antigravity", root_key="mcpServers"),
+    McpClientSpec(id="windsurf", label="Windsurf", root_key="mcpServers"),
+    McpClientSpec(id="zed", label="Zed", root_key="context_servers"),
+    McpClientSpec(id="cline", label="Cline", root_key="mcpServers"),
+    McpClientSpec(id="openclaw", label="OpenClaw", root_key="mcpServers"),
 )
 
 CLIENTS_BY_ID = {client.id: client for client in CLIENT_SPECS}
@@ -36,7 +41,15 @@ CLIENT_ALIASES = {
     "claude": "claude_desktop",
     "claude-desktop": "claude_desktop",
     "claude_desktop": "claude_desktop",
+    "claude-code": "claude_code",
+    "claude_code": "claude_code",
     "antigravity": "antigravity",
+    "windsurf": "windsurf",
+    "zed": "zed",
+    "zed-editor": "zed",
+    "cline": "cline",
+    "openclaw": "openclaw",
+    "open-claw": "openclaw",
 }
 
 
@@ -113,8 +126,41 @@ def client_config_path(
             return home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
         return None
 
+    if client_id == "claude_code":
+        if platform == "win32":
+            appdata = env.get("APPDATA")
+            base = Path(appdata) if appdata else home / "AppData" / "Roaming"
+            return base / "Claude" / "settings.json"
+        if platform == "darwin":
+            return home / "Library" / "Application Support" / "Claude" / "settings.json"
+        return home / ".claude" / "settings.json"
+
     if client_id == "antigravity":
         return home / ".gemini" / "antigravity" / "mcp_config.json"
+
+    if client_id == "windsurf":
+        return home / ".codeium" / "windsurf" / "mcp_config.json"
+
+    if client_id == "zed":
+        if platform == "win32":
+            appdata = env.get("LOCALAPPDATA")
+            base = Path(appdata) if appdata else home / "AppData" / "Local"
+            return base / "Zed" / "settings.json"
+        if platform == "darwin":
+            return home / "Library" / "Application Support" / "Zed" / "settings.json"
+        return home / ".config" / "zed" / "settings.json"
+
+    if client_id == "cline":
+        if platform == "win32":
+            appdata = env.get("APPDATA")
+            base = Path(appdata) if appdata else home / "AppData" / "Roaming"
+            return base / "Code" / "User" / "globalStorage" / "saoudrizwan.claude-dev" / "settings" / "cline_mcp_settings.json"
+        if platform == "darwin":
+            return home / "Library" / "Application Support" / "Code" / "User" / "globalStorage" / "saoudrizwan.claude-dev" / "settings" / "cline_mcp_settings.json"
+        return home / ".config" / "Code" / "User" / "globalStorage" / "saoudrizwan.claude-dev" / "settings" / "cline_mcp_settings.json"
+
+    if client_id == "openclaw":
+        return home / ".openclaw" / "openclaw.json"
 
     raise ValueError(f"Unknown client id: {client_id}")
 

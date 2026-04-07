@@ -18,7 +18,13 @@ const MCP_CLIENTS = [
   { label: 'VS Code', value: 'vscode' },
   { label: 'Cursor', value: 'cursor' },
   { label: 'Claude Desktop', value: 'claude_desktop' },
+  { label: 'Claude Code', value: 'claude_code' },
   { label: 'Kiro', value: 'kiro' },
+  { label: 'Antigravity', value: 'antigravity' },
+  { label: 'Windsurf', value: 'windsurf' },
+  { label: 'Zed', value: 'zed' },
+  { label: 'Cline', value: 'cline' },
+  { label: 'OpenClaw', value: 'openclaw' },
 ];
 
 function Wizard({ config, onComplete }) {
@@ -28,11 +34,22 @@ function Wizard({ config, onComplete }) {
   const [mcpClients, setMcpClients] = useState(config.mcpClients);
   const [mcpToggleIdx, setMcpToggleIdx] = useState(0);
 
+  const allClientValues = MCP_CLIENTS.map((c) => c.value);
+  const isAllSelected = allClientValues.every((v) => mcpClients.includes(v));
+
   const toggleMcp = (value) => {
     if (mcpClients.includes(value)) {
       setMcpClients(mcpClients.filter((c) => c !== value));
     } else {
       setMcpClients([...mcpClients, value]);
+    }
+  };
+
+  const toggleAll = () => {
+    if (isAllSelected) {
+      setMcpClients([]);
+    } else {
+      setMcpClients([...allClientValues]);
     }
   };
 
@@ -60,10 +77,14 @@ function Wizard({ config, onComplete }) {
       handleNext();
     }
     if (step === 2 && (input === ' ')) {
-      toggleMcp(MCP_CLIENTS[mcpToggleIdx].value);
+      if (mcpToggleIdx === 0) {
+        toggleAll();
+      } else {
+        toggleMcp(MCP_CLIENTS[mcpToggleIdx - 1].value);
+      }
     }
     if (step === 2 && (key && key.downArrow)) {
-      setMcpToggleIdx((i) => Math.min(i + 1, MCP_CLIENTS.length - 1));
+      setMcpToggleIdx((i) => Math.min(i + 1, MCP_CLIENTS.length));
     }
     if (step === 2 && (key && key.upArrow)) {
       setMcpToggleIdx((i) => Math.max(i - 1, 0));
@@ -113,9 +134,19 @@ function Wizard({ config, onComplete }) {
       React.createElement(Text, { bold: true, color: 'cyan' }, 'Configure MCP Clients'),
       React.createElement(Text, { color: 'gray', marginTop: 1 }, '  Select which IDEs/clients to configure for MCP.'),
       React.createElement(Box, { flexDirection: 'column', marginTop: 1 },
+        (() => {
+          const allActive = mcpToggleIdx === 0;
+          const allCheck = isAllSelected ? '✔' : '○';
+          const allColor = isAllSelected ? 'green' : 'gray';
+          return React.createElement(Box, { key: 'all' },
+            React.createElement(Text, { color: allActive ? 'cyan' : 'gray' }, `  ▸ `),
+            React.createElement(Text, { color: allColor }, `${allCheck} `),
+            React.createElement(Text, { bold: allActive, color: allActive ? 'white' : 'gray' }, 'Install for All'),
+          );
+        })(),
         ...MCP_CLIENTS.map((client, i) => {
           const selected = mcpClients.includes(client.value);
-          const active = i === mcpToggleIdx;
+          const active = i === mcpToggleIdx - 1;
           const cursor = active ? '▸' : ' ';
           const check = selected ? '✔' : '○';
           const color = selected ? 'green' : 'gray';

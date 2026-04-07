@@ -23,7 +23,13 @@ const MCP_CLIENTS = [
   { label: 'VS Code', value: 'vscode' },
   { label: 'Cursor', value: 'cursor' },
   { label: 'Claude Desktop', value: 'claude_desktop' },
+  { label: 'Claude Code', value: 'claude_code' },
   { label: 'Kiro', value: 'kiro' },
+  { label: 'Antigravity', value: 'antigravity' },
+  { label: 'Windsurf', value: 'windsurf' },
+  { label: 'Zed', value: 'zed' },
+  { label: 'Cline', value: 'cline' },
+  { label: 'OpenClaw', value: 'openclaw' },
 ];
 
 const STEPS = ['Embedding Model', 'Vector Backend', 'MCP Clients', 'Review', 'Install'];
@@ -146,20 +152,31 @@ function BackendSelect({ value, onSelect, onNext }) {
 }
 
 function McpMultiSelect({ selected, onComplete }) {
+  const allClientValues = MCP_CLIENTS.map((c) => c.value);
   const [selectedIds, setSelectedIds] = useState(new Set(selected));
   const [cursorIdx, setCursorIdx] = useState(0);
+
+  const isAllSelected = allClientValues.every((v) => selectedIds.has(v));
 
   useInput((input, key) => {
     if (key.upArrow) {
       setCursorIdx((i) => Math.max(0, i - 1));
     } else if (key.downArrow) {
-      setCursorIdx((i) => Math.min(MCP_CLIENTS.length - 1, i + 1));
+      setCursorIdx((i) => Math.min(MCP_CLIENTS.length, i + 1));
     } else if (input === ' ') {
-      const id = MCP_CLIENTS[cursorIdx].value;
-      const next = new Set(selectedIds);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      setSelectedIds(next);
+      if (cursorIdx === 0) {
+        if (isAllSelected) {
+          setSelectedIds(new Set());
+        } else {
+          setSelectedIds(new Set(allClientValues));
+        }
+      } else {
+        const id = MCP_CLIENTS[cursorIdx - 1].value;
+        const next = new Set(selectedIds);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        setSelectedIds(next);
+      }
     } else if (key.return) {
       onComplete([...selectedIds]);
     }
@@ -172,9 +189,19 @@ function McpMultiSelect({ selected, onComplete }) {
       React.createElement(Text, { color: 'gray' }, 'Select which IDEs/clients to configure for MCP.'),
     ),
     React.createElement(Box, { marginTop: 1, flexDirection: 'column' },
+      (() => {
+        const allCursor = cursorIdx === 0;
+        const allCheck = isAllSelected ? '✔' : '○';
+        const allColor = isAllSelected ? 'green' : 'gray';
+        return React.createElement(Box, { key: 'all' },
+          React.createElement(Text, { color: allCursor ? 'cyan' : 'gray' }, `  ▸ `),
+          React.createElement(Text, { color: allColor }, `${allCheck} `),
+          React.createElement(Text, { bold: true, color: allCursor ? 'white' : 'gray' }, 'Install for All'),
+        );
+      })(),
       ...MCP_CLIENTS.map((client, i) => {
         const isSelected = selectedIds.has(client.value);
-        const isCursor = i === cursorIdx;
+        const isCursor = i === cursorIdx - 1;
         const cursor = isCursor ? '▸' : ' ';
         const check = isSelected ? '✔' : '○';
         const color = isSelected ? 'green' : 'gray';

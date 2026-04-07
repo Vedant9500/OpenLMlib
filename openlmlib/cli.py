@@ -50,7 +50,10 @@ def _interactive_terminal() -> bool:
 
 
 def _requested_client_ids(args) -> list[str]:
-    return normalize_client_ids(getattr(args, "ide", None))
+    raw = getattr(args, "ide", None)
+    if raw and "all" in [r.strip().lower() for r in raw]:
+        return [c.id for c in available_clients()]
+    return normalize_client_ids(raw)
 
 
 def _run_mcp_setup(settings_path: Path, requested_client_ids: list[str]) -> dict:
@@ -898,7 +901,7 @@ def build_parser() -> argparse.ArgumentParser:
     setup_parser.add_argument(
         "--ide",
         action="append",
-        help="IDE/client to configure globally. Repeat or pass a comma-separated list.",
+        help="IDE/client to configure globally. Repeat or pass a comma-separated list. Use 'all' to install for every available client (vscode, cursor, kiro, claude_desktop, claude_code, antigravity, windsurf, zed, cline, openclaw).",
     )
     setup_parser.set_defaults(func=cmd_setup)
 
