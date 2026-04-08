@@ -62,6 +62,8 @@ from .security import (
     verify_orchestrator,
     verify_session_exists_and_active,
 )
+from .notification import write_notification
+from .notification import wait_for_notification, clear_notification
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +99,12 @@ def _get_collab_paths() -> tuple[Path, Path]:
         import json
         with open(settings_path) as f:
             cfg = json.load(f)
-        data_root = Path(cfg.get("data_root", "data"))
+        data_root_raw = cfg.get("data_root", "data")
+        data_root = Path(data_root_raw)
+        # Resolve relative paths against the settings file's parent directory,
+        # so all MCP clients (VS Code, Antigravity, etc.) use the same DB.
+        if not data_root.is_absolute():
+            data_root = settings_path.parent / data_root
     else:
         data_root = Path("data")
 
@@ -571,6 +578,23 @@ def collab_send_message(
                 created_at=now,
             )
 
+            # Write cross-process notification so other MCP instances wake up
+            if not write_notification(
+                sessions_dir=sessions_dir,
+                session_id=session_id,
+                sender=from_agent,
+                msg_type=msg_type,
+                seq=result["seq"],
+                msg_id=result["msg_id"],
+                timestamp=now,
+            ):
+                logger.warning(
+                    "Notification write failed for %s — polling agents may miss "
+                    "message %s (message was still sent to bus)",
+                    session_id,
+                    result["msg_id"],
+                )
+
             return {
                 "success": True,
                 "msg_id": result["msg_id"],
@@ -641,6 +665,186 @@ def collab_read_messages(
             conn.close()
     except Exception as e:
         return _handle_tool_error("collab_read_messages", e)
+
+
+@collab_mcp.tool()
+def collab_poll_messages(
+    session_id: str,
+    agent_id: str,
+    timeout: float = 30.0,
+    limit: int = 50,
+    msg_types: Optional[List[str]] = None,
+    from_agent: Optional[str] = None,
+) -> Dict:
+    """Wait for and read new messages from a session (AUTONOMOUS LOOP tool).
+
+    This tool blocks until new messages arrive or the timeout expires.
+    It is the primary mechanism for agents to run continuous collaboration
+    without human intervention.
+
+    Usage pattern for autonomous agents:
+        1. Call collab_poll_messages(session_id, agent_id, timeout=30)
+        2. Process any returned messages
+        3. Send responses via collab_send_message
+        4. Repeat from step 1 until the session is complete
+
+    Args:
+        session_id: Session to monitor
+        agent_id: Your agent ID (for offset tracking)
+        timeout: Max seconds to wait for new messages (default: 30, 0 = no wait)
+        limit: Max messages to return once data arrives (default: 50)
+        msg_types: Filter by message types (optional)
+        from_agent: Filter by sender (optional)
+
+    Returns:
+        Dict with:
+            - messages: list of new messages (empty if timeout)
+            - count: number of messages returned
+            - waited_seconds: how long we actually waited
+            - timed_out: True if no new messages arrived before timeout
+            - last_seq: latest message sequence number seen
+            - session_status: current session status (active/completed/etc)
+    """
+    import time as _time
+
+    try:
+        validate_session_id(session_id)
+        limit = max(1, min(limit, 200))
+        if not agent_id:
+            return {"success": False, "error": "agent_id is required", "error_type": "validation_error"}
+
+        conn, sessions_dir = _get_collab_connection()
+        try:
+            _require_reader_access(conn, session_id, agent_id)
+
+            # Check current status first
+            session = collab_db.get_session(conn, session_id)
+            if session is None:
+                return {"success": False, "error": "Session not found", "error_type": "session_not_found"}
+
+            session_status = session.get("status", "unknown")
+            if session_status in ("completed", "terminated"):
+                # Session ended — return immediately without waiting
+                return {
+                    "success": True,
+                    "messages": [],
+                    "count": 0,
+                    "waited_seconds": 0.0,
+                    "timed_out": False,
+                    "last_seq": 0,
+                    "session_status": session_status,
+                    "note": f"Session is {session_status}, no more messages expected",
+                }
+
+            bus = MessageBus(conn, sessions_dir)
+            stored_last_seq = bus.load_offset(session_id, agent_id)
+
+            # Check if messages already exist since our last read
+            existing = bus.read_new(
+                session_id=session_id,
+                last_seq=stored_last_seq,
+                limit=limit,
+                msg_types=msg_types,
+                from_agent=from_agent,
+            )
+            if existing:
+                # Messages already available — return immediately, no blocking
+                new_last_seq = existing[-1]["seq"]
+                bus.save_offset(session_id, agent_id, new_last_seq)
+                return {
+                    "success": True,
+                    "messages": existing,
+                    "count": len(existing),
+                    "waited_seconds": 0.0,
+                    "timed_out": False,
+                    "last_seq": new_last_seq,
+                    "session_status": session_status,
+                    "has_more": len(existing) >= limit,
+                }
+
+            # No new messages — wait for a notification signal
+            if timeout == 0:
+                return {
+                    "success": True,
+                    "messages": [],
+                    "count": 0,
+                    "waited_seconds": 0.0,
+                    "timed_out": True,
+                    "last_seq": stored_last_seq,
+                    "session_status": session_status,
+                }
+
+            start = _time.monotonic()
+            notify = wait_for_notification(
+                sessions_dir=sessions_dir,
+                session_id=session_id,
+                timeout=timeout,
+                poll_interval=0.3,
+            )
+            waited = _time.monotonic() - start
+
+            # Clear notification after processing
+            clear_notification(sessions_dir, session_id)
+
+            # Re-check session status after waiting
+            session = collab_db.get_session(conn, session_id)
+            session_status = session.get("status", "unknown") if session else "unknown"
+
+            if session_status in ("completed", "terminated"):
+                return {
+                    "success": True,
+                    "messages": [],
+                    "count": 0,
+                    "waited_seconds": round(waited, 2),
+                    "timed_out": False,
+                    "last_seq": stored_last_seq,
+                    "session_status": session_status,
+                    "note": f"Session is now {session_status}",
+                }
+
+            if notify is None:
+                # Timeout — no new messages
+                return {
+                    "success": True,
+                    "messages": [],
+                    "count": 0,
+                    "waited_seconds": round(waited, 2),
+                    "timed_out": True,
+                    "last_seq": stored_last_seq,
+                    "session_status": session_status,
+                }
+
+            # Notification arrived — read all new messages from DB
+            messages = bus.read_new(
+                session_id=session_id,
+                last_seq=stored_last_seq,
+                limit=limit,
+                msg_types=msg_types,
+                from_agent=from_agent,
+            )
+
+            if messages:
+                new_last_seq = messages[-1]["seq"]
+                bus.save_offset(session_id, agent_id, new_last_seq)
+            else:
+                new_last_seq = stored_last_seq
+
+            return {
+                "success": True,
+                "messages": messages,
+                "count": len(messages),
+                "waited_seconds": round(waited, 2),
+                "timed_out": False,
+                "last_seq": new_last_seq,
+                "session_status": session_status,
+                "has_more": len(messages) >= limit,
+                "notification_from": notify.get("sender"),
+                "notification_type": notify.get("msg_type"),
+            }
+        finally:
+            conn.close()
+    except Exception as e:
+        return _handle_tool_error("collab_poll_messages", e)
 
 
 @collab_mcp.tool()
@@ -1650,6 +1854,19 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
                 "from_agent": "Filter by sender (optional)",
             },
             "returns": "Dict with messages and your current offset",
+        },
+        "collab_poll_messages": {
+            "description": "Wait for and read new messages from a session (AUTONOMOUS LOOP tool). Blocks until new messages arrive or timeout expires. Use this for continuous agent-to-agent communication without human intervention.",
+            "args": {
+                "session_id": "Session to monitor",
+                "agent_id": "Your agent ID (required for offset tracking)",
+                "timeout": "Max seconds to wait for new messages (default: 30, 0 = no wait)",
+                "limit": "Max messages to return once data arrives (default: 50)",
+                "msg_types": "Filter by message types (optional)",
+                "from_agent": "Filter by sender (optional)",
+            },
+            "usage": "Call in a loop: poll → process messages → send response → poll again. Keeps running until session completes.",
+            "returns": "Dict with messages, waited_seconds, timed_out flag, and session_status",
         },
         "collab_tail_messages": {
             "description": "Read the last N messages from a session (quick status check).",

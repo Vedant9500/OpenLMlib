@@ -105,6 +105,7 @@ class ContextCompiler:
             "pending_tasks": pending_tasks,
             "artifacts": artifact_refs,
             "active_agents": active_agents,
+            "autonomous_instructions": self.autonomous_instructions(),
         }
 
     def format_context_for_prompt(self, context: Dict) -> str:
@@ -120,6 +121,11 @@ class ContextCompiler:
         lines.append(f"[Status: {info['status']} | Orchestrator: {info['orchestrator']}]")
         lines.append(f"[Your role: {identity['role']} | Agent ID: {identity['agent_id']}]")
         lines.append("")
+
+        if context.get("autonomous_instructions"):
+            lines.append("=== AUTONOMOUS MODE ACTIVE ===")
+            lines.append(context["autonomous_instructions"])
+            lines.append("")
 
         if context.get("summary"):
             lines.append("=== SESSION SUMMARY ===")
@@ -171,6 +177,38 @@ class ContextCompiler:
             lines.append("")
 
         return "\n".join(lines)
+
+    @staticmethod
+    def autonomous_instructions() -> str:
+        """Return instructions for agents running in autonomous mode.
+
+        This tells the agent to run a continuous poll→process→respond loop
+        without requiring human intervention between turns.
+        """
+        return (
+            "You are in AUTONOMOUS MODE. You must run a continuous collaboration loop "
+            "without waiting for user input:\n\n"
+            "1. Call collab_poll_messages(session_id, your_agent_id, timeout=30)\n"
+            "   - This blocks until another agent sends a message or 30s passes\n"
+            "   - If timed_out is True, call it again to keep waiting\n"
+            "   - If messages arrive, process ALL of them before the next poll\n\n"
+            "2. For each message:\n"
+            "   - If msg_type is 'task' or 'question': process it, then send your result\n"
+            "   - If msg_type is 'result' or 'answer': acknowledge and update your state\n"
+            "   - If msg_type is 'complete': acknowledge and consider the task done\n"
+            "   - If msg_type is 'ack', 'update', or 'artifact': note it and continue the loop\n\n"
+            "3. Send responses via collab_send_message(session_id, msg_type, content, "
+            "from_agent=your_agent_id, to_agent=target_agent_if_known)\n\n"
+            "4. After sending, loop back to step 1 immediately\n\n"
+            "5. When all your work is done:\n"
+            "   - If you are the orchestrator: call collab_terminate_session(session_id, "
+            "your_agent_id, summary='...') to mark the session completed\n"
+            "   - If you are a worker: send a 'complete' message to the orchestrator, "
+            "then call collab_leave_session(session_id, your_agent_id)\n\n"
+            "IMPORTANT: Do NOT stop after a single turn. Keep the poll→process→respond loop "
+            "running until the session status changes to 'completed' or 'terminated'.\n"
+            "Only return control to the user when the session is fully finished."
+        )
 
     def _format_messages(self, messages: List[Dict], current_agent_id: str) -> List[str]:
         """Format messages with clear attribution for the current agent."""

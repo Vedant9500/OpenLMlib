@@ -1,33 +1,60 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=68", "wheel", "build"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "openlmlib"
-version = "0.1.6"
+dynamic = ["version"]
 description = "Local cross-project knowledge and research library for LLM workflows"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
-  { name = "OpenLMlib Contributors" }
+  { name = "Vedant9500", email = "deshmukhvedant95@gmail.com" }
+]
+keywords = [
+  "llm", "knowledge-base", "mcp", "vector-search",
+  "semantic-search", "research", "findings", "collaboration"
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-  "numpy>=1.23",
-  "mcp>=1.0.0",
-  "sentence-transformers>=2.2",
-  "rich>=12.0.0"
+  "numpy>=1.23,<3.0",
+  "mcp>=1.0.0,<2.0.0",
+  "sentence-transformers>=2.2,<5.0",
+  "rich>=12.0.0,<15.0.0",
 ]
 
 [project.optional-dependencies]
 faiss = ["faiss-cpu>=1.7.4"]
+dev = ["pytest>=7.0", "pytest-cov>=4.0"]
+
+[project.urls]
+Homepage = "https://github.com/Vedant9500/LMlib"
+Documentation = "https://github.com/Vedant9500/LMlib#readme"
+Repository = "https://github.com/Vedant9500/LMlib"
+Changelog = "https://github.com/Vedant9500/LMlib/blob/main/CHANGELOG.md"
+"Bug Tracker" = "https://github.com/Vedant9500/LMlib/issues"
 
 [project.scripts]
 openlmlib = "openlmlib.cli:main"
 openlmlib-mcp = "openlmlib.mcp_server:main"
 openlmlib-collab-tui = "openlmlib.collab.collab_tui:main"
 
-[tool.setuptools]
+[tool.setuptools.dynamic]
+version = {attr = "openlmlib.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["openlmlib*"]

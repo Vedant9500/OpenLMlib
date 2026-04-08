@@ -1,6 +1,6 @@
 {
   "name": "openlmlib",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "description": "AI-powered knowledge library for LLM agents — install, manage, and retrieve findings via CLI and MCP",
   "type": "module",
   "main": "src/cli.js",
@@ -30,7 +30,10 @@
     "retrieval",
     "embeddings",
     "rag",
-    "cli"
+    "cli",
+    "collaboration",
+    "multi-agent",
+    "autonomous"
   ],
   "author": "OpenLMlib Contributors",
   "license": "MIT",

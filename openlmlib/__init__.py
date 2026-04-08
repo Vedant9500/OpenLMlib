@@ -3,7 +3,7 @@
 from .settings import Settings, load_settings
 from .schema import Finding, FindingAudit, FindingText, ValidationIssue
 
-__version__ = "0.1.6"
+__version__ = "0.2.0"
 
 __all__ = [
     "__version__",
