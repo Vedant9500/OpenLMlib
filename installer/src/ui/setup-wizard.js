@@ -6,6 +6,7 @@ import { execSync } from 'child_process';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 
 const EMBEDDING_MODELS = [
   { label: 'all-MiniLM-L6-v2 (fast, 384d) — Recommended', value: 'sentence-transformers/all-MiniLM-L6-v2' },
@@ -35,7 +36,29 @@ const MCP_CLIENTS = [
 const STEPS = ['Embedding Model', 'Vector Backend', 'MCP Clients', 'Review', 'Install'];
 
 function getVenvPython() {
-  const home = process.env.OPENLMLIB_HOME || path.join(os.homedir(), '.openlmlib');
+  // 1. Check OPENLMLIB_HOME environment variable
+  if (process.env.OPENLMLIB_HOME) {
+    const pyPath = os.platform() === 'win32'
+      ? path.join(process.env.OPENLMLIB_HOME, 'venv', 'Scripts', 'python.exe')
+      : path.join(process.env.OPENLMLIB_HOME, 'venv', 'bin', 'python');
+    if (fs.existsSync(pyPath)) {
+      return pyPath;
+    }
+  }
+
+  // 2. Check for development .venv in repository root (parent of installer's parent)
+  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+  const installerDir = path.dirname(path.dirname(moduleDir));
+  const repoRoot = path.dirname(installerDir);
+  const devVenv = os.platform() === 'win32'
+    ? path.join(repoRoot, '.venv', 'Scripts', 'python.exe')
+    : path.join(repoRoot, '.venv', 'bin', 'python');
+  if (fs.existsSync(devVenv)) {
+    return devVenv;
+  }
+
+  // 3. Fall back to ~/.openlmlib/venv (installed location)
+  const home = path.join(os.homedir(), '.openlmlib');
   return os.platform() === 'win32'
     ? path.join(home, 'venv', 'Scripts', 'python.exe')
     : path.join(home, 'venv', 'bin', 'python');
@@ -47,10 +70,14 @@ function runPythonScript(script) {
   fs.writeFileSync(tmpPath, script);
   try {
     return execSync(`"${python}" "${tmpPath}"`, {
-      stdio: 'pipe',
+      stdio: ['pipe', 'pipe', 'pipe'],
       encoding: 'utf-8',
       timeout: 60000,
     });
+  } catch (error) {
+    const errorMsg = error.stderr ? error.stderr.toString() : error.message;
+    console.error('Python script error:', errorMsg);
+    throw error;
   } finally {
     try { fs.unlinkSync(tmpPath); } catch {}
   }
@@ -248,16 +275,16 @@ function ReviewScreen({ config, onConfirm }) {
 
 function InstallScreen({ config, onDone }) {
   const [steps, setSteps] = useState([
-    { label: 'Writing settings...', status: 'pending' },
-    { label: 'Initializing library...', status: 'pending' },
-    { label: 'Configuring MCP clients...', status: 'pending' },
+    { label: 'Writing settings...', status: 'pending', error: null },
+    { label: 'Initializing library...', status: 'pending', error: null },
+    { label: 'Configuring MCP clients...', status: 'pending', error: null },
   ]);
 
   useEffect(() => {
-    const updateStep = (idx, status) => {
+    const updateStep = (idx, status, error = null) => {
       setSteps((prev) => {
         const next = [...prev];
-        next[idx] = { ...next[idx], status };
+        next[idx] = { ...next[idx], status, error };
         return next;
       });
     };
@@ -268,7 +295,8 @@ function InstallScreen({ config, onDone }) {
         'import json',
         'from pathlib import Path',
         'from openlmlib.settings import write_default_settings, default_settings_payload',
-        "settings_path = Path.home() / '.config' / 'openlmlib' / 'settings.json'",
+        'from openlmlib.mcp_setup import global_settings_path',
+        'settings_path = global_settings_path()',
         'settings_path.parent.mkdir(parents=True, exist_ok=True)',
         'payload = default_settings_payload()',
         `payload['embedding_model'] = '${config.embeddingModel}'`,
@@ -277,8 +305,16 @@ function InstallScreen({ config, onDone }) {
         '    json.dump(payload, f, indent=2)',
         "print('ok')",
       ].join('\n');
-      runPythonScript(settingsScript);
-      updateStep(0, 'done');
+      try {
+        runPythonScript(settingsScript);
+        updateStep(0, 'done');
+      } catch (err) {
+        const errMsg = err.stderr?.toString() || err.message || 'Unknown error';
+        console.error('Settings error:', errMsg);
+        updateStep(0, 'error', errMsg);
+        setTimeout(() => onDone(false), 2000);
+        return;
+      }
 
       updateStep(1, 'running');
       const initScript = [
@@ -288,21 +324,43 @@ function InstallScreen({ config, onDone }) {
         'result = init_library(global_settings_path())',
         "print(result.get('status', 'error'))",
       ].join('\n');
-      runPythonScript(initScript);
-      updateStep(1, 'done');
+      try {
+        runPythonScript(initScript);
+        updateStep(1, 'done');
+      } catch (err) {
+        const errMsg = err.stderr?.toString() || err.message || 'Unknown error';
+        console.error('Init error:', errMsg);
+        updateStep(1, 'error', errMsg);
+        setTimeout(() => onDone(false), 2000);
+        return;
+      }
 
       if (config.mcpClients.length > 0) {
         updateStep(2, 'running');
         const clientsJson = JSON.stringify(config.mcpClients);
         const mcpScript = [
           'from pathlib import Path',
-          'from openlmlib.mcp_setup import install_client_configs, global_settings_path',
+          'from openlmlib.mcp_setup import available_clients, install_client_configs, global_settings_path',
+          'import json',
           `clients = ${clientsJson}`,
-          'result = install_client_configs(clients, settings_path=global_settings_path())',
+          'supported = {client.id for client in available_clients()}',
+          'filtered = [client_id for client_id in clients if client_id in supported]',
+          'skipped = [client_id for client_id in clients if client_id not in supported]',
+          'if skipped:',
+          '    print(json.dumps({"skipped": skipped}))',
+          'result = install_client_configs(filtered, settings_path=global_settings_path())',
           "print(result.get('status', 'error'))",
         ].join('\n');
-        runPythonScript(mcpScript);
-        updateStep(2, 'done');
+        try {
+          runPythonScript(mcpScript);
+          updateStep(2, 'done');
+        } catch (err) {
+          const errMsg = err.stderr?.toString() || err.message || 'Unknown error';
+          console.error('MCP error:', errMsg);
+          updateStep(2, 'error', errMsg);
+          setTimeout(() => onDone(false), 2000);
+          return;
+        }
       } else {
         setSteps((prev) => {
           const next = [...prev];
@@ -339,9 +397,12 @@ function InstallScreen({ config, onDone }) {
           icon = React.createElement(Text, { color: 'gray' }, '·');
           color = 'gray';
         }
-        return React.createElement(Box, { key: i },
-          icon,
-          React.createElement(Text, { color }, ` ${step.label}`),
+        return React.createElement(Box, { key: i, flexDirection: 'column' },
+          React.createElement(Box, {},
+            icon,
+            React.createElement(Text, { color }, ` ${step.label}`),
+          ),
+          step.error ? React.createElement(Text, { color: 'red', paddingLeft: 2 }, `  Error: ${step.error}`) : null,
         );
       })
     ),

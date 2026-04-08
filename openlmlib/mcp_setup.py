@@ -202,7 +202,15 @@ def install_client_config(
     env: Optional[Dict[str, str]] = None,
     home: Optional[Path] = None,
 ) -> Dict[str, object]:
-    client = CLIENTS_BY_ID[client_id]
+    client = CLIENTS_BY_ID.get(client_id)
+    if client is None:
+        return {
+            "client": client_id,
+            "label": client_id,
+            "status": "skipped",
+            "message": "Unsupported client in this OpenLMlib version",
+        }
+
     target_path = client_config_path(client_id, platform=platform, env=env, home=home)
 
     if target_path is None:
@@ -263,7 +271,7 @@ def install_client_configs(
 
     if not results:
         status = "skipped"
-    elif all(result.get("status") == "ok" for result in results):
+    elif all(result.get("status") in {"ok", "skipped"} for result in results):
         status = "ok"
     elif any(result.get("status") == "ok" for result in results):
         status = "partial"

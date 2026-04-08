@@ -36,8 +36,29 @@ function ensureHomeDir() {
 function createVenv(onProgress) {
   ensureHomeDir();
   onProgress('Creating isolated Python environment...');
-  execSync(`${getActivePythonCmd()} -m venv "${VENV_DIR}"`, { stdio: 'pipe' });
-  onProgress('Virtual environment created.');
+  if (fs.existsSync(VENV_PYTHON)) {
+    onProgress('Using existing virtual environment.');
+    return;
+  }
+
+  if (fs.existsSync(VENV_DIR)) {
+    try {
+      fs.rmSync(VENV_DIR, { recursive: true, force: true });
+    } catch {
+      // Best effort cleanup; creation may still succeed.
+    }
+  }
+
+  try {
+    execSync(`${getActivePythonCmd()} -m venv "${VENV_DIR}"`, { stdio: 'pipe' });
+    onProgress('Virtual environment created.');
+  } catch (err) {
+    if (fs.existsSync(VENV_PYTHON)) {
+      onProgress('Reusing existing virtual environment (creation failed).');
+      return;
+    }
+    throw err;
+  }
 }
 
 function installPackage(packageName, onProgress) {
@@ -47,18 +68,75 @@ function installPackage(packageName, onProgress) {
   onProgress(`${packageName} installed.`);
 }
 
+function hasOpenLMlibProject(dirPath) {
+  if (!dirPath) return false;
+  const pyprojectPath = path.join(dirPath, 'pyproject.toml');
+  const packageDir = path.join(dirPath, 'openlmlib');
+  if (!fs.existsSync(pyprojectPath) || !fs.existsSync(packageDir)) return false;
+  try {
+    const content = fs.readFileSync(pyprojectPath, 'utf-8');
+    return content.includes('name = "openlmlib"');
+  } catch {
+    return false;
+  }
+}
+
+function discoverLocalSourceCandidates(seedPath) {
+  const paths = [
+    seedPath,
+    process.cwd(),
+    path.resolve(process.cwd(), '..'),
+    path.resolve(process.cwd(), '..', '..'),
+  ].filter(Boolean);
+  return [...new Set(paths)];
+}
+
+function validateInstalledOpenLMlib() {
+  const scriptPath = path.join(os.tmpdir(), `openlmlib-validate-${Date.now()}.py`);
+  const script = [
+    'import openlmlib.mcp_server as m',
+    'required_core = ["openlmlib_init", "openlmlib_add_finding", "openlmlib_retrieve", "openlmlib_health"]',
+    'required_collab = ["collab_create_session", "collab_help"]',
+    'missing_core = [name for name in required_core if not hasattr(m, name)]',
+    'missing_collab = [name for name in required_collab if not hasattr(m, name)]',
+    'if missing_core:',
+    '    raise SystemExit("missing_core_mcp_tools:" + ",".join(missing_core))',
+    'if missing_collab:',
+    '    print("missing_collab_mcp_tools:" + ",".join(missing_collab))',
+    'print("ok")',
+  ].join('\n');
+  fs.writeFileSync(scriptPath, script, { encoding: 'utf-8' });
+  try {
+    const output = execSync(`"${VENV_PYTHON}" "${scriptPath}"`, { stdio: 'pipe', encoding: 'utf-8' });
+    if (output && output.includes('missing_collab_mcp_tools:')) {
+      const warningLine = output.split('\n').find((line) => line.startsWith('missing_collab_mcp_tools:'));
+      if (warningLine) {
+        return { status: 'warn', message: warningLine };
+      }
+    }
+    return { status: 'ok' };
+  } finally {
+    try {
+      fs.unlinkSync(scriptPath);
+    } catch {
+      // Best effort cleanup.
+    }
+  }
+}
+
 function installFromLocal(localPath, onProgress) {
   onProgress('Installing openlmlib...');
   execSync(`"${VENV_PYTHON}" -m pip install --upgrade pip`, { stdio: 'pipe' });
 
-  const hasLocalProject = !!localPath && (
-    fs.existsSync(path.join(localPath, 'pyproject.toml')) ||
-    fs.existsSync(path.join(localPath, 'setup.py'))
-  );
+  const localSourceCandidates = discoverLocalSourceCandidates(localPath);
 
   const candidates = [];
-  if (hasLocalProject) {
-    candidates.push({ kind: 'editable', value: localPath, label: `local source (${localPath})` });
+  for (const candidatePath of localSourceCandidates) {
+    const hasLocalProject = fs.existsSync(path.join(candidatePath, 'pyproject.toml')) || fs.existsSync(path.join(candidatePath, 'setup.py'));
+    if (hasLocalProject && hasOpenLMlibProject(candidatePath)) {
+      candidates.push({ kind: 'editable', value: candidatePath, label: `local source (${candidatePath})` });
+      break;
+    }
   }
   if (process.env.npm_package_version) {
     candidates.push({
@@ -81,6 +159,10 @@ function installFromLocal(localPath, onProgress) {
         execSync(`"${VENV_PYTHON}" -m pip install -e "${candidate.value}"`, { stdio: 'pipe' });
       } else {
         execSync(`"${VENV_PYTHON}" -m pip install "${candidate.value}"`, { stdio: 'pipe' });
+      }
+      const validation = validateInstalledOpenLMlib();
+      if (validation?.status === 'warn') {
+        onProgress(`Warning: ${validation.message}`);
       }
       onProgress('openlmlib installed.');
       return;
@@ -117,7 +199,7 @@ function runSetupWizard(config, onProgress) {
     'from openlmlib.settings import write_default_settings, default_settings_payload',
     'import json',
     `settings_path = Path(r"${escapedHome}") / "config" / "settings.json"`,
-    'write_default_settings(settings_path, force=False)',
+    'write_default_settings(settings_path)',
     'payload = default_settings_payload()',
     config.vectorBackend ? `payload["vector_backend"] = "${config.vectorBackend}"` : '',
     config.embeddingModel ? `payload["embedding_model"] = "${config.embeddingModel}"` : '',
@@ -125,16 +207,25 @@ function runSetupWizard(config, onProgress) {
     '    json.dump(payload, f, indent=2)',
     'install_or_refresh_default_client_configs(settings_path=settings_path)',
     'print("setup-complete")',
-  ].filter(Boolean).join('; ');
+  ].filter(Boolean).join('\n');
+
+  const scriptPath = path.join(os.tmpdir(), `openlmlib-setup-${Date.now()}.py`);
+  fs.writeFileSync(scriptPath, script, { encoding: 'utf-8' });
 
   try {
-    execSync(`"${VENV_PYTHON}" -c "${script}"`, {
+    execSync(`"${VENV_PYTHON}" "${scriptPath}"`, {
       stdio: 'pipe',
       encoding: 'utf-8',
     });
     onProgress('Setup complete.');
   } catch {
     onProgress('Warning: Setup wizard encountered an issue. You can run "openlmlib setup" later.');
+  } finally {
+    try {
+      fs.unlinkSync(scriptPath);
+    } catch {
+      // Best effort cleanup.
+    }
   }
 }
 

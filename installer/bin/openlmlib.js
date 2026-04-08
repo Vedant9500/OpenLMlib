@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-'use strict';
+import { execFileSync } from 'child_process';
+import os from 'os';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 
-const { execFileSync } = require('child_process');
-const os = require('os');
-const path = require('path');
-const fs = require('fs');
+const __filename = fileURLToPath(import.meta.url);
 
 const OPENLMLIB_HOME = process.env.OPENLMLIB_HOME || path.join(os.homedir(), '.openlmlib');
 const VENV_PYTHON = os.platform() === 'win32'
@@ -33,7 +34,7 @@ if (args[0] === 'setup' || args[0] === 'wizard') {
 }
 
 try {
-  execFileSync(VENV_PYTHON, ['-m', 'openlmlib', ...args], {
+  execFileSync(VENV_PYTHON, ['-m', 'openlmlib.cli', ...args], {
     stdio: 'inherit',
   });
 } catch (err) {

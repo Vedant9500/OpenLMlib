@@ -1,6 +1,6 @@
 {
   "name": "openlmlib",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "AI-powered knowledge library for LLM agents — install, manage, and retrieve findings via CLI and MCP",
   "type": "module",
   "main": "src/cli.js",
@@ -8,7 +8,16 @@
     "openlmlib": "bin/openlmlib.js"
   },
   "preferGlobal": true,
+  "files": [
+    "bin/",
+    "src/",
+    "openlmlib/",
+    "pyproject.toml"
+  ],
   "scripts": {
+    "bundle": "node bundle-python.js",
+    "prepack": "node bundle-python.js",
+    "postpack": "node bundle-python.js --cleanup",
     "postinstall": "node src/postinstall.mjs",
     "dev": "node src/cli.js",
     "build": "echo 'No build step — src runs directly with Node.js'"

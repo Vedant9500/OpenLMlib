@@ -111,26 +111,98 @@ function hasPythonProject(dirPath) {
   return fs.existsSync(path.join(dirPath, 'pyproject.toml')) || fs.existsSync(path.join(dirPath, 'setup.py'));
 }
 
+function hasOpenLMlibProject(dirPath) {
+  if (!dirPath) return false;
+  const pyprojectPath = path.join(dirPath, 'pyproject.toml');
+  const packageDir = path.join(dirPath, 'openlmlib');
+  if (!fs.existsSync(pyprojectPath) || !fs.existsSync(packageDir)) return false;
+  try {
+    const content = fs.readFileSync(pyprojectPath, 'utf-8');
+    return content.includes('name = "openlmlib"');
+  } catch {
+    return false;
+  }
+}
+
+function discoverLocalSourceCandidates() {
+  const paths = [
+    process.cwd(),
+    path.resolve(process.cwd(), '..'),
+    path.resolve(process.cwd(), '..', '..'),
+    path.resolve(__dirname, '..', '..'),
+    path.resolve(__dirname, '..'),
+  ];
+  return [...new Set(paths)];
+}
+
+function validateInstalledOpenLMlib(VENV_PYTHON) {
+  const scriptPath = path.join(os.tmpdir(), `openlmlib-validate-${Date.now()}.py`);
+  const checkScript = [
+    'import openlmlib.mcp_server as m',
+    'required_core = ["openlmlib_init", "openlmlib_add_finding", "openlmlib_retrieve", "openlmlib_health"]',
+    'required_collab = ["collab_create_session", "collab_help"]',
+    'missing_core = [name for name in required_core if not hasattr(m, name)]',
+    'missing_collab = [name for name in required_collab if not hasattr(m, name)]',
+    'if missing_core:',
+    '    raise SystemExit("missing_core_mcp_tools:" + ",".join(missing_core))',
+    'if missing_collab:',
+    '    print("missing_collab_mcp_tools:" + ",".join(missing_collab))',
+    'print("ok")',
+  ].join('\n');
+  fs.writeFileSync(scriptPath, checkScript, { encoding: 'utf-8' });
+  try {
+    const output = execSync(`"${VENV_PYTHON}" "${scriptPath}"`, { stdio: 'pipe', encoding: 'utf-8' });
+    if (output && output.includes('missing_collab_mcp_tools:')) {
+      const warningLine = output.split('\n').find((line) => line.startsWith('missing_collab_mcp_tools:'));
+      if (warningLine) {
+        return { status: 'warn', message: warningLine };
+      }
+    }
+    return { status: 'ok' };
+  } finally {
+    try {
+      fs.unlinkSync(scriptPath);
+    } catch {
+      // Best effort cleanup.
+    }
+  }
+}
+
 function installOpenLMlib(VENV_PYTHON, spinner) {
   execSync(`"${VENV_PYTHON}" -m pip install --upgrade pip`, { stdio: 'pipe' });
 
   const candidateSpecs = [];
-  const localSourceCandidates = [
-    path.resolve(__dirname, '..', '..'),
-    path.resolve(__dirname, '..'),
-  ];
+  
+  // Priority 1: Use bundled Python source from npm package (if available)
+  const installerDir = path.dirname(path.dirname(__filename));
+  const bundledPyproject = path.join(installerDir, 'pyproject.toml');
+  const bundledPackage = path.join(installerDir, 'openlmlib');
+  
+  if (fs.existsSync(bundledPyproject) && fs.existsSync(bundledPackage)) {
+    candidateSpecs.push({
+      kind: 'editable',
+      value: installerDir,
+      label: 'bundled source (from npm package)',
+    });
+  }
 
+  // Priority 2: Try to find local development source
+  const localSourceCandidates = discoverLocalSourceCandidates();
   for (const localPath of localSourceCandidates) {
-    if (hasPythonProject(localPath)) {
-      candidateSpecs.push({
-        kind: 'editable',
-        value: localPath,
-        label: `local source (${localPath})`,
-      });
-      break;
+    if (hasPythonProject(localPath) && hasOpenLMlibProject(localPath)) {
+      // Skip if it's the same as bundled
+      if (localPath !== installerDir) {
+        candidateSpecs.push({
+          kind: 'editable',
+          value: localPath,
+          label: `local source (${localPath})`,
+        });
+        break;
+      }
     }
   }
 
+  // Priority 3: GitHub tags and releases
   if (process.env.npm_package_version) {
     candidateSpecs.push({
       kind: 'package',
@@ -153,6 +225,10 @@ function installOpenLMlib(VENV_PYTHON, spinner) {
         execSync(`"${VENV_PYTHON}" -m pip install -e "${spec.value}"`, { stdio: 'pipe' });
       } else {
         execSync(`"${VENV_PYTHON}" -m pip install "${spec.value}"`, { stdio: 'pipe' });
+      }
+      const validation = validateInstalledOpenLMlib(VENV_PYTHON);
+      if (validation?.status === 'warn') {
+        spinner.text = `Installed with warning: ${validation.message}`;
       }
       return;
     } catch (err) {
@@ -222,8 +298,28 @@ async function runNonInteractive() {
     fs.mkdirSync(OPENLMLIB_HOME, { recursive: true });
   }
 
-  execSync(`${getActivePythonCmd()} -m venv "${VENV_DIR}"`, { stdio: 'pipe' });
-  spinner1.succeed('Virtual environment created.');
+  if (fs.existsSync(VENV_PYTHON)) {
+    spinner1.succeed('Using existing virtual environment.');
+  } else {
+    if (fs.existsSync(VENV_DIR)) {
+      try {
+        fs.rmSync(VENV_DIR, { recursive: true, force: true });
+      } catch {
+        // Best effort cleanup; creation may still succeed if files are releasable.
+      }
+    }
+
+    try {
+      execSync(`${getActivePythonCmd()} -m venv "${VENV_DIR}"`, { stdio: 'pipe' });
+      spinner1.succeed('Virtual environment created.');
+    } catch (err) {
+      if (fs.existsSync(VENV_PYTHON)) {
+        spinner1.warn('Reusing existing virtual environment (creation failed).');
+      } else {
+        throw err;
+      }
+    }
+  }
 
   // Step 3: Install openlmlib
   const spinner2 = ora('Installing openlmlib...').start();
@@ -242,7 +338,7 @@ async function runNonInteractive() {
 from openlmlib.mcp_setup import install_or_refresh_default_client_configs
 from openlmlib.settings import write_default_settings
 settings_path = Path(r"${OPENLMLIB_HOME}") / "config" / "settings.json"
-write_default_settings(settings_path, force=False)
+write_default_settings(settings_path)
 install_or_refresh_default_client_configs(settings_path=settings_path)
 print("ok")`;
   fs.writeFileSync(configScriptPath, configScript);
