@@ -105,6 +105,9 @@ class ContextCompiler:
             "pending_tasks": pending_tasks,
             "artifacts": artifact_refs,
             "active_agents": active_agents,
+            "role_instructions": self._role_instructions(
+                session_id, agent_id, agents
+            ),
             "autonomous_instructions": self.autonomous_instructions(),
         }
 
@@ -122,8 +125,12 @@ class ContextCompiler:
         lines.append(f"[Your role: {identity['role']} | Agent ID: {identity['agent_id']}]")
         lines.append("")
 
+        if context.get("role_instructions"):
+            lines.append(context["role_instructions"])
+            lines.append("")
+
         if context.get("autonomous_instructions"):
-            lines.append("=== AUTONOMOUS MODE ACTIVE ===")
+            lines.append("=== AUTONOMOUS MODE ===")
             lines.append(context["autonomous_instructions"])
             lines.append("")
 
@@ -177,6 +184,140 @@ class ContextCompiler:
             lines.append("")
 
         return "\n".join(lines)
+
+    def _role_instructions(
+        self,
+        session_id: str,
+        agent_id: str,
+        agents: List[Dict],
+    ) -> str:
+        """Return role-specific behavioral instructions for this agent.
+
+        Unlike autonomous_instructions (which explains the poll→respond loop),
+        this tells the agent WHAT to do based on its role — its responsibilities,
+        priorities, and how it should interact with other agents.
+        """
+        role = next(
+            (a["role"] for a in agents if a["agent_id"] == agent_id),
+            "worker",
+        )
+
+        other_agents = [
+            a for a in agents
+            if a["agent_id"] != agent_id and a["status"] == "active"
+        ]
+        other_agents_str = ", ".join(
+            f"{a['agent_id']} ({a['model']}, {a['role']})"
+            for a in other_agents
+        ) if other_agents else "(none yet)"
+
+        if role == "orchestrator":
+            return (
+                "=== YOUR ROLE: ORCHESTRATOR ===\n"
+                "You are the session ORCHESTRATOR. You are in charge. Your job is to:\n\n"
+                "1. **PLAN**: Analy the session goal and break it into specific, numbered tasks.\n"
+                "   - Each task should have a clear description, step number, and expected output.\n"
+                "   - Assign tasks to specific workers based on their model capabilities.\n"
+                "   - Use collab_update_session_state to save your plan.\n\n"
+                "2. **DELEGATE**: Send tasks to workers via collab_send_message.\n"
+                "   - Use msg_type='task' for work assignments.\n"
+                "   - Include the step number, detailed instructions, and acceptance criteria.\n"
+                "   - Address messages to the specific worker's agent_id.\n\n"
+                "3. **MONITOR**: After delegating, use collab_poll_messages to watch for results.\n"
+                "   - Workers will send msg_type='result' when they complete tasks.\n"
+                "   - Workers may send msg_type='question' if they need clarification.\n"
+                "   - If a worker is silent, send a follow-up message.\n\n"
+                "4. **SYNTHESIZE**: When workers return results, integrate them.\n"
+                "   - Compare findings from different workers.\n"
+                "   - Identify gaps and assign follow-up tasks as needed.\n"
+                "   - Save consolidated conclusions as artifacts.\n\n"
+                "5. **TERMINATE**: When the session goal is achieved, call\n"
+                "   collab_terminate_session(session_id, your_agent_id, summary='...').\n\n"
+                f"Active agents in this session: {other_agents_str}\n"
+                "If no workers have joined yet, you can still create your plan and save it via\n"
+                "collab_update_session_state. Workers will see it when they join."
+            )
+
+        elif role == "worker":
+            # Find who the orchestrator is
+            orchestrator = next(
+                (a for a in agents if a["role"] == "orchestrator"),
+                None,
+            )
+            orch_id = orchestrator["agent_id"] if orchestrator else "unknown"
+            orch_model = orchestrator["model"] if orchestrator else "unknown"
+
+            # Find my tasks
+            my_task_list = [
+                t for t in (self.conn.execute(
+                    "SELECT step_num, description, status FROM tasks "
+                    "WHERE session_id = ? AND (assigned_to = ? OR assigned_to IS NULL OR assigned_to = 'any') "
+                    "ORDER BY step_num",
+                    (session_id, agent_id),
+                ).fetchall() or [])
+            ]
+
+            tasks_text = ""
+            if my_task_list:
+                tasks_lines = [
+                    f"  Step {t[0]}: {t[1]} (status: {t[2]})"
+                    for t in my_task_list
+                ]
+                tasks_text = (
+                    "\nYour current assigned tasks:\n"
+                    + "\n".join(tasks_lines)
+                    + "\n"
+                )
+            else:
+                tasks_text = (
+                    "No tasks are assigned to you yet. Wait for the orchestrator to send work.\n"
+                )
+
+            return (
+                "=== YOUR ROLE: WORKER ===\n"
+                "You are a WORKER agent. Your job is to complete tasks assigned by the orchestrator.\n\n"
+                "1. **CHECK FOR TASKS**: Look at 'Your Current Tasks' in the session context above.\n"
+                "   - If you have a pending or in-progress task, work on it now.\n"
+                "   - If you have no tasks, wait for the orchestrator to assign you work.\n\n"
+                "2. **EXECUTE**: Complete your assigned task thoroughly.\n"
+                "   - Do the research, analysis, or writing as required.\n"
+                "   - Save significant outputs as artifacts via collab_add_artifact.\n\n"
+                "3. **REPORT**: Send your results back to the orchestrator.\n"
+                "   - Use collab_send_message with msg_type='result'.\n"
+                "   - Address the message to the orchestrator: to_agent='{orch_id}' ({orch_model}).\n"
+                "   - Include a clear summary, not just raw data.\n"
+                "   - Reference artifact IDs if you saved outputs.\n\n"
+                "4. **PROGRESS UPDATES**: For long tasks, send interim updates.\n"
+                "   - Use msg_type='update' to show partial progress.\n"
+                "   - This keeps the orchestrator informed and prevents timeout.\n\n"
+                "5. **ASK QUESTIONS**: If a task is unclear, ask the orchestrator.\n"
+                "   - Use msg_type='question' with to_agent='{orch_id}'.\n\n"
+                "6. **WHEN DONE**: After completing all your tasks:\n"
+                "   - Send a msg_type='complete' message to the orchestrator.\n"
+                "   - Call collab_leave_session(session_id, your_agent_id).\n\n"
+                f"Orchestrator: {orch_id} ({orch_model})\n"
+                f"Other workers: {other_agents_str}\n\n"
+                f"{tasks_text}"
+                "IMPORTANT: Always use collab_poll_messages(session_id, your_agent_id, timeout=30)\n"
+                "in a loop to check for new tasks or messages from the orchestrator."
+            )
+
+        else:  # observer
+            return (
+                "=== YOUR ROLE: OBSERVER ===\n"
+                "You are an OBSERVER agent. Your job is to monitor and analyze the session.\n\n"
+                "1. **MONITOR**: Use collab_poll_messages to watch session activity.\n"
+                "   - Track how the orchestrator and workers are collaborating.\n"
+                "   - Note key decisions, progress, and any issues.\n\n"
+                "2. **ANALYZE**: Provide insights on session progress.\n"
+                "   - Identify bottlenecks or communication gaps.\n"
+                "   - Suggest improvements if asked.\n\n"
+                "3. **DO NOT INTERFERE**: You are read-only.\n"
+                "   - Do NOT assign tasks or modify session state.\n"
+                "   - Only send messages with msg_type='answer' when directly asked.\n\n"
+                "4. **SAVE ANALYSIS**: Use collab_add_artifact for analysis outputs.\n\n"
+                f"Active agents: {other_agents_str}"
+            )
 
     @staticmethod
     def autonomous_instructions() -> str:
