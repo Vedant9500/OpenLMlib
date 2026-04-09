@@ -858,9 +858,16 @@ class TestSessionCompactor(unittest.TestCase):
     def test_check_and_compact_above_threshold(self):
         from openlmlib.collab.compactor import SessionCompactor
         self._make_session()
-        state = self.sm.get_state("sess_001")
-        state["state"]["message_count"] = 60
-        self.sm.update_state("sess_001", state["state"], "system", "2026-04-05T10:10:00Z", state["version"])
+
+        # Insert 60 messages so get_max_seq() returns 60
+        for i in range(60):
+            self.bus.send(
+                session_id="sess_001",
+                from_agent="agent_test_001",
+                msg_type="system",
+                content=f"Message {i}",
+                created_at="2026-04-05T10:00:00Z",
+            )
 
         compactor = SessionCompactor(self.conn, self.sessions_dir, self.bus, self.store, self.sm)
         result = compactor.check_and_compact("sess_001", auto_compact_threshold=50)
