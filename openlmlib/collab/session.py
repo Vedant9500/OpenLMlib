@@ -15,6 +15,7 @@ from typing import Dict, List, Optional
 
 import sqlite3
 
+from ..schema import utc_now_iso
 from . import db
 from .message_bus import MessageBus
 from .artifact_store import ArtifactStore
@@ -28,10 +29,6 @@ from .errors import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _generate_session_id() -> str:
@@ -79,7 +76,7 @@ def create_collab_session(
     Returns:
         Dict with session_id, title, status, orchestrator, created_at
     """
-    created_at = created_at or _now_iso()
+    created_at = created_at or utc_now_iso()
     session_id = _generate_session_id()
     agent_id = _generate_agent_id(created_by)
 
@@ -186,7 +183,7 @@ def join_collab_session(
             f"Session is full ({current_agents}/{max_agents} agents)"
         )
 
-    joined_at = joined_at or _now_iso()
+    joined_at = joined_at or utc_now_iso()
     agent_id = _generate_agent_id(model)
 
     _ensure_session_dirs(sessions_dir, session_id)
@@ -240,7 +237,7 @@ def leave_collab_session(
     Returns:
         True if successfully left
     """
-    left_at = left_at or _now_iso()
+    left_at = left_at or utc_now_iso()
 
     agents = conn.execute(
         "SELECT session_id, model, role FROM agents WHERE agent_id = ?",
@@ -251,6 +248,15 @@ def leave_collab_session(
 
     session_id = agents["session_id"]
     model = agents["model"]
+
+    # Check if session is still active
+    session = db.get_session(conn, session_id)
+    if session is None:
+        raise SessionNotFoundError(f"Session {session_id} not found")
+    if session["status"] != "active":
+        raise SessionNotActiveError(
+            f"Session {session_id} is not active (status: {session['status']})"
+        )
 
     db.update_agent_status(conn, agent_id, "left", left_at)
 
@@ -291,7 +297,7 @@ def terminate_collab_session(
     if session is None:
         raise SessionNotFoundError(f"Session {session_id} not found")
 
-    terminated_at = terminated_at or _now_iso()
+    terminated_at = terminated_at or utc_now_iso()
 
     if not db.update_session_status(conn, session_id, "completed", terminated_at):
         raise SessionNotActiveError(
@@ -314,10 +320,15 @@ def terminate_collab_session(
         metadata={"summary": summary},
     )
 
-    other_agents = db.get_session_agents(conn, session_id)
-    for agent in other_agents:
-        if agent["status"] == "active":
-            db.update_agent_status(conn, agent["agent_id"], "inactive", terminated_at)
+    # Batch update all active agents to inactive status in one query
+    conn.execute(
+        """
+        UPDATE agents
+        SET status = ?, last_seen = ?
+        WHERE session_id = ? AND status = 'active'
+        """,
+        ("inactive", terminated_at, session_id),
+    )
 
     return {
         "session_id": session_id,

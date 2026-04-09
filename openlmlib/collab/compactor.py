@@ -10,19 +10,15 @@ Inspired by Google ADK's context compaction pattern.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 import sqlite3
 
+from ..schema import utc_now_iso
 from . import db
 from .message_bus import MessageBus
 from .artifact_store import ArtifactStore
 from .state_manager import StateManager
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 class SessionCompactor:
@@ -152,7 +148,7 @@ class SessionCompactor:
         if summary is None:
             return None
 
-        compacted_at = compacted_at or _now_iso()
+        compacted_at = compacted_at or utc_now_iso()
         pre_summary_max_seq = db.get_max_seq(self.conn, session_id)
 
         file_path = self.artifact_store.save_summary(

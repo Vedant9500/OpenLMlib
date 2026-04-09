@@ -31,6 +31,11 @@ ARTIFACT_ID_RE = re.compile(r"^art_[a-f0-9]{8}$")
 TASK_ID_RE = re.compile(r"^task_[a-f0-9]{6}$")
 
 
+def _has_path_traversal(value: str) -> bool:
+    """Check if a value contains path traversal characters."""
+    return ".." in value or "/" in value or "\\" in value
+
+
 def validate_session_id(session_id: str) -> str:
     """Validate and return a safe session ID.
 
@@ -39,7 +44,7 @@ def validate_session_id(session_id: str) -> str:
     """
     if not session_id or not isinstance(session_id, str):
         raise SecurityError("session_id is required")
-    if ".." in session_id or "/" in session_id or "\\" in session_id:
+    if _has_path_traversal(session_id):
         raise SecurityError("session_id contains path traversal characters")
     if len(session_id) > 64:
         raise SecurityError("session_id is too long")
@@ -54,7 +59,7 @@ def validate_agent_id(agent_id: str) -> str:
     """
     if not agent_id or not isinstance(agent_id, str):
         raise SecurityError("agent_id is required")
-    if ".." in agent_id or "/" in agent_id or "\\" in agent_id:
+    if _has_path_traversal(agent_id):
         raise SecurityError("agent_id contains path traversal characters")
     if len(agent_id) > 64:
         raise SecurityError("agent_id is too long")
@@ -65,7 +70,7 @@ def validate_artifact_id(artifact_id: str) -> str:
     """Validate artifact ID format."""
     if not artifact_id or not isinstance(artifact_id, str):
         raise SecurityError("artifact_id is required")
-    if ".." in artifact_id or "/" in artifact_id or "\\" in artifact_id:
+    if _has_path_traversal(artifact_id):
         raise SecurityError("artifact_id contains path traversal characters")
     return artifact_id.strip()
 

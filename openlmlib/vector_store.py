@@ -82,7 +82,7 @@ class FaissVectorStore(VectorStore):
         self._index = faiss.IndexIDMap2(index)
 
     def add(self, ids: Iterable[int], vectors: Iterable[Iterable[float]]) -> None:
-        vecs = np.asarray(list(vectors), dtype=np.float32)
+        vecs = np.asarray(vectors, dtype=np.float32)
         id_array = np.asarray(list(ids), dtype=np.int64)
         if vecs.size == 0:
             return

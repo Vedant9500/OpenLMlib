@@ -80,6 +80,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_findings_project ON findings(project);
         CREATE INDEX IF NOT EXISTS idx_findings_created_at ON findings(created_at);
         CREATE INDEX IF NOT EXISTS idx_findings_status ON findings(status);
+        CREATE INDEX IF NOT EXISTS idx_findings_embedding_id ON findings(embedding_id);
         CREATE INDEX IF NOT EXISTS idx_retrieval_usage_query_id ON retrieval_usage(query_id);
         CREATE INDEX IF NOT EXISTS idx_retrieval_usage_finding_id ON retrieval_usage(finding_id);
         CREATE INDEX IF NOT EXISTS idx_retrieval_usage_created_at ON retrieval_usage(created_at);
