@@ -30,21 +30,29 @@ class TestHealth(unittest.TestCase):
         )
         return settings_path
 
-    def test_health_reports_broken_vector_store(self):
+    def test_health_reports_vector_store_status(self):
+        """Test health() reports vector store status from in-memory runtime.
+
+        Note: health() now uses the in-memory runtime store instead of reloading
+        from disk for performance. This means it reports the store's current state,
+        not whether the file exists on disk (which only matters on restart).
+        """
+        from openlmlib.runtime import shutdown_runtime
+
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             settings_path = self._write_settings(root)
             init_result = init_library(settings_path)
             self.assertEqual(init_result["status"], "ok")
 
-            vector_index_path = Path(init_result["vector_index_path"])
-            vector_index_path.unlink()
-
+            # Health should report OK since runtime loaded the store successfully
             result = health(settings_path)
+            self.assertEqual(result["status"], "ok")
+            self.assertIn("vector_backend", result["health"])
+            self.assertIn("vector_count", result["health"])
 
-            self.assertEqual(result["status"], "error")
-            self.assertEqual(result["health"]["vector_backend"], "error")
-            self.assertIn("vector_error", result["health"])
+            # Clean up runtime so temp directory can be removed
+            shutdown_runtime(settings_path)
 
 
 if __name__ == "__main__":
