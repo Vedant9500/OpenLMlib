@@ -14,7 +14,14 @@ if [ ! -f "pyproject.toml" ]; then
 fi
 
 pipx install . --force
-pipx run --spec . openlmlib setup
-pipx run --spec . openlmlib doctor
 
-echo "OpenLMlib installed and validated. Try: openlmlib query --query 'retrieval'"
+echo ""
+echo "OpenLMlib installed successfully!"
+echo ""
+echo "Next steps:"
+echo "  1. Run 'openlmlib setup' to initialize your library and download the embedding model"
+echo "  2. Run 'openlmlib doctor' to validate the installation"
+echo "  3. Run 'openlmlib query --query \"retrieval\"' to test retrieval"
+echo ""
+echo "Note: The embedding model will be downloaded during the setup step (not during install)."
+echo ""

@@ -140,13 +140,21 @@ def _warm_embedding_model(settings_path: Path) -> dict:
 
     settings = load_settings(settings_path)
     cache = EmbeddingCache(settings.embeddings_cache_path)
+    
+    print(f"  Downloading embedding model: {settings.embedding_model}...", file=sys.stderr)
+    print(f"  (This may take a minute on first run)", file=sys.stderr)
+    
     embedder = SentenceTransformerEmbedder(
         settings.embedding_model,
         cache=cache,
         normalize=settings.embedding_metric == "cosine",
     )
+    
+    print(f"  Warming up model...", file=sys.stderr)
     _ = embedder.encode(["openlmlib setup warmup"])
     cache.save()
+    
+    print(f"  ✓ Model ready", file=sys.stderr)
     return {"status": "ok", "model": settings.embedding_model}
 
 

@@ -74,33 +74,13 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-$openlmlibCmd = Get-Command openlmlib -ErrorAction SilentlyContinue
-if ($openlmlibCmd) {
-    & openlmlib setup
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "openlmlib setup failed."
-        exit $LASTEXITCODE
-    }
-
-    & openlmlib doctor
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "openlmlib doctor failed."
-        exit $LASTEXITCODE
-    }
-} else {
-    Write-Warning "openlmlib command is not available in this shell yet. Running setup via pipx fallback."
-
-    Invoke-Pipx -PipxArgs @('run', '--spec', '.', 'openlmlib', 'setup')
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "openlmlib setup failed via pipx fallback."
-        exit $LASTEXITCODE
-    }
-
-    Invoke-Pipx -PipxArgs @('run', '--spec', '.', 'openlmlib', 'doctor')
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "openlmlib doctor failed via pipx fallback."
-        exit $LASTEXITCODE
-    }
-}
-
-Write-Host "OpenLMlib installed and validated. Try: openlmlib query --query 'retrieval'"
+Write-Host ""
+Write-Host "OpenLMlib installed successfully!" -ForegroundColor Green
+Write-Host ""
+Write-Host "Next steps:" -ForegroundColor Cyan
+Write-Host "  1. Run 'openlmlib setup' to initialize your library and download the embedding model"
+Write-Host "  2. Run 'openlmlib doctor' to validate the installation"
+Write-Host "  3. Run 'openlmlib query --query `"retrieval`"' to test retrieval"
+Write-Host ""
+Write-Host "Note: The embedding model will be downloaded during the setup step (not during install)." -ForegroundColor Yellow
+Write-Host ""
