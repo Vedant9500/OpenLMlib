@@ -10,6 +10,7 @@ with custom templates persisted to disk as JSON files.
 from __future__ import annotations
 
 import json
+import functools
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -137,8 +138,12 @@ def _get_custom_templates_dir() -> Path:
     return _custom_templates_dir
 
 
+@functools.lru_cache(maxsize=1)
 def _load_custom_templates() -> Dict[str, Dict]:
-    """Load custom templates from disk JSON files."""
+    """Load custom templates from disk JSON files.
+    
+    Cached with lru_cache. Call _clear_template_cache() to invalidate.
+    """
     templates_dir = _get_custom_templates_dir()
     custom = {}
     for fpath in templates_dir.glob("*.json"):
@@ -152,12 +157,19 @@ def _load_custom_templates() -> Dict[str, Dict]:
     return custom
 
 
+def _clear_template_cache() -> None:
+    """Clear the template loading cache (called when templates are modified)."""
+    _load_custom_templates.cache_clear()
+
+
 def _save_custom_template(template_id: str, data: Dict) -> Path:
     """Save a custom template to disk as JSON."""
     templates_dir = _get_custom_templates_dir()
     fpath = templates_dir / f"{template_id}.json"
     with open(fpath, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+    # Clear cache so new template is picked up
+    _clear_template_cache()
     return fpath
 
 
@@ -167,6 +179,8 @@ def _delete_custom_template(template_id: str) -> bool:
     fpath = templates_dir / f"{template_id}.json"
     if fpath.exists():
         fpath.unlink()
+        # Clear cache so deletion is picked up
+        _clear_template_cache()
         return True
     return False
 

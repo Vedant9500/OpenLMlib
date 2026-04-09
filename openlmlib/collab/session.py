@@ -114,28 +114,46 @@ def create_collab_session(
     )
 
     if plan:
+        # Batch insert all tasks with executemany
+        task_rows = []
         for step in plan:
             task_id = f"task_{uuid.uuid4().hex[:6]}"
             assigned_to = step.get("assigned_to")
             if assigned_to == "orchestrator":
                 assigned_to = agent_id
-            db.insert_task(
-                conn,
-                task_id=task_id,
-                session_id=session_id,
-                step_num=step.get("step", 0),
-                description=step.get("task", ""),
-                created_at=created_at,
-                assigned_to=assigned_to,
+            task_rows.append((
+                task_id,
+                session_id,
+                step.get("step", 0),
+                step.get("task", ""),
+                assigned_to,
+                created_at,
+            ))
+
+        with conn:
+            conn.executemany(
+                """
+                INSERT INTO tasks (task_id, session_id, step_num, description,
+                                   assigned_to, status, created_at)
+                VALUES (?, ?, ?, ?, ?, 'pending', ?)
+                """,
+                task_rows,
             )
-            bus.send(
-                session_id=session_id,
-                from_agent=agent_id,
-                msg_type="system",
-                content=f"Task created: Step {step.get('step', '?')}: {step.get('task', '')}",
-                created_at=created_at,
-                metadata={"task_id": task_id, "step": step.get("step")},
-            )
+
+        # Single bus message for all tasks
+        bus = MessageBus(conn, sessions_dir)
+        task_summary = f"{len(plan)} tasks created"
+        bus.send(
+            session_id=session_id,
+            from_agent=agent_id,
+            msg_type="system",
+            content=f"Plan created: {task_summary}",
+            created_at=created_at,
+            metadata={"task_count": len(plan)},
+        )
+
+        # Touch session once after all inserts
+        db.touch_session(conn, session_id, created_at)
 
     return {
         **session_info,

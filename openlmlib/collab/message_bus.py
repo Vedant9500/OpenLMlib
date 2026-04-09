@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+import threading
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -19,6 +20,10 @@ from . import db
 from .errors import VALID_MESSAGE_TYPES, InvalidMessageTypeError
 
 logger = logging.getLogger(__name__)
+
+# In-memory cache for agent offsets: {(session_id, agent_id): seq}
+_offset_cache: Dict[tuple[str, str], int] = {}
+_offset_cache_lock = threading.Lock()
 
 
 class MessageBus:
@@ -187,18 +192,40 @@ class MessageBus:
 
     def load_offset(self, session_id: str, agent_id: str) -> int:
         """Load an agent's last-read sequence number."""
+        cache_key = (session_id, agent_id)
+
+        # Check in-memory cache first
+        with _offset_cache_lock:
+            if cache_key in _offset_cache:
+                return _offset_cache[cache_key]
+
+        # Fallback to file system
         offset_path = self.get_offset_file(session_id, agent_id)
         if offset_path.exists():
             try:
                 with open(offset_path, "r") as f:
                     data = json.load(f)
-                return int(data.get("last_seq", 0))
+                seq = int(data.get("last_seq", 0))
             except (json.JSONDecodeError, ValueError):
-                return 0
-        return 0
+                seq = 0
+        else:
+            seq = 0
+
+        # Cache the result
+        with _offset_cache_lock:
+            _offset_cache[cache_key] = seq
+
+        return seq
 
     def save_offset(self, session_id: str, agent_id: str, seq: int) -> None:
         """Save an agent's last-read sequence number."""
+        cache_key = (session_id, agent_id)
+
+        # Update in-memory cache immediately
+        with _offset_cache_lock:
+            _offset_cache[cache_key] = seq
+
+        # Defer file write (offset is for crash recovery, not critical)
         offset_path = self.get_offset_file(session_id, agent_id)
         offset_path.parent.mkdir(parents=True, exist_ok=True)
         with open(offset_path, "w") as f:

@@ -201,10 +201,13 @@ class SessionCompactor:
             return None
 
         state = state_row["state"]
-        message_count = state.get("message_count", 0)
         last_compact_seq = state.get("last_compact_seq", 0)
 
-        if (message_count - last_compact_seq) >= auto_compact_threshold:
+        # Use actual max_seq from DB instead of message_count counter
+        current_max_seq = db.get_max_seq(self.conn, session_id)
+        messages_since_compact = current_max_seq - last_compact_seq
+
+        if messages_since_compact >= auto_compact_threshold:
             return self.compact_session(session_id, last_compact_seq)
 
         return None

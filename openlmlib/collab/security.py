@@ -48,6 +48,12 @@ def validate_session_id(session_id: str) -> str:
         raise SecurityError("session_id contains path traversal characters")
     if len(session_id) > 64:
         raise SecurityError("session_id is too long")
+    # Enforce regex format
+    if not SESSION_ID_RE.match(session_id):
+        raise SecurityError(
+            f"Invalid session_id format: {session_id}. "
+            f"Expected format: sess_YYYYMMDD_xxxxxxxx"
+        )
     return session_id.strip()
 
 
@@ -63,6 +69,12 @@ def validate_agent_id(agent_id: str) -> str:
         raise SecurityError("agent_id contains path traversal characters")
     if len(agent_id) > 64:
         raise SecurityError("agent_id is too long")
+    # Enforce regex format
+    if not AGENT_ID_RE.match(agent_id):
+        raise SecurityError(
+            f"Invalid agent_id format: {agent_id}. "
+            f"Expected format: agent_<model>_<hex>"
+        )
     return agent_id.strip()
 
 

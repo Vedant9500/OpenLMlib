@@ -245,10 +245,18 @@ def get_session_statistics(conn: sqlite3.Connection, session_id: str) -> Dict:
     Returns:
         Dict with session statistics
     """
-    msg_count = conn.execute(
-        "SELECT COUNT(*) as cnt FROM messages WHERE session_id = ?",
-        (session_id,)
-    ).fetchone()["cnt"]
+    # Combine count + first/last time into single query
+    msg_stats = conn.execute(
+        """
+        SELECT
+            COUNT(*) as cnt,
+            MIN(created_at) as first_at,
+            MAX(created_at) as last_at
+        FROM messages
+        WHERE session_id = ?
+        """,
+        (session_id,),
+    ).fetchone()
 
     msg_by_type = conn.execute(
         "SELECT msg_type, COUNT(*) as cnt FROM messages WHERE session_id = ? GROUP BY msg_type",
@@ -265,22 +273,12 @@ def get_session_statistics(conn: sqlite3.Connection, session_id: str) -> Dict:
         (session_id,)
     ).fetchone()["cnt"]
 
-    first_msg = conn.execute(
-        "SELECT created_at FROM messages WHERE session_id = ? ORDER BY seq ASC LIMIT 1",
-        (session_id,)
-    ).fetchone()
-
-    last_msg = conn.execute(
-        "SELECT created_at FROM messages WHERE session_id = ? ORDER BY seq DESC LIMIT 1",
-        (session_id,)
-    ).fetchone()
-
     return {
         "session_id": session_id,
-        "total_messages": msg_count,
+        "total_messages": msg_stats["cnt"],
         "total_artifacts": artifact_count,
         "messages_by_type": {row["msg_type"]: row["cnt"] for row in msg_by_type},
         "messages_by_agent": {row["from_agent"]: row["cnt"] for row in msg_by_agent},
-        "first_message_at": first_msg["created_at"] if first_msg else None,
-        "last_message_at": last_msg["created_at"] if last_msg else None,
+        "first_message_at": msg_stats["first_at"],
+        "last_message_at": msg_stats["last_at"],
     }

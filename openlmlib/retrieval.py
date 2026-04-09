@@ -204,14 +204,23 @@ class RetrievalEngine:
         if len(candidates) < 2:
             return candidates, {"status": "ok", "duplicates_removed": 0}
 
+        # Pre-tokenize all candidates once to avoid repeated regex scans
+        candidate_tokens = []
+        for candidate in candidates:
+            candidate_tokens.append(set(_tokenize_for_trace(candidate.get("claim", ""))))
+
         kept: List[Dict[str, Any]] = []
+        kept_tokens: List[set[str]] = []
         duplicates_removed = 0
         merged_from: Dict[str, List[str]] = {}  # kept_id → [merged_ids]
 
-        for candidate in candidates:
+        for idx, candidate in enumerate(candidates):
             is_duplicate = False
-            for existing in kept:
-                sim = _claim_similarity(candidate.get("claim", ""), existing.get("claim", ""))
+            cand_tok = candidate_tokens[idx]
+
+            for kept_idx, existing in enumerate(kept):
+                # Use pre-computed tokens instead of re-tokenizing
+                sim = _jaccard_similarity(cand_tok, kept_tokens[kept_idx])
                 if sim >= threshold:
                     # Merge: add project/tag info to the existing item
                     if candidate.get("project") and candidate["project"] != existing.get("project"):
@@ -234,6 +243,7 @@ class RetrievalEngine:
 
             if not is_duplicate:
                 kept.append(candidate)
+                kept_tokens.append(cand_tok)
 
         # Add merge metadata
         for item in kept:
@@ -532,7 +542,9 @@ class RetrievalEngine:
         for item in merged.values():
             semantic_score = float(item.get("semantic_score", 0.0))
             lexical_score = float(item.get("lexical_score", 0.0))
-            recency_score = _recency_score(item.get("created_at", ""))
+            # Use pre-parsed datetime to avoid re-parsing
+            created_dt = item.get("_created_dt")
+            recency_score = _recency_score_from_dt(created_dt)
             hit_count = 0
             if "semantic_score" in item:
                 hit_count += 1
@@ -548,7 +560,8 @@ class RetrievalEngine:
 
 def _to_result(row: Dict[str, Any], validity_days: int = 90) -> Dict[str, Any]:
     created_at = row.get("created_at")
-    stale, age_days = _staleness(created_at, validity_days=validity_days)
+    created_dt = _parse_utc(created_at or "")
+    stale, age_days = _staleness_from_dt(created_dt, validity_days=validity_days)
     return {
         "id": row.get("id"),
         "project": row.get("project"),
@@ -562,7 +575,24 @@ def _to_result(row: Dict[str, Any], validity_days: int = 90) -> Dict[str, Any]:
         "caveats": row.get("caveats", []),
         "pending_review": stale,
         "age_days": age_days,
+        "_created_dt": created_dt,  # Internal: pass to downstream functions
     }
+
+
+def _staleness_from_dt(created_dt: Optional[datetime], validity_days: int = 90) -> tuple[bool, int]:
+    """Compute staleness from already-parsed datetime."""
+    if created_dt is None:
+        return (False, 0)
+    age_days = int(max(0.0, (datetime.now(timezone.utc) - created_dt).total_seconds() / 86400.0))
+    return (age_days >= validity_days, age_days)
+
+
+def _recency_score_from_dt(created_dt: Optional[datetime]) -> float:
+    """Compute recency score from already-parsed datetime."""
+    if created_dt is None:
+        return 0.0
+    age_days = max(0.0, (datetime.now(timezone.utc) - created_dt).total_seconds() / 86400.0)
+    return 1.0 / (1.0 + (age_days / 30.0))
 
 
 def _parse_utc(value: str) -> Optional[datetime]:
@@ -642,11 +672,8 @@ def _tokenize_for_trace(text: str) -> List[str]:
     return [t for t in tokens if t not in _STOPWORDS_TRACE and len(t) > 2]
 
 
-def _claim_similarity(claim_a: str, claim_b: str) -> float:
-    """Compute Jaccard similarity between two claims for deduplication."""
-    tokens_a = set(_tokenize_for_trace(claim_a))
-    tokens_b = set(_tokenize_for_trace(claim_b))
-
+def _jaccard_similarity(tokens_a: set[str], tokens_b: set[str]) -> float:
+    """Compute Jaccard similarity from pre-computed token sets."""
     if not tokens_a or not tokens_b:
         return 0.0
 
@@ -654,6 +681,13 @@ def _claim_similarity(claim_a: str, claim_b: str) -> float:
     union = tokens_a | tokens_b
 
     return len(intersection) / len(union) if union else 0.0
+
+
+def _claim_similarity(claim_a: str, claim_b: str) -> float:
+    """Compute Jaccard similarity between two claims for deduplication."""
+    tokens_a = set(_tokenize_for_trace(claim_a))
+    tokens_b = set(_tokenize_for_trace(claim_b))
+    return _jaccard_similarity(tokens_a, tokens_b)
 
 
 def _normalize_map(values: Dict[str, float]) -> Dict[str, float]:

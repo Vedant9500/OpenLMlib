@@ -71,12 +71,11 @@ def rebuild_vector_index(settings_path: Path) -> Dict[str, Any]:
     store = create_vector_store(settings.embedding_dim, settings.embedding_metric)
     rows = conn.execute("SELECT id FROM findings ORDER BY created_at ASC").fetchall()
 
-    rebuilt = 0
-    skipped = 0
+    # Collect all embedding texts and finding IDs first
+    embedding_data = []  # List of (finding_id, embedding_id, embedding_text)
     for row in rows:
         finding = db.get_finding(conn, row["id"])
         if finding is None:
-            skipped += 1
             continue
         _hydrate_finding_from_json(settings, finding)
         embedding_text = build_contextual_chunk(
@@ -85,9 +84,19 @@ def rebuild_vector_index(settings_path: Path) -> Dict[str, Any]:
             reasoning=finding.text.reasoning,
             full_text=finding.full_text,
         )
-        vec = embedder.encode([embedding_text])[0]
-        store.add([finding.embedding_id], [vec])
-        rebuilt += 1
+        embedding_data.append((finding.id, finding.embedding_id, embedding_text))
+
+    # Batch encode all texts at once
+    rebuilt = 0
+    skipped = len(rows) - len(embedding_data)
+    if embedding_data:
+        all_texts = [text for _, _, text in embedding_data]
+        vectors = embedder.encode(all_texts, batch_size=32)
+
+        # Batch add to vector store
+        ids = [eid for _, eid, _ in embedding_data]
+        store.add(ids, vectors)
+        rebuilt = len(embedding_data)
 
     # Back up existing index files before overwriting, in case of save failure
     index_backup = None
@@ -819,30 +828,16 @@ def health(settings_path: Path) -> Dict[str, Any]:
         status["db_exists"] = False
         return {"status": "ok", "health": status}
 
-    conn = db.connect(settings.db_path)
-    db.init_db(conn)
-    row = conn.execute("SELECT COUNT(*) AS count FROM findings").fetchone()
-    conn.close()
+    # Use runtime state instead of reloading from disk
+    runtime = get_runtime(settings_path)
+    row = runtime.conn.execute("SELECT COUNT(*) AS count FROM findings").fetchone()
     status["db_exists"] = True
     status["findings_count"] = int(row["count"]) if row else 0
 
-    if settings.vector_meta_path.exists():
-        try:
-            store = load_vector_store(settings.vector_index_path, settings.vector_meta_path)
-        except Exception as exc:
-            status["vector_backend"] = "error"
-            status["vector_count"] = 0
-            status["vector_dim"] = 0
-            status["vector_error"] = str(exc)
-            return {"status": "error", "health": status}
-
-        status["vector_backend"] = store.backend
-        status["vector_count"] = store.count()
-        status["vector_dim"] = store.dim
-    else:
-        status["vector_backend"] = "none"
-        status["vector_count"] = 0
-        status["vector_dim"] = 0
+    # Use in-memory store instead of loading from disk
+    status["vector_backend"] = runtime.store.backend
+    status["vector_count"] = runtime.store.count()
+    status["vector_dim"] = runtime.store.dim
 
     return {"status": "ok", "health": status}
 

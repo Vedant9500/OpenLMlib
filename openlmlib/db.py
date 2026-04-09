@@ -183,25 +183,38 @@ def delete_finding(conn: sqlite3.Connection, finding_id: str) -> None:
 
 
 def get_finding(conn: sqlite3.Connection, finding_id: str) -> Optional[Finding]:
-    row = conn.execute("SELECT * FROM findings WHERE id = ?", (finding_id,)).fetchone()
+    # Single query with LEFT JOIN across all three tables
+    row = conn.execute(
+        """
+        SELECT
+            f.id, f.project, f.claim, f.confidence, f.created_at,
+            f.embedding_id, f.content_hash, f.status,
+            ft.tags, ft.evidence, ft.caveats, ft.reasoning, ft.full_text,
+            a.proposed_by, a.evidence_provided, a.reasoning_length,
+            a.failure_log, a.confidence_history
+        FROM findings AS f
+        LEFT JOIN findings_text AS ft ON ft.id = f.id
+        LEFT JOIN findings_audit AS a ON a.id = f.id
+        WHERE f.id = ?
+        """,
+        (finding_id,),
+    ).fetchone()
+
     if row is None:
         return None
 
-    text_row = conn.execute("SELECT * FROM findings_text WHERE id = ?", (finding_id,)).fetchone()
-    audit_row = conn.execute("SELECT * FROM findings_audit WHERE id = ?", (finding_id,)).fetchone()
-
     text = FindingText(
-        tags=_json_load(text_row["tags"], []) if text_row else [],
-        evidence=_json_load(text_row["evidence"], []) if text_row else [],
-        caveats=_json_load(text_row["caveats"], []) if text_row else [],
-        reasoning=text_row["reasoning"] if text_row else "",
+        tags=_json_load(row["tags"], []),
+        evidence=_json_load(row["evidence"], []),
+        caveats=_json_load(row["caveats"], []),
+        reasoning=row["reasoning"] if row["reasoning"] else "",
     )
     audit = FindingAudit(
-        proposed_by=audit_row["proposed_by"] if audit_row else "",
-        evidence_provided=bool(audit_row["evidence_provided"]) if audit_row else False,
-        reasoning_length=int(audit_row["reasoning_length"]) if audit_row else 0,
-        failure_log=_json_load(audit_row["failure_log"], []) if audit_row else [],
-        confidence_history=_json_load(audit_row["confidence_history"], []) if audit_row else [],
+        proposed_by=row["proposed_by"] if row["proposed_by"] else "",
+        evidence_provided=bool(row["evidence_provided"]) if row["evidence_provided"] is not None else False,
+        reasoning_length=int(row["reasoning_length"]) if row["reasoning_length"] is not None else 0,
+        failure_log=_json_load(row["failure_log"], []) if row["failure_log"] else [],
+        confidence_history=_json_load(row["confidence_history"], []) if row["confidence_history"] else [],
     )
 
     return Finding(
@@ -215,7 +228,7 @@ def get_finding(conn: sqlite3.Connection, finding_id: str) -> Optional[Finding]:
         status=row["status"],
         text=text,
         audit=audit,
-        full_text=text_row["full_text"] if text_row and "full_text" in text_row.keys() else "",
+        full_text=row["full_text"] if row["full_text"] else "",
     )
 
 
@@ -383,27 +396,32 @@ def log_retrieval_usage(
     tags: Optional[List[str]] = None,
 ) -> None:
     tags_json = _json_dump(tags or [])
-    with conn:
-        for rank, item in enumerate(items, start=1):
-            finding_id = str(item.get("id") or "").strip()
-            if not finding_id:
-                continue
-            conn.execute(
+    # Build rows for executemany
+    rows = []
+    for rank, item in enumerate(items, start=1):
+        finding_id = str(item.get("id") or "").strip()
+        if not finding_id:
+            continue
+        rows.append((
+            query_id,
+            finding_id,
+            rank,
+            1,
+            created_at,
+            query,
+            project,
+            tags_json,
+        ))
+
+    if rows:
+        with conn:
+            conn.executemany(
                 """
                 INSERT OR REPLACE INTO retrieval_usage
                   (query_id, finding_id, rank, cited, created_at, query, project, tags)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (
-                    query_id,
-                    finding_id,
-                    rank,
-                    1,
-                    created_at,
-                    query,
-                    project,
-                    tags_json,
-                ),
+                rows,
             )
 
 
