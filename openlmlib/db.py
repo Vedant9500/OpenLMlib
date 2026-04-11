@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
-from .schema import Finding, FindingAudit, FindingText
+from .schema import Finding, FindingAudit, FindingText, PaperContext
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
@@ -99,6 +99,12 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
     findings_text_columns = _table_columns(conn, "findings_text")
     if "full_text" not in findings_text_columns:
         conn.execute("ALTER TABLE findings_text ADD COLUMN full_text TEXT DEFAULT ''")
+    if "domain" not in findings_text_columns:
+        conn.execute("ALTER TABLE findings_text ADD COLUMN domain TEXT DEFAULT ''")
+    if "paper" not in findings_text_columns:
+        conn.execute("ALTER TABLE findings_text ADD COLUMN paper TEXT DEFAULT '{}'")
+    if "related_papers" not in findings_text_columns:
+        conn.execute("ALTER TABLE findings_text ADD COLUMN related_papers TEXT DEFAULT '[]'")
 
 
 def _json_dump(value) -> str:
@@ -141,8 +147,8 @@ def insert_finding(conn: sqlite3.Connection, finding: Finding) -> None:
         )
         conn.execute(
             """
-            INSERT INTO findings_text (id, tags, evidence, caveats, reasoning, full_text)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO findings_text (id, tags, evidence, caveats, reasoning, full_text, domain, paper, related_papers)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 finding.id,
@@ -151,6 +157,13 @@ def insert_finding(conn: sqlite3.Connection, finding: Finding) -> None:
                 _json_dump(text.caveats),
                 text.reasoning,
                 finding.full_text,
+                text.domain,
+                _json_dump({
+                    "title": text.paper.title,
+                    "url": text.paper.url,
+                    "also_covers": text.paper.also_covers,
+                }),
+                _json_dump(text.related_papers),
             ),
         )
         conn.execute(
@@ -190,6 +203,7 @@ def get_finding(conn: sqlite3.Connection, finding_id: str) -> Optional[Finding]:
             f.id, f.project, f.claim, f.confidence, f.created_at,
             f.embedding_id, f.content_hash, f.status,
             ft.tags, ft.evidence, ft.caveats, ft.reasoning, ft.full_text,
+            ft.domain, ft.paper, ft.related_papers,
             a.proposed_by, a.evidence_provided, a.reasoning_length,
             a.failure_log, a.confidence_history
         FROM findings AS f
@@ -203,11 +217,21 @@ def get_finding(conn: sqlite3.Connection, finding_id: str) -> Optional[Finding]:
     if row is None:
         return None
 
+    paper_data = _json_load(row["paper"], {})
+    paper = PaperContext(
+        title=paper_data.get("title", ""),
+        url=paper_data.get("url", ""),
+        also_covers=paper_data.get("also_covers", []),
+    )
+
     text = FindingText(
         tags=_json_load(row["tags"], []),
         evidence=_json_load(row["evidence"], []),
         caveats=_json_load(row["caveats"], []),
         reasoning=row["reasoning"] if row["reasoning"] else "",
+        domain=row["domain"] if row["domain"] else "",
+        paper=paper,
+        related_papers=_json_load(row["related_papers"], []),
     )
     audit = FindingAudit(
         proposed_by=row["proposed_by"] if row["proposed_by"] else "",

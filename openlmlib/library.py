@@ -16,6 +16,7 @@ from .schema import (
     Finding,
     FindingAudit,
     FindingText,
+    PaperContext,
     ValidationIssue,
     compute_content_hash,
     make_embedding_id,
@@ -314,6 +315,12 @@ def add_finding(
     proposed_by: str = "",
     finding_id: Optional[str] = None,
     confirm: bool = False,
+    # New fields for richer context
+    domain: str = "",
+    paper_title: str = "",
+    paper_url: str = "",
+    paper_also_covers: Optional[List[str]] = None,
+    related_papers: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
     if not confirm:
         return {
@@ -342,6 +349,8 @@ def add_finding(
     evidence = evidence or []
     tags = tags or []
     caveats = caveats or []
+    paper_also_covers = paper_also_covers or []
+    related_papers = related_papers or []
 
     embedder = runtime.embedder
     store = runtime.store
@@ -400,7 +409,20 @@ def add_finding(
             {"timestamp": created_at, "confidence": adjusted_confidence, "reason": "validator_adjusted"},
         ],
     )
-    text = FindingText(tags=tags, evidence=evidence, caveats=caveats, reasoning=reasoning)
+    paper = PaperContext(
+        title=paper_title,
+        url=paper_url,
+        also_covers=paper_also_covers,
+    )
+    text = FindingText(
+        tags=tags,
+        evidence=evidence,
+        caveats=caveats,
+        reasoning=reasoning,
+        domain=domain,
+        paper=paper,
+        related_papers=related_papers,
+    )
 
     finding = Finding(
         id=finding_id,

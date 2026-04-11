@@ -9,11 +9,25 @@ import uuid
 
 
 @dataclass
+class PaperContext:
+    """Lightweight reference to source paper and what else it covers."""
+    title: str = ""
+    url: str = ""
+    also_covers: List[str] = field(default_factory=list)
+
+
+@dataclass
 class FindingText:
     tags: List[str] = field(default_factory=list)
     evidence: List[str] = field(default_factory=list)
     caveats: List[str] = field(default_factory=list)
     reasoning: str = ""
+    # Domain/field for high-level categorization (e.g., "LLM", "Symbolic Regression")
+    domain: str = ""
+    # Source paper context (what else the paper mentions beyond this finding)
+    paper: PaperContext = field(default_factory=PaperContext)
+    # Related papers worth noting
+    related_papers: List[Dict[str, str]] = field(default_factory=list)  # [{title, url}]
 
 
 @dataclass
@@ -48,10 +62,17 @@ class Finding:
             "created_at": self.created_at,
             "embedding_id": self.embedding_id,
             "status": self.status,
+            "domain": self.text.domain,
             "tags": self.text.tags,
             "evidence": self.text.evidence,
             "reasoning": self.text.reasoning,
             "caveats": self.text.caveats,
+            "paper": {
+                "title": self.text.paper.title,
+                "url": self.text.paper.url,
+                "also_covers": self.text.paper.also_covers,
+            } if self.text.paper.title or self.text.paper.url or self.text.paper.also_covers else None,
+            "related_papers": self.text.related_papers,
             "full_text": self.full_text,
             "audit": {
                 "proposed_by": self.audit.proposed_by,
