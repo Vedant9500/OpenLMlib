@@ -35,6 +35,9 @@ mcp = FastMCP("OpenLMlib")
 # at startup. This cuts MCP server startup time from ~50s to ~2s.
 _collab_registered = False
 
+# Lazy-load memory tools to avoid importing memory module at startup.
+_memory_registered = False
+
 
 def _register_collab_tools() -> None:
     """Register collaboration tools with the MCP server on first access."""
@@ -109,6 +112,230 @@ def _register_collab_tools() -> None:
     mcp.tool()(collab_help)
 
     _collab_registered = True
+
+
+def _register_memory_tools() -> None:
+    """Register memory lifecycle and retrieval tools with the MCP server.
+    
+    Lazy-loads memory module to avoid import penalty at startup.
+    Provides 7 tools for session lifecycle management and progressive retrieval.
+    """
+    global _memory_registered
+    if _memory_registered:
+        return
+
+    from typing import List as TypingList
+    
+    from .memory import (
+        SessionManager,
+        ProgressiveRetriever,
+        MemoryStorage,
+        ContextBuilder,
+    )
+    from .runtime import get_runtime
+
+    # Initialize memory system components
+    runtime = get_runtime(_settings_path())
+    storage = MemoryStorage(runtime.conn)
+    session_mgr = SessionManager(storage)
+    retriever = ProgressiveRetriever(storage)
+    context_builder = ContextBuilder(retriever)
+
+    @mcp.tool()
+    def memory_session_start(
+        session_id: str,
+        user_id: Optional[str] = None,
+        query: Optional[str] = None,
+        limit: int = 50
+    ) -> dict:
+        """Start a new session and inject relevant context from previous sessions.
+        
+        Call this when beginning work to load knowledge from past sessions.
+        Returns context block with up to 50 relevant observations (compressed with caveman ultra).
+        
+        Args:
+            session_id: Unique session identifier
+            user_id: Optional user/agent identifier
+            query: Optional initial query to filter relevant memories
+            limit: Max observations to inject (default: 50)
+        
+        Returns:
+            Dict with session_id, context_block, and observation_count
+        """
+        context = session_mgr.on_session_start(session_id, user_id, query)
+        
+        # Build injection context (with caveman compression enabled)
+        context_block = context_builder.build_session_start_context(
+            session_id, query, limit
+        )
+        
+        return {
+            "session_id": session_id,
+            "context_injected": bool(context_block),
+            "observation_count": context.get("observation_count", 0),
+            "context_block": context_block,
+            "message": "Session started with memory context loaded"
+        }
+
+    @mcp.tool()
+    def memory_session_end(session_id: str) -> dict:
+        """End a session and trigger summarization.
+        
+        Call this when finishing work to summarize and persist session knowledge.
+        Automatically generates a compressed summary of all observations.
+        
+        Args:
+            session_id: Session identifier to end
+        
+        Returns:
+            Dict with session_id, status, and summary info
+        """
+        result = session_mgr.on_session_end(session_id)
+        
+        return {
+            "session_id": session_id,
+            "status": "ended",
+            "summary_generated": result.get("summary_generated", False),
+            "observation_count": result.get("observation_count", 0),
+            "message": "Session ended and summary saved"
+        }
+
+    @mcp.tool()
+    def memory_log_observation(
+        session_id: str,
+        tool_name: str,
+        tool_input: str,
+        tool_output: str
+    ) -> dict:
+        """Log an observation from tool execution.
+        
+        Captures tool outputs for future memory retrieval.
+        Call this after important tool executions to build session memory.
+        
+        Args:
+            session_id: Active session identifier
+            tool_name: Tool that was executed (e.g., "Read", "Edit")
+            tool_input: Tool input
+            tool_output: Tool output
+        
+        Returns:
+            Dict with observation_id and status
+        """
+        obs_id = session_mgr.on_tool_use(
+            session_id, tool_name, tool_input, tool_output
+        )
+        
+        return {
+            "observation_id": obs_id,
+            "status": "logged" if obs_id else "failed",
+            "message": "Observation queued for compression" if obs_id else "Session not active"
+        }
+
+    @mcp.tool()
+    def memory_search(
+        query: str,
+        limit: int = 50,
+        filters: Optional[dict] = None
+    ) -> dict:
+        """Layer 1: Search memory index (lightweight, ~75 tokens/result).
+        
+        Returns compact metadata for filtering. Use this first to identify relevant memories.
+        Token-efficient: ~75 tokens per result vs ~750 for full details.
+        
+        Args:
+            query: Search query
+            limit: Max results to return (default: 50)
+            filters: Optional filters (tool_name, obs_type, session_id)
+        
+        Returns:
+            Dict with results (list of MemoryIndex), count, and estimated_tokens
+        """
+        results = retriever.layer1_search_index(query, limit, filters)
+        
+        return {
+            "query": query,
+            "results": [r.__dict__ for r in results],
+            "count": len(results),
+            "estimated_tokens": len(results) * 75
+        }
+
+    @mcp.tool()
+    def memory_timeline(
+        ids: TypingList[str],
+        window: str = "5m"
+    ) -> dict:
+        """Layer 2: Get chronological context for memory IDs (~200 tokens/result).
+        
+        Returns narrative flow around observations. Use after memory_search to understand sequence.
+        Provides timeline context for how observations relate to each other.
+        
+        Args:
+            ids: List of observation IDs from memory_search
+            window: Time window for context (not yet implemented)
+        
+        Returns:
+            Dict with timeline entries and estimated_tokens
+        """
+        results = retriever.layer2_timeline(ids, window)
+        
+        return {
+            "ids": ids,
+            "timeline": [r.__dict__ for r in results],
+            "count": len(results),
+            "estimated_tokens": len(results) * 200
+        }
+
+    @mcp.tool()
+    def memory_get_observations(ids: TypingList[str]) -> dict:
+        """Layer 3: Get full details for specific memory IDs (~750 tokens/result).
+        
+        Returns complete observation data. Use only for explicitly selected relevant items.
+        Most expensive layer - use after filtering with memory_search and memory_timeline.
+        
+        Args:
+            ids: List of observation IDs from memory_search or memory_timeline
+        
+        Returns:
+            Dict with full observation details and estimated_tokens
+        """
+        results = retriever.layer3_full_details(ids)
+        
+        return {
+            "ids": ids,
+            "observations": [r.__dict__ for r in results],
+            "count": len(results),
+            "estimated_tokens": len(results) * 750
+        }
+
+    @mcp.tool()
+    def memory_inject_context(
+        session_id: str,
+        query: Optional[str] = None,
+        limit: int = 50
+    ) -> dict:
+        """Auto-inject relevant context at session start.
+        
+        Retrieves up to 50 relevant observations from previous sessions.
+        Primary entry point for memory injection with caveman ultra compression.
+        
+        Args:
+            session_id: Current session ID
+            query: Optional query to filter relevant memories
+            limit: Max observations to inject (default: 50)
+        
+        Returns:
+            Dict with context_block, observation_count, and estimated_tokens
+        """
+        context = context_builder.build_session_start_context(session_id, query, limit)
+        
+        return {
+            "session_id": session_id,
+            "context_block": context,
+            "observation_count": limit,
+            "estimated_tokens": limit * 75
+        }
+
+    _memory_registered = True
 
 
 def _ensure_runtime() -> None:
@@ -402,6 +629,16 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
         "collab_help": "Get help about collab MCP tools.",
     }
 
+    memory_tools = {
+        "memory_session_start": "Start a new session and inject relevant context from previous sessions.",
+        "memory_session_end": "End a session and trigger summarization.",
+        "memory_log_observation": "Log an observation from tool execution.",
+        "memory_search": "Layer 1: Search memory index (lightweight, ~75 tokens/result).",
+        "memory_timeline": "Layer 2: Get chronological context for memory IDs (~200 tokens/result).",
+        "memory_get_observations": "Layer 3: Get full details for specific memory IDs (~750 tokens/result).",
+        "memory_inject_context": "Auto-inject relevant context at session start.",
+    }
+
     if tool_name:
         if tool_name in core_tools:
             return {"tool": tool_name, **core_tools[tool_name]}
@@ -411,11 +648,18 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
                 "description": collab_tools_summary[tool_name],
                 "note": f"Use collab_help(tool_name='{tool_name}') for detailed usage information",
             }
+        elif tool_name in memory_tools:
+            return {
+                "tool": tool_name,
+                "description": memory_tools[tool_name],
+                "category": "Memory Injection",
+            }
         else:
             return {
                 "error": f"Tool '{tool_name}' not found",
                 "available_core_tools": sorted(core_tools.keys()),
                 "available_collab_tools": sorted(collab_tools_summary.keys()),
+                "available_memory_tools": sorted(memory_tools.keys()),
             }
 
     return {
@@ -425,6 +669,11 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
                 "description": "Manage findings in the OpenLMLib knowledge base",
                 "tools": {name: info["description"] for name, info in core_tools.items()},
             },
+            "Memory Injection Tools": {
+                "description": "Lifecycle-based memory management with progressive disclosure (7 tools)",
+                "tools": memory_tools,
+                "note": "Use openlmlib_help(tool_name='memory_<tool>') for detailed usage",
+            },
             "CollabSession Tools": {
                 "description": "Multi-agent collaboration session management (30 tools)",
                 "summary": collab_tools_summary,
@@ -433,6 +682,7 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
         },
         "usage": [
             "Call openlmlib_help(tool_name='<tool>') for detailed usage of a core tool",
+            "Call openlmlib_help(tool_name='memory_<tool>') for memory tool usage",
             "Call collab_help(tool_name='<tool>') for detailed usage of a collab tool",
         ],
     }
@@ -454,6 +704,9 @@ def main() -> None:
         os.environ["OPENLMLIB_SETTINGS"] = str(Path(args.dir) / "config" / "settings.json")
         
     sys.argv = [sys.argv[0]] + unknown
+
+    # Register memory tools (lazy-loaded to avoid import penalty)
+    _register_memory_tools()
 
     # Register collab tools just before the server starts (not at import time).
     # This avoids the heavy collab module import penalty during Python startup.
