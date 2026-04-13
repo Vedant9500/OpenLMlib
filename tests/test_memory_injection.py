@@ -396,7 +396,8 @@ class TestCompressor:
         observation = {"tool_name": "Read", "tool_output": ""}
 
         result = compressor.compress(observation)
-        assert result["title"] == "Read execution"
+        # Title may have trailing period from caveman compression
+        assert result["title"].rstrip('.') == "Read execution"
 
     def test_compress_classifies_type(self, compressor):
         """Test observation type classification."""

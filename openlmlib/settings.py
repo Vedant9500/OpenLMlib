@@ -77,6 +77,8 @@ class MemoryInjectionSettings:
     compression_enabled: bool = True
     max_observations_per_session: int = 500
     session_cleanup_days: int = 30
+    caveman_enabled: bool = True
+    caveman_intensity: str = 'ultra'
 
 
 @dataclass
@@ -176,6 +178,8 @@ class Settings:
                 compression_enabled=bool(memory_data.get("compression_enabled", True)),
                 max_observations_per_session=int(memory_data.get("max_observations_per_session", 500)),
                 session_cleanup_days=int(memory_data.get("session_cleanup_days", 30)),
+                caveman_enabled=bool(memory_data.get("caveman_enabled", True)),
+                caveman_intensity=memory_data.get("caveman_intensity", "ultra"),
             ),
         )
 
@@ -240,6 +244,8 @@ DEFAULT_SETTINGS_DATA = {
         "compression_enabled": True,
         "max_observations_per_session": 500,
         "session_cleanup_days": 30,
+        "caveman_enabled": True,
+        "caveman_intensity": "ultra",
     },
 }
 

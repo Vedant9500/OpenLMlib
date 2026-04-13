@@ -18,14 +18,23 @@ logger = logging.getLogger(__name__)
 class ContextBuilder:
     """Builds context blocks for LLM injection."""
 
-    def __init__(self, retriever: ProgressiveRetriever):
+    def __init__(
+        self,
+        retriever: ProgressiveRetriever,
+        caveman_enabled: bool = True,
+        caveman_intensity: str = 'ultra'
+    ):
         """
         Initialize context builder.
 
         Args:
             retriever: ProgressiveRetriever instance
+            caveman_enabled: Enable ultra linguistic compression
+            caveman_intensity: Compression level ('lite', 'full', 'ultra')
         """
         self.retriever = retriever
+        self.caveman_enabled = caveman_enabled
+        self.caveman_intensity = caveman_intensity
 
     def build_session_start_context(
         self,
@@ -56,6 +65,18 @@ class ContextBuilder:
         if not context_block:
             logger.info(f"No context injected for session {session_id}")
             return ""
+
+        # Apply caveman compression
+        if self.caveman_enabled:
+            from .caveman_compress import compress_context_block
+            context_block, caveman_stats = compress_context_block(
+                context_block,
+                intensity=self.caveman_intensity
+            )
+            logger.info(
+                f"Caveman compressed context: "
+                f"{caveman_stats.get('reduction_percent', 0)}% reduction"
+            )
 
         # Format as system instruction
         context_lines = []
@@ -111,6 +132,20 @@ class ContextBuilder:
         if not index:
             logger.debug(f"No context for prompt: {user_prompt[:50]}")
             return ""
+
+        # Apply caveman compression to index entries
+        if self.caveman_enabled:
+            from .caveman_compress import caveman_compress
+            compressed_items = []
+            for item in index:
+                # Compress title
+                compressed_title, _ = caveman_compress(
+                    item.title,
+                    intensity=self.caveman_intensity
+                )
+                item.title = compressed_title
+                compressed_items.append(item)
+            index = compressed_items
 
         context_lines = []
         context_lines.append("# Relevant Previous Context")

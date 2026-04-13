@@ -27,6 +27,8 @@ class MemoryCompressor:
         max_narrative_length: int = 300,
         max_facts: int = 5,
         max_concepts: int = 10,
+        caveman_enabled: bool = True,
+        caveman_intensity: str = 'ultra',
     ):
         """
         Initialize compressor.
@@ -35,10 +37,14 @@ class MemoryCompressor:
             max_narrative_length: Max chars for narrative
             max_facts: Max facts to extract
             max_concepts: Max concepts to extract
+            caveman_enabled: Enable ultra linguistic compression
+            caveman_intensity: Compression level
         """
         self.max_narrative_length = max_narrative_length
         self.max_facts = max_facts
         self.max_concepts = max_concepts
+        self.caveman_enabled = caveman_enabled
+        self.caveman_intensity = caveman_intensity
 
     def compress(self, observation: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -74,6 +80,29 @@ class MemoryCompressor:
             " ".join(summary["facts"]),
         ])
         summary["token_count_compressed"] = self._count_tokens(compressed_text)
+
+        # Apply caveman compression to narrative and title
+        if self.caveman_enabled:
+            from .caveman_compress import caveman_compress
+            
+            if summary.get("narrative"):
+                summary["narrative"], caveman_stats = caveman_compress(
+                    summary["narrative"],
+                    intensity=self.caveman_intensity
+                )
+                summary["token_count_compressed"] = caveman_stats.get(
+                    "compressed_tokens", summary["token_count_compressed"]
+                )
+            
+            if summary.get("title"):
+                compressed_title, _ = caveman_compress(
+                    summary["title"],
+                    intensity=self.caveman_intensity
+                )
+                summary["title"] = compressed_title
+
+            summary["caveman_enabled"] = True
+            summary["caveman_intensity"] = self.caveman_intensity
 
         # Log compression ratio
         original = summary["token_count_original"]
