@@ -314,25 +314,272 @@ def _register_memory_tools() -> None:
         limit: int = 50
     ) -> dict:
         """Auto-inject relevant context at session start.
-        
+
         Retrieves up to 50 relevant observations from previous sessions.
         Primary entry point for memory injection with caveman ultra compression.
-        
+
         Args:
             session_id: Current session ID
             query: Optional query to filter relevant memories
             limit: Max observations to inject (default: 50)
-        
+
         Returns:
             Dict with context_block, observation_count, and estimated_tokens
         """
         context = context_builder.build_session_start_context(session_id, query, limit)
-        
+
         return {
             "session_id": session_id,
             "context_block": context,
             "observation_count": limit,
             "estimated_tokens": limit * 75
+        }
+
+    @mcp.tool()
+    def memory_quick_recap(
+        session_id: Optional[str] = None,
+        limit: int = 3
+    ) -> dict:
+        """Get a synthesized recap of recent session knowledge (~150-250 tokens).
+
+        Call this FIRST when starting work to understand what happened in past sessions.
+        Returns structured knowledge: files touched, decisions made, next steps,
+        conventions discovered — not raw tool outputs.
+
+        If you need more details on a specific topic after reading the recap,
+        call memory_detailed_context with a topic from the recap.
+
+        Args:
+            session_id: Optional specific session to recap (default: recent sessions)
+            limit: Max recent sessions to recap (default: 3)
+
+        Returns:
+            Dict with quick_recap text, session summaries, and next steps
+        """
+        if session_id:
+            knowledge_entries = storage.get_knowledge(session_id)
+        else:
+            knowledge_entries = storage.get_knowledge(limit=limit)
+
+        if not knowledge_entries:
+            return {
+                "quick_recap": "No synthesized knowledge from previous sessions found.",
+                "sessions_recapped": 0,
+                "message": "Call memory_log_observation during work to build knowledge.",
+                "estimated_tokens": 15,
+            }
+
+        # Build recap from knowledge entries
+        recap_lines = []
+        recap_lines.append("# Previous Sessions Recap")
+        recap_lines.append("")
+
+        all_next_steps = []
+        all_decisions = []
+        all_files = []
+
+        for entry in knowledge_entries:
+            knowledge_data = entry.get("knowledge", {})
+            from .memory.knowledge_extractor import SessionKnowledge
+            sk = SessionKnowledge.from_dict(knowledge_data)
+
+            recap_lines.append(f"## Session: {entry['session_id'][:16]}")
+            recap_lines.append(f"**Summary**: {sk.summary}")
+            recap_lines.append("")
+
+            if sk.files_touched:
+                files = ", ".join(
+                    f"{f['path']} ({f['action']})"
+                    for f in sk.files_touched[:5]
+                )
+                recap_lines.append(f"**Files**: {files}")
+                all_files.extend(sk.files_touched)
+                recap_lines.append("")
+
+            if sk.decisions_made:
+                recap_lines.append("**Key Decisions**:")
+                for d in sk.decisions_made[:3]:
+                    recap_lines.append(f"- {d}")
+                    all_decisions.append(d)
+                recap_lines.append("")
+
+            if sk.next_steps:
+                recap_lines.append("**Next Steps**:")
+                for n in sk.next_steps[:3]:
+                    recap_lines.append(f"- {n}")
+                    all_next_steps.append(n)
+                recap_lines.append("")
+
+        # Consolidated next steps
+        if all_next_steps:
+            recap_lines.append("## Consolidated Next Steps")
+            for n in all_next_steps[:5]:
+                recap_lines.append(f"- {n}")
+            recap_lines.append("")
+
+        recap_text = "\n".join(recap_lines)
+        token_estimate = int(len(recap_text.split()) * 1.3)
+
+        return {
+            "quick_recap": recap_text,
+            "sessions_recapped": len(knowledge_entries),
+            "next_steps": all_next_steps[:5],
+            "decisions_made": all_decisions[:5],
+            "files_touched": all_files[:10],
+            "estimated_tokens": token_estimate,
+            "message": (
+                f"Recapped {len(knowledge_entries)} session(s). "
+                "Call memory_detailed_context(topic='X') for deep dive on a topic, "
+                "or memory_get_observations(ids=[...]) for raw observation details."
+            ),
+        }
+
+    @mcp.tool()
+    def memory_detailed_context(
+        topic: str,
+        session_id: Optional[str] = None
+    ) -> dict:
+        """Get detailed context about a specific topic from past sessions (~500-800 tokens).
+
+        Call this AFTER memory_quick_recap when you need deep understanding of a topic.
+        Example topics: 'storage', 'privacy', 'MCP', 'compression', 'caveman',
+        'session_manager', or any file name/feature from the recap.
+
+        Returns detailed files, decisions, architecture notes, and conventions
+        related to the topic — not just compressed tool outputs.
+
+        Args:
+            topic: Topic to get detailed context about (e.g., 'storage', 'privacy')
+            session_id: Optional specific session to search (default: all sessions)
+
+        Returns:
+            Dict with detailed context text and related knowledge
+        """
+        # Get knowledge from relevant sessions
+        if session_id:
+            knowledge_entries = storage.get_knowledge(session_id)
+        else:
+            knowledge_entries = storage.get_knowledge(limit=10)
+
+        if not knowledge_entries:
+            return {
+                "detailed_context": f"No knowledge found for topic: {topic}",
+                "topic": topic,
+                "message": "Call memory_log_observation during work to build knowledge.",
+                "estimated_tokens": 15,
+            }
+
+        # Search both knowledge AND observations for topic relevance
+        from .memory.knowledge_extractor import SessionKnowledge
+
+        context_parts = []
+        context_parts.append(f"# Detailed Context: {topic}")
+        context_parts.append("")
+
+        relevant_found = False
+        for entry in knowledge_entries:
+            knowledge_data = entry.get("knowledge", {})
+            sk = SessionKnowledge.from_dict(knowledge_data)
+
+            # Check if topic is relevant to this session's knowledge
+            topic_lower = topic.lower()
+            all_text = (
+                f"{sk.summary} "
+                + " ".join(f['path'] for f in sk.files_touched) + " "
+                + " ".join(f.get('reason', '') for f in sk.files_touched) + " "
+                + " ".join(sk.decisions_made) + " "
+                + " ".join(sk.conventions_found) + " "
+                + " ".join(sk.architecture_notes) + " "
+                + " ".join(sk.next_steps)
+            ).lower()
+
+            if topic_lower in all_text:
+                relevant_found = True
+                context_parts.append(f"## Session: {entry['session_id'][:16]}")
+                context_parts.append(f"**Summary**: {sk.summary}")
+                context_parts.append("")
+
+                # Topic-related files
+                topic_files = [
+                    f for f in sk.files_touched
+                    if topic_lower in f["path"].lower() or topic_lower in f.get("reason", "").lower()
+                ]
+                if topic_files:
+                    context_parts.append("### Related Files")
+                    for f in topic_files:
+                        context_parts.append(f"- `{f['path']}` — {f['action']}: {f['reason']}")
+                    context_parts.append("")
+
+                # Topic-related decisions
+                topic_decisions = [
+                    d for d in sk.decisions_made
+                    if topic_lower in d.lower()
+                ]
+                if topic_decisions:
+                    context_parts.append("### Related Decisions")
+                    for d in topic_decisions:
+                        context_parts.append(f"- {d}")
+                    context_parts.append("")
+
+                # Architecture notes
+                topic_arch = [
+                    a for a in sk.architecture_notes
+                    if topic_lower in a.lower()
+                ]
+                if topic_arch:
+                    context_parts.append("### Architecture Notes")
+                    for a in topic_arch:
+                        context_parts.append(f"- {a}")
+                    context_parts.append("")
+
+                # Conventions
+                topic_conventions = [
+                    c for c in sk.conventions_found
+                    if topic_lower in c.lower()
+                ]
+                if topic_conventions:
+                    context_parts.append("### Conventions")
+                    for c in topic_conventions:
+                        context_parts.append(f"- {c}")
+                    context_parts.append("")
+
+        # Also search raw observations for the topic
+        observations = storage.search_observations(query=topic, limit=10)
+        if observations:
+            context_parts.append("## Related Observations")
+            context_parts.append(f"Found {len(observations)} observations mentioning '{topic}':")
+            context_parts.append("")
+            for obs in observations[:5]:
+                title = obs.get("tool_name", "unknown")
+                summary = obs.get("compressed_summary", "")
+                context_parts.append(
+                    f"- **{title}** (ID: {obs['id']}): {summary[:150]}"
+                )
+            context_parts.append("")
+
+        if not relevant_found and not observations:
+            return {
+                "detailed_context": (
+                    f"No knowledge or observations found related to '{topic}'. "
+                    "Try a different topic, or call memory_search for raw text search."
+                ),
+                "topic": topic,
+                "estimated_tokens": 25,
+            }
+
+        context_text = "\n".join(context_parts)
+        token_estimate = int(len(context_text.split()) * 1.3)
+
+        return {
+            "detailed_context": context_text,
+            "topic": topic,
+            "sessions_searched": len(knowledge_entries),
+            "observations_found": len(observations) if observations else 0,
+            "estimated_tokens": token_estimate,
+            "message": (
+                f"Detailed context for '{topic}'. "
+                "Call memory_get_observations(ids=[...]) for full raw observation details."
+            ),
         }
 
     _memory_registered = True
@@ -637,6 +884,8 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
         "memory_timeline": "Layer 2: Get chronological context for memory IDs (~200 tokens/result).",
         "memory_get_observations": "Layer 3: Get full details for specific memory IDs (~750 tokens/result).",
         "memory_inject_context": "Auto-inject relevant context at session start.",
+        "memory_quick_recap": "Get a synthesized recap of recent sessions (~150-250 tokens). Call FIRST for structured knowledge.",
+        "memory_detailed_context": "Get detailed context about a specific topic (~500-800 tokens). Call AFTER quick recap.",
     }
 
     if tool_name:

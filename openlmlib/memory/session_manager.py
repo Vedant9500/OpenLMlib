@@ -356,6 +356,22 @@ class SessionManager:
                         exc_info=True
                     )
 
+                # Auto-synthesize knowledge from observations
+                try:
+                    from .knowledge_extractor import extract_knowledge
+                    knowledge = extract_knowledge(session_id, observations)
+                    self.storage.save_knowledge(session_id, knowledge.to_dict())
+                    logger.info(
+                        f"Synthesized knowledge for session {session_id} "
+                        f"({len(knowledge.files_touched)} files, "
+                        f"{len(knowledge.decisions_made)} decisions)"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to extract knowledge: {e}",
+                        exc_info=True
+                    )
+
         # End session in storage
         ended = self.storage.end_session(session_id)
 

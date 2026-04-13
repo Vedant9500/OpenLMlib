@@ -18,6 +18,11 @@ from .memory_retriever import ProgressiveRetriever
 from .storage import MemoryStorage
 from .context_builder import ContextBuilder
 from .caveman_compress import caveman_compress, compress_context_block, compress_observation_summary
+from .knowledge_extractor import (
+    KnowledgeExtractor,
+    SessionKnowledge,
+    extract_knowledge,
+)
 
 __all__ = [
     "HookType",
@@ -31,4 +36,7 @@ __all__ = [
     "caveman_compress",
     "compress_context_block",
     "compress_observation_summary",
+    "KnowledgeExtractor",
+    "SessionKnowledge",
+    "extract_knowledge",
 ]

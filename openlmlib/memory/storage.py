@@ -79,6 +79,20 @@ class MemoryStorage:
             )
         """)
 
+        # Knowledge table (synthesized session knowledge)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS memory_knowledge (
+                session_id TEXT PRIMARY KEY,
+                knowledge_json TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                files_touched TEXT,
+                decisions TEXT,
+                next_steps TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (session_id) REFERENCES memory_sessions(session_id) ON DELETE CASCADE
+            )
+        """)
+
         # Indexes for performance
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_obs_session
@@ -468,6 +482,116 @@ class MemoryStorage:
             "concepts": json.loads(row[3]) if row[3] else [],
             "created_at": row[4],
         }
+
+    def save_knowledge(
+        self,
+        session_id: str,
+        knowledge: Dict[str, Any]
+    ) -> bool:
+        """
+        Save synthesized knowledge for a session.
+
+        Args:
+            session_id: Session identifier
+            knowledge: Knowledge dict from SessionKnowledge.to_dict()
+
+        Returns:
+            True if knowledge was saved
+        """
+        cursor = self.conn.cursor()
+        created_at = datetime.now(timezone.utc).isoformat()
+
+        import json
+        files_touched = json.dumps(knowledge.get("files_touched", []))
+        decisions = json.dumps(knowledge.get("decisions_made", []))
+        next_steps = json.dumps(knowledge.get("next_steps", []))
+
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO memory_knowledge
+            (session_id, knowledge_json, summary, files_touched, decisions, next_steps, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                session_id,
+                json.dumps(knowledge),
+                knowledge.get("summary", ""),
+                files_touched,
+                decisions,
+                next_steps,
+                created_at
+            )
+        )
+
+        self.conn.commit()
+        return cursor.rowcount > 0
+
+    def get_knowledge(
+        self,
+        session_id: Optional[str] = None,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        Get synthesized knowledge for a session or recent sessions.
+
+        Args:
+            session_id: Optional session identifier (if None, returns recent)
+            limit: Max knowledge entries to return (for recent query)
+
+        Returns:
+            List of knowledge dicts
+        """
+        cursor = self.conn.cursor()
+
+        if session_id:
+            cursor.execute(
+                """
+                SELECT session_id, knowledge_json, summary,
+                       files_touched, decisions, next_steps, created_at
+                FROM memory_knowledge
+                WHERE session_id = ?
+                """,
+                (session_id,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return []
+
+            import json
+            return [{
+                "session_id": row[0],
+                "knowledge": json.loads(row[1]),
+                "summary": row[2],
+                "files_touched": json.loads(row[3]) if row[3] else [],
+                "decisions": json.loads(row[4]) if row[4] else [],
+                "next_steps": json.loads(row[5]) if row[5] else [],
+                "created_at": row[6],
+            }]
+        else:
+            cursor.execute(
+                """
+                SELECT session_id, knowledge_json, summary,
+                       files_touched, decisions, next_steps, created_at
+                FROM memory_knowledge
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (limit,)
+            )
+
+            results = []
+            for row in cursor.fetchall():
+                import json
+                results.append({
+                    "session_id": row[0],
+                    "knowledge": json.loads(row[1]),
+                    "summary": row[2],
+                    "files_touched": json.loads(row[3]) if row[3] else [],
+                    "decisions": json.loads(row[4]) if row[4] else [],
+                    "next_steps": json.loads(row[5]) if row[5] else [],
+                    "created_at": row[6],
+                })
+            return results
 
     def search_observations(
         self,
