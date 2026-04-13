@@ -11,6 +11,7 @@ Integrates with HookRegistry and MemoryStorage.
 
 from __future__ import annotations
 
+import atexit
 import logging
 import time
 from datetime import datetime, timezone
@@ -26,7 +27,7 @@ from .hooks import (
     default_session_start_handler,
     default_stop_handler,
 )
-from .privacy import contains_private, filter_private
+from .privacy import sanitize_for_storage
 from .storage import MemoryStorage
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,9 @@ class SessionManager:
 
         # Register default hooks
         self._register_default_hooks()
+
+        # Register atexit handler to clean up active sessions
+        atexit.register(self._cleanup_on_exit)
 
     def _register_default_hooks(self):
         """Register default lifecycle hooks."""
@@ -198,10 +202,9 @@ class SessionManager:
             )
             return None
 
-        # Privacy filtering
-        if contains_private(tool_output):
-            tool_output = filter_private(tool_output)
-            logger.debug(f"Filtered private content from {tool_name} output")
+        # Privacy filtering on both input and output
+        tool_input = sanitize_for_storage(tool_input)
+        tool_output = sanitize_for_storage(tool_output)
 
         # Create observation
         obs_id = f"obs_{uuid4().hex[:12]}"
@@ -388,6 +391,22 @@ class SessionManager:
         )
 
         return result
+
+    def _cleanup_on_exit(self):
+        """Clean up all active sessions on process exit."""
+        if not self.active_sessions:
+            return
+
+        logger.info(f"Cleaning up {len(self.active_sessions)} active sessions on exit")
+        session_ids = list(self.active_sessions.keys())
+        for session_id in session_ids:
+            try:
+                self.storage.end_session(session_id)
+                logger.debug(f"Ended session {session_id} on exit")
+            except Exception as e:
+                logger.error(f"Failed to end session {session_id} on exit: {e}")
+
+        self.active_sessions.clear()
 
     def get_active_sessions(self) -> List[Dict[str, Any]]:
         """

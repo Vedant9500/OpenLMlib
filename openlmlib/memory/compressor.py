@@ -57,7 +57,15 @@ class MemoryCompressor:
 
         Returns:
             Compressed summary dict
+
+        Raises:
+            ValueError: If observation is not a dict
         """
+        if not isinstance(observation, dict):
+            raise ValueError(
+                f"Expected dict observation, got {type(observation).__name__}"
+            )
+
         tool_output = observation.get("tool_output", "")
         tool_name = observation.get("tool_name", "unknown")
 

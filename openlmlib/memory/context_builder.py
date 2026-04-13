@@ -7,6 +7,7 @@ Handles session start and prompt-specific context injection.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -211,7 +212,7 @@ class ContextBuilder:
             )
             result["item_count"] = len(index)
             result["token_estimate"] = len(index) * 75
-            result["items"] = [item.__dict__ for item in index]
+            result["items"] = [dataclasses.asdict(item) for item in index]
 
             # Format context
             if index:
@@ -242,7 +243,7 @@ class ContextBuilder:
             timeline = self.retriever.layer2_timeline(ids)
             result["item_count"] = len(timeline)
             result["token_estimate"] = len(timeline) * 200
-            result["items"] = [item.__dict__ for item in timeline]
+            result["items"] = [dataclasses.asdict(item) for item in timeline]
 
             # Format context
             if timeline:
@@ -271,7 +272,7 @@ class ContextBuilder:
             details = self.retriever.layer3_full_details(ids)
             result["item_count"] = len(details)
             result["token_estimate"] = len(details) * 750
-            result["items"] = [item.__dict__ for item in details]
+            result["items"] = [dataclasses.asdict(item) for item in details]
 
             # Format context
             if details:

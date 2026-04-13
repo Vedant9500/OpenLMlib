@@ -33,6 +33,9 @@ class MemoryStorage:
         """Initialize memory tables and indexes."""
         cursor = self.conn.cursor()
 
+        # Enable foreign key constraints
+        cursor.execute("PRAGMA foreign_keys = ON")
+
         # Sessions table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS memory_sessions (
@@ -60,7 +63,7 @@ class MemoryStorage:
                 facts TEXT,
                 concepts TEXT,
                 obs_type TEXT,
-                FOREIGN KEY (session_id) REFERENCES memory_sessions(session_id)
+                FOREIGN KEY (session_id) REFERENCES memory_sessions(session_id) ON DELETE CASCADE
             )
         """)
 
@@ -72,7 +75,7 @@ class MemoryStorage:
                 key_facts TEXT,
                 concepts TEXT,
                 created_at TEXT NOT NULL,
-                FOREIGN KEY (session_id) REFERENCES memory_sessions(session_id)
+                FOREIGN KEY (session_id) REFERENCES memory_sessions(session_id) ON DELETE CASCADE
             )
         """)
 
@@ -97,8 +100,28 @@ class MemoryStorage:
             ON memory_observations(obs_type)
         """)
 
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_obs_embedding
+            ON memory_observations(embedding_id)
+        """)
+
         self.conn.commit()
         logger.info("Memory storage schema initialized")
+
+    def close(self):
+        """Close the database connection."""
+        if self.conn:
+            self.conn.close()
+            logger.debug("Memory storage connection closed")
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - closes connection."""
+        self.close()
+        return False
 
     def create_session(
         self,
@@ -207,20 +230,6 @@ class MemoryStorage:
         )
 
         self.conn.commit()
-
-        # Increment session count (ignore errors if session doesn't exist)
-        try:
-            cursor.execute(
-                """
-                UPDATE memory_sessions
-                SET observation_count = observation_count + 1
-                WHERE session_id = ?
-                """,
-                (session_id,)
-            )
-            self.conn.commit()
-        except Exception:
-            pass
 
         logger.debug(f"Added observation {obs_id} for session {session_id}")
         return obs_id
@@ -494,12 +503,12 @@ class MemoryStorage:
                 where_clauses.append("session_id = ?")
                 params.append(filters["session_id"])
 
-        # Add text search
+        # Add text search (escape LIKE special characters)
         if query:
             where_clauses.append(
                 "(tool_output LIKE ? OR compressed_summary LIKE ? OR tool_input LIKE ?)"
             )
-            search_pattern = f"%{query}%"
+            search_pattern = f"%{self._escape_like(query)}%"
             params.extend([search_pattern, search_pattern, search_pattern])
 
         where_sql = (
@@ -606,6 +615,10 @@ class MemoryStorage:
         observations.reverse()
         return observations
 
+    def _escape_like(self, s: str) -> str:
+        """Escape LIKE special characters to prevent wildcard matching."""
+        return s.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+
     def get_session_stats(self, session_id: str) -> Dict[str, Any]:
         """
         Get statistics for a session.
@@ -660,6 +673,7 @@ class MemoryStorage:
     def cleanup_old_sessions(self, max_age_days: int = 30) -> int:
         """
         Clean up sessions older than max_age_days.
+        Uses ON DELETE CASCADE for dependent tables.
 
         Args:
             max_age_days: Maximum age in days
@@ -688,26 +702,8 @@ class MemoryStorage:
         if not old_session_ids:
             return 0
 
-        # Delete observations
+        # Delete sessions (CASCADE deletes observations and summaries)
         placeholders = ",".join("?" * len(old_session_ids))
-        cursor.execute(
-            f"""
-            DELETE FROM memory_observations
-            WHERE session_id IN ({placeholders})
-            """,
-            old_session_ids
-        )
-
-        # Delete summaries
-        cursor.execute(
-            f"""
-            DELETE FROM memory_summaries
-            WHERE session_id IN ({placeholders})
-            """,
-            old_session_ids
-        )
-
-        # Delete sessions
         cursor.execute(
             f"""
             DELETE FROM memory_sessions

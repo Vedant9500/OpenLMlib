@@ -176,6 +176,8 @@ class ObservationQueue:
         """
         Wait for all items to be processed.
 
+        Uses the underlying queue.Queue.join() which waits for task_done() calls.
+
         Args:
             timeout: Max seconds to wait (None = forever)
 
@@ -186,14 +188,18 @@ class ObservationQueue:
             self.queue.join()
             return True
 
-        # Poll with timeout
+        # Use a thread to call queue.join() with timeout
+        import threading
         import time
-        start = time.time()
-        while not self.empty():
-            if time.time() - start > timeout:
-                return False
-            time.sleep(0.1)
-        return True
+        evt = threading.Event()
+
+        def _join():
+            self.queue.join()
+            evt.set()
+
+        t = threading.Thread(target=_join, daemon=True)
+        t.start()
+        return evt.wait(timeout)
 
     def stats(self) -> Dict[str, Any]:
         """Get queue statistics."""

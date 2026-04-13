@@ -15,36 +15,62 @@ logger = logging.getLogger(__name__)
 
 # Patterns to detect private/sensitive content
 PRIVATE_PATTERNS = [
-    # API keys and tokens
+    # API keys and tokens (generic)
     r'API_KEY\s*=\s*\S+',
     r'API_SECRET\s*=\s*\S+',
     r'SECRET_KEY\s*=\s*\S+',
     r'ACCESS_TOKEN\s*=\s*\S+',
     r'AUTH_TOKEN\s*=\s*\S+',
     r'TOKEN\s*=\s*\S+',
-    
+    r'PRIVATE_KEY\s*=\s*\S+',
+
     # Passwords
     r'PASSWORD\s*=\s*\S+',
     r'PASSWD\s*=\s*\S+',
     r'DB_PASSWORD\s*=\s*\S+',
     r'DATABASE_PASSWORD\s*=\s*\S+',
-    
+    r'MYSQL_ROOT_PASSWORD\s*=\s*\S+',
+
     # Live API keys (OpenAI, Anthropic, etc.)
     r'sk-live-[a-zA-Z0-9]+',
     r'sk-test-[a-zA-Z0-9]+',
+    r'sk-proj-[a-zA-Z0-9]+',
     r'anthropic-[a-zA-Z0-9]+',
     r'openai-[a-zA-Z0-9]+',
-    
+    r'xai-[a-zA-Z0-9]+',
+
+    # GitHub tokens
+    r'ghp_[a-zA-Z0-9]{36}',
+    r'gho_[a-zA-Z0-9]{36}',
+    r'github_pat_[a-zA-Z0-9_]{22,}',
+
+    # AWS keys
+    r'AKIA[0-9A-Z]{16}',
+
+    # JWT tokens
+    r'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}',
+
+    # Slack tokens
+    r'xox[bpsar]-[a-zA-Z0-9-]+',
+
     # Private keys
     r'-----BEGIN\s+(RSA\s+)?PRIVATE\s+KEY-----',
     r'-----BEGIN\s+EC\s+PRIVATE\s+KEY-----',
-    
+    r'-----BEGIN\s+DSA\s+PRIVATE\s+KEY-----',
+    r'-----BEGIN\s+OPENSSH\s+PRIVATE\s+KEY-----',
+    r'-----BEGIN\s+PGP\s+PRIVATE\s+KEY BLOCK-----',
+
     # Connection strings with credentials
     r'mongodb(\+srv)?://\S+:\S+@',
     r'postgres(ql)?://\S+:\S+@',
     r'mysql://\S+:\S+@',
     r'redis://:\S+@',
-    
+    r'amqp://\S+:\S+@',
+    r'smtp://\S+:\S+@',
+
+    # Bearer tokens
+    r'[Bb]earer\s+[a-zA-Z0-9\-._~+/]+=*',
+
     # Email addresses (sometimes considered private)
     # r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',  # Uncomment if needed
 ]

@@ -400,14 +400,17 @@ def compress_observation_summary(
 ) -> tuple[dict, dict]:
     """
     Compress observation summary fields.
-    
+
     Args:
         summary: Summary dict from compressor
         intensity: Compression intensity
-    
+
     Returns:
         Tuple of (compressed_summary, stats)
     """
+    # Shallow copy to avoid mutating caller's dict
+    summary = dict(summary)
+
     all_stats = {
         'original_tokens': 0,
         'compressed_tokens': 0,
