@@ -328,22 +328,13 @@ def run_real_session(
         )
 
         # Call each worker with session context and differentiated roles
-        for i, (worker_model, worker_id) in enumerate(zip(worker_models, worker_ids)):
+        def _run_worker_task(i, worker_model, worker_id, worker_focus):
             print(f"\n[4.{round_num}.{i+1}] Worker {i+1}: {worker_model['id']}")
 
             # Compile context so the worker can see session history
             worker_context = compiler.format_context_for_prompt(
                 compiler.compile_context(session_id, worker_id, max_messages=20)
             )
-
-            # Differentiate worker roles to avoid duplicate responses
-            focus_areas = [
-                "methodology, approach design, and technical implementation",
-                "literature review, comparative analysis, and validation",
-                "benchmarking, experiments, and results interpretation",
-                "integration, documentation, and code quality",
-            ]
-            worker_focus = focus_areas[i % len(focus_areas)]
 
             worker_system = (
                 f"You are Worker {i+1} of {len(worker_models)} in a multi-agent research collaboration.\n"
@@ -391,8 +382,24 @@ def run_real_session(
                 shared=True,
             )
 
-            if inter_call_delay > 0 and i < len(worker_models) - 1:
-                time.sleep(inter_call_delay)
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(worker_models)) as executor:
+            futures = []
+            for i, (worker_model, worker_id) in enumerate(zip(worker_models, worker_ids)):
+                # Differentiate worker roles to avoid duplicate responses
+                focus_areas = [
+                    "methodology, approach design, and technical implementation",
+                    "literature review, comparative analysis, and validation",
+                    "benchmarking, experiments, and results interpretation",
+                    "integration, documentation, and code quality",
+                ]
+                worker_focus = focus_areas[i % len(focus_areas)]
+
+                futures.append(executor.submit(_run_worker_task, i, worker_model, worker_id, worker_focus))
+                if inter_call_delay > 0 and i < len(worker_models) - 1:
+                    time.sleep(inter_call_delay)
+            
+            concurrent.futures.wait(futures)
 
         if inter_call_delay > 0:
             time.sleep(inter_call_delay)

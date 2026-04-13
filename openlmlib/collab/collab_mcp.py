@@ -305,8 +305,7 @@ def collab_create_session(
         safe_title = sanitize_content(title)
         safe_desc = sanitize_content(task_description)
 
-        conn, sessions_dir = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, sessions_dir):
             result = create_collab_session(
                 conn=conn,
                 sessions_dir=sessions_dir,
@@ -330,8 +329,6 @@ def collab_create_session(
                     "Use collab_read_messages to monitor progress",
                 ],
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_create_session", e)
 
@@ -358,8 +355,7 @@ def collab_join_session(
         if not model or not isinstance(model, str):
             return {"success": False, "error": "model is required", "error_type": "validation_error"}
 
-        conn, sessions_dir = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, sessions_dir):
             verify_session_exists_and_active(conn, session_id)
 
             result = join_collab_session(
@@ -392,8 +388,6 @@ def collab_join_session(
                     "Use collab_add_artifact to save your research outputs",
                 ],
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_join_session", e)
 
@@ -414,15 +408,12 @@ def collab_list_sessions(
     """
     try:
         limit = max(1, min(limit, 100))
-        conn, _ = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, _):
             sessions = collab_db.list_sessions(conn, status=status, limit=limit)
             return {
                 "sessions": sessions,
                 "count": len(sessions),
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_list_sessions", e)
 
@@ -439,8 +430,7 @@ def collab_get_session_state(session_id: str, agent_id: str) -> Dict:
     """
     try:
         validate_session_id(session_id)
-        conn, sessions_dir = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, sessions_dir):
             session = _require_reader_access(conn, session_id, agent_id)
 
             state = collab_db.get_session_state(conn, session_id)
@@ -453,8 +443,6 @@ def collab_get_session_state(session_id: str, agent_id: str) -> Dict:
                 "tasks": tasks,
                 "agents": agents,
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_get_session_state", e)
 
@@ -481,8 +469,7 @@ def collab_update_session_state(
     try:
         validate_session_id(session_id)
         validate_agent_id(orchestrator_id)
-        conn, sessions_dir = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, sessions_dir):
             verify_orchestrator(conn, session_id, orchestrator_id)
 
             sm = StateManager(conn)
@@ -507,8 +494,6 @@ def collab_update_session_state(
                 "updated_at": now,
                 "state": merged,
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_update_session_state", e)
 
@@ -558,8 +543,7 @@ def collab_send_message(
         if to_agent is not None and to_agent != "":
             validate_agent_id(to_agent)
 
-        conn, sessions_dir = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, sessions_dir):
             verify_session_exists_and_active(conn, session_id)
 
             if from_agent:
@@ -602,8 +586,6 @@ def collab_send_message(
                 "session_id": session_id,
                 "created_at": now,
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_send_message", e)
 
@@ -634,8 +616,7 @@ def collab_read_messages(
         if not agent_id:
             return {"success": False, "error": "agent_id is required", "error_type": "validation_error"}
 
-        conn, sessions_dir = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, sessions_dir):
             _require_reader_access(conn, session_id, agent_id)
 
             bus = MessageBus(conn, sessions_dir)
@@ -661,8 +642,6 @@ def collab_read_messages(
                 "offset_updated": offset_updated,
                 "has_more": len(messages) >= limit,
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_read_messages", e)
 
@@ -713,8 +692,7 @@ def collab_poll_messages(
         if not agent_id:
             return {"success": False, "error": "agent_id is required", "error_type": "validation_error"}
 
-        conn, sessions_dir = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, sessions_dir):
             _require_reader_access(conn, session_id, agent_id)
 
             # Check current status first
@@ -762,30 +740,32 @@ def collab_poll_messages(
                     "has_more": len(existing) >= limit,
                 }
 
-            # No new messages — wait for a notification signal
-            if timeout == 0:
-                return {
-                    "success": True,
-                    "messages": [],
-                    "count": 0,
-                    "waited_seconds": 0.0,
-                    "timed_out": True,
-                    "last_seq": stored_last_seq,
-                    "session_status": session_status,
-                }
+        # No new messages — wait for a notification signal without holding DB lock
+        if timeout == 0:
+            return {
+                "success": True,
+                "messages": [],
+                "count": 0,
+                "waited_seconds": 0.0,
+                "timed_out": True,
+                "last_seq": stored_last_seq,
+                "session_status": session_status,
+            }
 
-            start = _time.monotonic()
-            notify = wait_for_notification(
-                sessions_dir=sessions_dir,
-                session_id=session_id,
-                timeout=timeout,
-                poll_interval=0.3,
-            )
-            waited = _time.monotonic() - start
+        start = _time.monotonic()
+        notify = wait_for_notification(
+            sessions_dir=sessions_dir,
+            session_id=session_id,
+            timeout=timeout,
+            poll_interval=0.3,
+            last_seq=stored_last_seq,
+        )
+        waited = _time.monotonic() - start
 
-            # Clear notification after processing
-            clear_notification(sessions_dir, session_id)
-
+        # Re-acquire connection to read results
+        with _collab_connection() as (conn, sessions_dir):
+            bus = MessageBus(conn, sessions_dir)
+            
             # Re-check session status after waiting
             session = collab_db.get_session(conn, session_id)
             session_status = session.get("status", "unknown") if session else "unknown"
@@ -802,19 +782,7 @@ def collab_poll_messages(
                     "note": f"Session is now {session_status}",
                 }
 
-            if notify is None:
-                # Timeout — no new messages
-                return {
-                    "success": True,
-                    "messages": [],
-                    "count": 0,
-                    "waited_seconds": round(waited, 2),
-                    "timed_out": True,
-                    "last_seq": stored_last_seq,
-                    "session_status": session_status,
-                }
-
-            # Notification arrived — read all new messages from DB
+            # ALWAYS read new messages, even on timeout, to avoid missing any
             messages = bus.read_new(
                 session_id=session_id,
                 last_seq=stored_last_seq,
@@ -829,20 +797,20 @@ def collab_poll_messages(
             else:
                 new_last_seq = stored_last_seq
 
+            is_timeout = not messages and notify is None
+
             return {
                 "success": True,
                 "messages": messages,
                 "count": len(messages),
                 "waited_seconds": round(waited, 2),
-                "timed_out": False,
+                "timed_out": is_timeout,
                 "last_seq": new_last_seq,
                 "session_status": session_status,
                 "has_more": len(messages) >= limit,
-                "notification_from": notify.get("sender"),
-                "notification_type": notify.get("msg_type"),
+                "notification_from": notify.get("sender") if notify else None,
+                "notification_type": notify.get("msg_type") if notify else None,
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_poll_messages", e)
 
@@ -866,8 +834,7 @@ def collab_tail_messages(
         validate_session_id(session_id)
         n = max(1, min(n, 100))
 
-        conn, sessions_dir = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, sessions_dir):
             _require_reader_access(conn, session_id, agent_id)
 
             bus = MessageBus(conn, sessions_dir)
@@ -876,8 +843,6 @@ def collab_tail_messages(
                 "messages": messages,
                 "count": len(messages),
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_tail_messages", e)
 
@@ -911,8 +876,7 @@ def collab_read_message_range(
         if end_seq - start_seq > 500:
             return {"success": False, "error": "Range too large (max 500 messages)", "error_type": "validation_error"}
 
-        conn, sessions_dir = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, sessions_dir):
             _require_reader_access(conn, session_id, agent_id)
             bus = MessageBus(conn, sessions_dir)
             messages = bus.read_range(session_id, start_seq, end_seq)
@@ -922,8 +886,6 @@ def collab_read_message_range(
                 "start_seq": start_seq,
                 "end_seq": end_seq,
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_read_message_range", e)
 
@@ -953,8 +915,7 @@ def collab_grep_messages(
             return {"success": False, "error": "pattern is required", "error_type": "validation_error"}
         limit = max(1, min(limit, 100))
 
-        conn, sessions_dir = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, sessions_dir):
             _require_reader_access(conn, session_id, agent_id)
             bus = MessageBus(conn, sessions_dir)
             try:
@@ -971,8 +932,6 @@ def collab_grep_messages(
                 "count": len(messages),
                 "pattern": pattern,
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_grep_messages", e)
 
@@ -1000,9 +959,7 @@ def collab_get_session_context(
         validate_session_id(session_id)
         max_messages = max(1, min(max_messages, 200))
 
-        conn, sessions_dir = _get_collab_connection()
-
-        try:
+        with _collab_connection() as (conn, sessions_dir):
             verify_session_exists_and_active(conn, session_id)
 
             if agent_id is not None and agent_id != "":
@@ -1020,8 +977,6 @@ def collab_get_session_context(
                 "structured_context": context,
                 "formatted_context": formatted,
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_get_session_context", e)
 
@@ -1063,8 +1018,7 @@ def collab_add_artifact(
 
         safe_title = sanitize_content(title)
 
-        conn, sessions_dir = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, sessions_dir):
             verify_session_exists_and_active(conn, session_id)
             verify_agent_in_session(conn, created_by, session_id)
 
@@ -1106,8 +1060,6 @@ def collab_add_artifact(
                 "file_path": result["file_path"],
                 "shared": result["shared"],
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_add_artifact", e)
 
@@ -1131,8 +1083,7 @@ def collab_list_artifacts(
     """
     try:
         validate_session_id(session_id)
-        conn, sessions_dir = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, sessions_dir):
             _require_reader_access(conn, session_id, agent_id)
 
             store = ArtifactStore(conn, sessions_dir)
@@ -1141,8 +1092,6 @@ def collab_list_artifacts(
                 "artifacts": artifacts,
                 "count": len(artifacts),
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_list_artifacts", e)
 
@@ -1166,8 +1115,7 @@ def collab_get_artifact(
         validate_session_id(session_id)
         validate_artifact_id(artifact_id)
 
-        conn, sessions_dir = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, sessions_dir):
             _require_reader_access(conn, session_id, agent_id)
             store = ArtifactStore(conn, sessions_dir)
             content = store.get_content_by_id(session_id, artifact_id)
@@ -1181,8 +1129,6 @@ def collab_get_artifact(
                 "content": content,
                 "metadata": metadata,
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_get_artifact", e)
 
@@ -1209,8 +1155,7 @@ def collab_grep_artifacts(
         if not pattern or not isinstance(pattern, str):
             return {"success": False, "error": "pattern is required", "error_type": "validation_error"}
 
-        conn, sessions_dir = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, sessions_dir):
             _require_reader_access(conn, session_id, agent_id)
             store = ArtifactStore(conn, sessions_dir)
             matches = store.grep_artifacts(session_id, pattern, created_by)
@@ -1219,8 +1164,6 @@ def collab_grep_artifacts(
                 "count": len(matches),
                 "pattern": pattern,
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_grep_artifacts", e)
 
@@ -1245,8 +1188,7 @@ def collab_leave_session(
         validate_session_id(session_id)
         validate_agent_id(agent_id)
 
-        conn, sessions_dir = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, sessions_dir):
             verify_agent_in_session(conn, agent_id, session_id)
 
             leave_collab_session(conn, sessions_dir, agent_id, reason)
@@ -1257,8 +1199,6 @@ def collab_leave_session(
                 "session_id": session_id,
                 "status": "left",
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_leave_session", e)
 
@@ -1285,8 +1225,7 @@ def collab_terminate_session(
         validate_session_id(session_id)
         validate_agent_id(orchestrator_id)
 
-        conn, sessions_dir = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, sessions_dir):
             verify_orchestrator(conn, session_id, orchestrator_id)
             result = terminate_collab_session(conn, sessions_dir, session_id, summary)
             logger.info("Session terminated: %s", session_id)
@@ -1301,8 +1240,6 @@ def collab_terminate_session(
                     f"Session files are preserved at: data/sessions/{session_id}/",
                 ],
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_terminate_session", e)
 
@@ -1336,8 +1273,7 @@ def collab_export_to_library(
         validate_session_id(session_id)
         confidence = max(0.0, min(confidence, 1.0))
 
-        conn, sessions_dir = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, sessions_dir):
             settings_path = _get_settings_path()
             from .export_bridge import export_session_to_library, export_session_summary_as_finding
 
@@ -1365,8 +1301,6 @@ def collab_export_to_library(
             result["summary_exported"] = summary_result
             logger.info("Exported %d artifacts from session %s to library", result.get("exported", 0), session_id)
             return result
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_export_to_library", e)
 
@@ -1444,8 +1378,7 @@ def collab_create_session_from_template(
         safe_title = sanitize_content(title)
         safe_desc = sanitize_content(task_description)
 
-        conn, sessions_dir = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, sessions_dir):
             result = create_collab_session(
                 conn=conn,
                 sessions_dir=sessions_dir,
@@ -1469,8 +1402,6 @@ def collab_create_session_from_template(
                     "Agents can join using collab_join_session",
                 ],
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_create_session_from_template", e)
 
@@ -1501,8 +1432,7 @@ def collab_get_agent_sessions(
                 "error": "Agents can only inspect their own session membership",
                 "error_type": "agent_not_authorized",
             }
-        conn, _ = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, _):
             from .multi_session import get_agent_sessions
             sessions = get_agent_sessions(conn, agent_id, status)
             return {
@@ -1510,8 +1440,6 @@ def collab_get_agent_sessions(
                 "sessions": sessions,
                 "count": len(sessions),
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_get_agent_sessions", e)
 
@@ -1524,12 +1452,9 @@ def collab_get_active_sessions_summary(agent_id: str) -> Dict:
     """
     try:
         validate_agent_id(agent_id)
-        conn, _ = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, _):
             from .multi_session import get_active_sessions_summary
             return get_active_sessions_summary(conn, agent_id=agent_id)
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_get_active_sessions_summary", e)
 
@@ -1559,8 +1484,7 @@ def collab_search_sessions(
         validate_agent_id(agent_id)
         limit = max(1, min(limit, 100))
 
-        conn, _ = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, _):
             from .multi_session import search_sessions_by_content
             results = search_sessions_by_content(conn, query, limit, status, agent_id=agent_id)
             return {
@@ -1568,8 +1492,6 @@ def collab_search_sessions(
                 "results": results,
                 "count": len(results),
             }
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_search_sessions", e)
 
@@ -1589,13 +1511,10 @@ def collab_get_session_relationships(session_id: str, agent_id: str) -> Dict:
     try:
         validate_session_id(session_id)
         validate_agent_id(agent_id)
-        conn, _ = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, _):
             _require_reader_access(conn, session_id, agent_id)
             from .multi_session import get_session_relationships
             return get_session_relationships(conn, session_id, agent_id=agent_id)
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_get_session_relationships", e)
 
@@ -1616,13 +1535,10 @@ def collab_get_session_statistics(session_id: str, agent_id: str) -> Dict:
     try:
         validate_session_id(session_id)
         validate_agent_id(agent_id)
-        conn, _ = _get_collab_connection()
-        try:
+        with _collab_connection() as (conn, _):
             _require_reader_access(conn, session_id, agent_id)
             from .multi_session import get_session_statistics
             return get_session_statistics(conn, session_id)
-        finally:
-            conn.close()
     except Exception as e:
         return _handle_tool_error("collab_get_session_statistics", e)
 
