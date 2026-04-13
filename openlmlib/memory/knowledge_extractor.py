@@ -14,8 +14,8 @@ understanding that an LLM can use to resume work across sessions.
 
 from __future__ import annotations
 
-import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
@@ -54,10 +54,11 @@ class SessionKnowledge:
     tool_breakdown: Dict[str, int] = field(default_factory=dict)
     errors_encountered: List[str] = field(default_factory=list)
 
-    def format_quick_recap(self, max_tokens: int = 200) -> str:
+    def format_quick_recap(self) -> str:
         """Format as a quick recap for the model (~150-250 tokens)."""
         lines = []
-        lines.append(f"# Session Recap (session: {self.session_id[:16]})")
+        session_preview = self.session_id[:16] if self.session_id else "unknown"
+        lines.append(f"# Session Recap (session: {session_preview})")
         lines.append("")
 
         # Summary
@@ -380,11 +381,7 @@ class KnowledgeExtractor:
         seen_files: Set[str]
     ):
         """Extract files touched from observation."""
-        # Try to extract file path from tool_input
         file_path = None
-
-        # Common file path patterns
-        import re
         path_match = re.search(
             r'([a-zA-Z0-9_./\\-]+(?:\.py|\.json|\.md|\.txt|\.yaml|\.yml|\.toml|\.cfg|\.ini|\.sh|\.ps1|\.js|\.ts|\.tsx|\.css|\.html))',
             tool_input
@@ -449,8 +446,6 @@ class KnowledgeExtractor:
 
         for keyword in DECISION_KEYWORDS:
             if keyword in text:
-                # Extract the surrounding sentence
-                import re
                 sentences = re.split(r'[.!?]+', f"{tool_input} {tool_output}")
                 for sentence in sentences:
                     if keyword in sentence.lower() and len(sentence.strip()) > 20:
@@ -469,8 +464,6 @@ class KnowledgeExtractor:
         """Extract conventions and patterns from observation text."""
         text = f"{tool_output} {compressed}".lower()
 
-        # Look for "uses X pattern" or "follows X convention"
-        import re
         uses_pattern = re.findall(
             r'(?:uses|follows|employs|applies)\s+([a-z][a-z\s_-]{3,30})\s+(?:pattern|convention|style|approach)',
             text
@@ -514,8 +507,6 @@ class KnowledgeExtractor:
             for o in observations
         ).lower()
 
-        import re
-        # Look for "Phase X" or "phase X" patterns
         phase_matches = re.findall(
             r'phase\s+(\d+|[ivxlcdm]+)\s*(completed|done|finished|remaining|pending|next)?',
             all_text

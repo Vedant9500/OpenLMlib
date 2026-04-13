@@ -13,8 +13,8 @@ because it reads the actual codebase state, not tool call logs.
 
 from __future__ import annotations
 
-import json
 import logging
+import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,8 +36,6 @@ def run_git(args: List[str], cwd: Optional[str] = None) -> str:
 
 def get_modified_files(cwd: Optional[str] = None) -> List[Dict[str, Any]]:
     """Get list of modified, staged, and untracked files."""
-    import re
-    # Modified/staged files
     status_output = run_git(["status", "--porcelain"], cwd)
     
     files = []
@@ -81,6 +79,8 @@ def get_file_diff(file_path: str, cwd: Optional[str] = None) -> str:
     if not diff_output:
         # Try staged diff
         diff_output = run_git(["diff", "--cached", "--", file_path], cwd)
+    if not diff_output:
+        logger.debug(f"No diff available for {file_path}")
     return diff_output
 
 

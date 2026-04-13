@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import List, Optional
+from typing import List as TypingList
 
 from mcp.server.fastmcp import FastMCP
 
@@ -124,8 +125,6 @@ def _register_memory_tools() -> None:
     if _memory_registered:
         return
 
-    from typing import List as TypingList
-    
     from .memory import (
         SessionManager,
         ProgressiveRetriever,
@@ -975,7 +974,7 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
                 "tools": {name: info["description"] for name, info in core_tools.items()},
             },
             "Memory Injection Tools": {
-                "description": "Lifecycle-based memory management with progressive disclosure (7 tools)",
+                "description": "Lifecycle-based memory management with progressive disclosure and retroactive git ingestion (10 tools)",
                 "tools": memory_tools,
                 "note": "Use openlmlib_help(tool_name='memory_<tool>') for detailed usage",
             },

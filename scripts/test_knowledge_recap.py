@@ -10,6 +10,7 @@ Demonstrates the knowledge-level progressive disclosure.
 
 from pathlib import Path
 import sys
+from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path.cwd()))
 
@@ -28,7 +29,7 @@ def main():
     session_mgr = SessionManager(storage)
 
     print("\n1. Starting test session...")
-    session_id = "recap_test_001"
+    session_id = f"recap_test_{datetime.now(timezone.utc).strftime('%H%M%S')}"
     session_mgr.on_session_start(session_id, "test", "Test knowledge recap flow")
     print("   ✓ Session started")
 
