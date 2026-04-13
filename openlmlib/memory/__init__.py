@@ -23,6 +23,7 @@ from .knowledge_extractor import (
     SessionKnowledge,
     extract_knowledge,
 )
+from .retrogit_ingest import retroactive_ingest
 
 __all__ = [
     "HookType",
@@ -39,4 +40,5 @@ __all__ = [
     "KnowledgeExtractor",
     "SessionKnowledge",
     "extract_knowledge",
+    "retroactive_ingest",
 ]

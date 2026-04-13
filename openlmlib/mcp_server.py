@@ -582,6 +582,61 @@ def _register_memory_tools() -> None:
             ),
         }
 
+    @mcp.tool()
+    def memory_retroactive_ingest(
+        session_id: str,
+        time_window_hours: int = 24,
+        include_uncommitted: bool = True
+    ) -> dict:
+        """Auto-ingest session activity from git history. NO manual logging needed!
+
+        Call this when you forgot to log observations during work. It scans
+        the git working tree to reconstruct what happened:
+        - Modified/created/deleted files (from git status)
+        - Commits made during the session (from git log)
+        - Lines added/removed per file (from git diff)
+
+        Works with ANY tool/agent (Qwen Code, Claude Code, manual edits)
+        because it reads the actual codebase state, not tool call logs.
+
+        After ingestion, call memory_quick_recap to see the synthesized knowledge.
+
+        Args:
+            session_id: Session identifier to create for this ingested session
+            time_window_hours: Hours to look back for commits (default: 24)
+            include_uncommitted: Include uncommitted changes (default: True)
+
+        Returns:
+            Dict with files found, commits found, observations created, and knowledge
+        """
+        from .memory.retrogit_ingest import retroactive_ingest as retro_ingest_fn
+
+        result = retro_ingest_fn(
+            session_id=session_id,
+            time_window_hours=time_window_hours,
+            include_uncommitted=include_uncommitted
+        )
+
+        # Save the synthesized knowledge
+        if "knowledge" in result:
+            try:
+                storage.save_knowledge(session_id, result["knowledge"])
+                result["knowledge_saved"] = True
+            except Exception as e:
+                result["knowledge_saved"] = False
+                result["knowledge_error"] = str(e)
+
+        return {
+            "session_id": session_id,
+            "files_found": result.get("files_found", []),
+            "commits_found": result.get("commits_found", []),
+            "observations_created": result.get("observations_created", 0),
+            "knowledge_summary": result.get("knowledge_summary", ""),
+            "knowledge_saved": result.get("knowledge_saved", False),
+            "message": result.get("message", "Ingestion complete"),
+            "estimated_tokens": result.get("observations_created", 0) * 75,
+        }
+
     _memory_registered = True
 
 
@@ -886,6 +941,7 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
         "memory_inject_context": "Auto-inject relevant context at session start.",
         "memory_quick_recap": "Get a synthesized recap of recent sessions (~150-250 tokens). Call FIRST for structured knowledge.",
         "memory_detailed_context": "Get detailed context about a specific topic (~500-800 tokens). Call AFTER quick recap.",
+        "memory_retroactive_ingest": "Auto-ingest session activity from git history. No manual logging needed!",
     }
 
     if tool_name:
