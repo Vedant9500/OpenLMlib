@@ -67,6 +67,21 @@ class Phase4Settings:
 
 
 @dataclass
+class MemoryInjectionSettings:
+    enabled: bool = True
+    observations_at_session_start: int = 50
+    auto_log_tool_use: bool = True
+    progressive_disclosure: bool = True
+    max_context_tokens: int = 4000
+    privacy_filtering: bool = True
+    compression_enabled: bool = True
+    max_observations_per_session: int = 500
+    session_cleanup_days: int = 30
+    caveman_enabled: bool = True
+    caveman_intensity: str = 'ultra'
+
+
+@dataclass
 class Settings:
     data_root: Path
     db_path: Path
@@ -81,6 +96,7 @@ class Settings:
     novelty: NoveltySettings
     retrieval: RetrievalSettings
     phase4: Phase4Settings
+    memory: MemoryInjectionSettings
 
     @classmethod
     def from_dict(cls, data: dict, base_dir: Path) -> "Settings":
@@ -95,6 +111,7 @@ class Settings:
         novelty_data = data.get("novelty", {})
         retrieval_data = data.get("retrieval", {})
         phase4_data = data.get("phase4", {})
+        memory_data = data.get("memory", {})
 
         reranking_data = phase4_data.get("reranking", {})
         expansion_data = phase4_data.get("query_expansion", {})
@@ -151,6 +168,19 @@ class Settings:
                     enabled=bool(packing_data.get("enabled", True)),
                 ),
             ),
+            memory=MemoryInjectionSettings(
+                enabled=bool(memory_data.get("enabled", True)),
+                observations_at_session_start=int(memory_data.get("observations_at_session_start", 50)),
+                auto_log_tool_use=bool(memory_data.get("auto_log_tool_use", True)),
+                progressive_disclosure=bool(memory_data.get("progressive_disclosure", True)),
+                max_context_tokens=int(memory_data.get("max_context_tokens", 4000)),
+                privacy_filtering=bool(memory_data.get("privacy_filtering", True)),
+                compression_enabled=bool(memory_data.get("compression_enabled", True)),
+                max_observations_per_session=int(memory_data.get("max_observations_per_session", 500)),
+                session_cleanup_days=int(memory_data.get("session_cleanup_days", 30)),
+                caveman_enabled=bool(memory_data.get("caveman_enabled", True)),
+                caveman_intensity=memory_data.get("caveman_intensity", "ultra"),
+            ),
         )
 
 
@@ -203,6 +233,19 @@ DEFAULT_SETTINGS_DATA = {
             "max_tokens": 4000,
             "enabled": True,
         },
+    },
+    "memory": {
+        "enabled": True,
+        "observations_at_session_start": 50,
+        "auto_log_tool_use": True,
+        "progressive_disclosure": True,
+        "max_context_tokens": 4000,
+        "privacy_filtering": True,
+        "compression_enabled": True,
+        "max_observations_per_session": 500,
+        "session_cleanup_days": 30,
+        "caveman_enabled": True,
+        "caveman_intensity": "ultra",
     },
 }
 
