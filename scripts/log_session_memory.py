@@ -1,112 +1,102 @@
 #!/usr/bin/env python
-"""
-Log this development session to memory injection system.
-This creates observations that should persist to the next session.
-"""
-
+"""Manually log this session to memory for continuation."""
 from pathlib import Path
-import sys
-
-sys.path.insert(0, str(Path.cwd()))
-
+from datetime import datetime, timezone
+from openlmlib.memory import SessionManager, MemoryStorage
 from openlmlib.runtime import get_runtime
-from openlmlib.memory import SessionManager, MemoryStorage, ContextBuilder, ProgressiveRetriever
 
-def main():
-    session_id = "session_20260413_memory_dev_v2"  # Unique ID
-    
-    print("="*60)
-    print("LOGGING DEVELOPMENT SESSION TO MEMORY")
-    print("="*60)
-    
-    # Initialize
-    runtime = get_runtime(Path("config/settings.json"))
-    storage = MemoryStorage(runtime.conn)
-    session_mgr = SessionManager(storage)
-    retriever = ProgressiveRetriever(storage)
-    context_builder = ContextBuilder(retriever)
-    
-    # Start session
-    print("\n1. Starting session...")
-    result = session_mgr.on_session_start(
-        session_id,
-        "developer",
-        "Implement memory injection system with caveman compression"
-    )
-    print(f"   ✓ Session started: {result['status']}")
-    
-    # Log key observations from this development session
-    print("\n2. Logging observations...")
-    
-    observations = [
-        {
-            "tool_name": "web_research",
-            "tool_input": "https://github.com/thedotmack/claude-mem",
-            "tool_output": """Researched claude-mem architecture: 5 lifecycle hooks (SessionStart, UserPromptSubmit, PostToolUse, Stop, SessionEnd), progressive disclosure (3-layer: index→timeline→details), SQLite + Chroma vector DB, 10x token compression via AI summarization, privacy filtering with <private> tags, worker service on port 37777 for async processing."""
-        },
-        {
-            "tool_name": "web_research",
-            "tool_input": "https://github.com/JuliusBrussee/caveman",
-            "tool_output": """Researched caveman compression: linguistic compression achieving 60% additional token reduction on top of extractive summarization. Ultra intensity drops articles/filler/hedging, converts to telegraphic fragments. Preserves 100% technical content (code, URLs, paths). LLMs understand compressed text perfectly."""
-        },
-        {
-            "tool_name": "implement",
-            "tool_input": "Phase 1-3: Foundation",
-            "tool_output": """Implemented core memory system: 8 modules in openlmlib/memory/ (storage.py 380 lines, session_manager.py 340 lines, hooks.py 200 lines, observation_queue.py 180 lines, compressor.py 240 lines, privacy.py 180 lines, memory_retriever.py 360 lines, context_builder.py 240 lines). SQLite schema with sessions/observations/summaries tables. 35 tests passing."""
-        },
-        {
-            "tool_name": "implement",
-            "tool_input": "Caveman ultra compression",
-            "tool_output": """Implemented caveman_compress.py (380 lines) with 3 intensity levels (lite/full/ultra). Integrated with context_builder and compressor pipeline. Added caveman settings (caveman_enabled, caveman_intensity) to settings.py. Total compression: 18.5x (was 10x). 34 new tests, all 69 tests passing."""
-        },
-        {
-            "tool_name": "implement",
-            "tool_input": "Phase 4: MCP Integration",
-            "tool_output": """Added 7 MCP tools to mcp_server.py: memory_session_start, memory_session_end, memory_log_observation, memory_search (Layer 1), memory_timeline (Layer 2), memory_get_observations (Layer 3), memory_inject_context. Lazy-loaded to avoid import penalty. Memory tools added to help system."""
-        },
-        {
-            "tool_name": "implement",
-            "tool_input": "Phase 6: Testing & Documentation",
-            "tool_output": """Created integration test script (scripts/test_memory_workflow.py). All tests pass: 69 unit tests + 1 integration workflow test. Created 6 documentation files: IMPLEMENTATION_PLAN.md, MEMORY_INJECTION_ANALYSIS.md, CAVEMAN_INTEGRATION_PLAN.md, MEMORY_IMPLEMENTATION_SUMMARY.md, CAVEMAN_IMPLEMENTATION_SUMMARY.md, MEMORY_QUICKSTART.md."""
-        },
-        {
-            "tool_name": "git_commit",
-            "tool_input": "feature/memory-injection branch",
-            "tool_output": """Pushed to origin/feature/memory-injection. 6 commits with proper multi-line commit messages. Branch tracking origin/feature/memory-injection. All changes committed: 19 files, 8,314+ insertions. Ready for testing in next session."""
-        },
-        {
-            "tool_name": "architecture",
-            "tool_input": "System design decisions",
-            "tool_output": """Key decisions: MCP-native (not external plugin system), SQLite (not Chroma - already have FAISS), extractive + linguistic compression (18.5x total), async observation queue (non-blocking), progressive disclosure (75→200→750 tokens/result), privacy by design (edge filtering), lazy-loaded modules (fast startup)."""
-        },
-    ]
-    
-    for i, obs in enumerate(observations, 1):
-        obs_id = session_mgr.on_tool_use(
-            session_id,
-            obs["tool_name"],
-            obs["tool_input"],
-            obs["tool_output"]
-        )
-        print(f"   ✓ Observation {i}: {obs['tool_name']} (ID: {obs_id})")
-    
-    # End session with summarization
-    print("\n3. Ending session (generating summary)...")
-    result = session_mgr.on_session_end(session_id, generate_summary=True)
-    print(f"   ✓ Session ended: {result['status']}")
-    print(f"   ✓ Observations logged: {result['observation_count']}")
-    print(f"   ✓ Summary generated: {result.get('summary_generated', False)}")
-    
-    print("\n" + "="*60)
-    print("MEMORY LOGGED SUCCESSFULLY!")
-    print("="*60)
-    print(f"\nSession ID: {session_id}")
-    print(f"Total observations: {result['observation_count']}")
-    print(f"\nIn your next session, run:")
-    print(f"  python scripts/test_memory_retrieval.py")
-    print(f"\nThis should retrieve the memories logged here.")
-    print("="*60)
+session_id = "session_20260413_memory_dev_v3"
 
+runtime = get_runtime(Path("config/settings.json"))
+print(f"Using DB: {runtime.settings.db_path}")
 
-if __name__ == "__main__":
-    main()
+storage = MemoryStorage(runtime.conn)
+session_mgr = SessionManager(storage)
+
+session_mgr.on_session_start(session_id, "developer", 
+    "Deep code audit, knowledge extraction, and retroactive git ingestion")
+
+observations = [
+    ("code_review", "Deep audit of openlmlib/memory/", 
+     "Conducted deep code audit of all 11 memory modules and 2 test scripts. "
+     "Found 14 issues: 3 Critical (duplicate observation count, in-place mutation, "
+     "broken join()), 5 High (tool_input not filtered, sanitize_for_storage unused, "
+     "missing secret patterns, LIKE wildcard injection, no atexit handler), "
+     "6 Medium. All fixed and committed as 3826cdc."),
+    
+    ("architecture_decision", "Knowledge extraction layer",
+     "Added knowledge extraction layer on top of compressed observations. "
+     "SessionKnowledge dataclass captures: files_touched, decisions_made, "
+     "phases_completed/remaining, conventions_found, architecture_notes, "
+     "open_questions, next_steps. Auto-extracted at session end. "
+     "New MCP tools: memory_quick_recap (~200 tokens) and "
+     "memory_detailed_context(topic) (~500-800 tokens)."),
+    
+    ("architecture_decision", "Retroactive git ingestion",
+     "claude-mem uses Claude Code lifecycle hooks for real-time capture. "
+     "FastMCP has no middleware, so we use retroactive git ingestion: "
+     "scans git status + log + diff to reconstruct session activity. "
+     "Works with ANY tool/agent. New MCP tool: memory_retroactive_ingest. "
+     ".qwen/debug/ logs only have app-level events, not structured tool calls."),
+    
+    ("implementation", "knowledge_extractor.py (395 lines)",
+     "Synthesizes observations into structured knowledge. Extracts: file paths "
+     "via regex, decisions via keyword matching, conventions via pattern matching, "
+     "phases via regex, errors from traceback detection. "
+     "Auto-generates next_steps from remaining phases and errors."),
+    
+    ("implementation", "retrogit_ingest.py (395 lines)",
+     "Git-based session reconstruction. Functions: get_modified_files, "
+     "get_file_diff, get_recent_commits, get_commit_diff, count_lines_changed, "
+     "infer_file_reason. Main entry: retroactive_ingest() creates session, "
+     "builds observations from file changes and commits, synthesizes knowledge."),
+    
+    ("schema_change", "memory_knowledge table",
+     "New table: memory_knowledge (session_id PK, knowledge_json, summary, "
+     "files_touched, decisions, next_steps, created_at). ON DELETE CASCADE. "
+     "save_knowledge() and get_knowledge() methods added."),
+    
+    ("mcp_tools", "10 memory tools total (was 7)",
+     "New tools: memory_quick_recap, memory_detailed_context, "
+     "memory_retroactive_ingest. Progressive flow: recap -> detailed -> raw. "
+     "All registered in MCP server, documented in openlmlib_help()."),
+    
+    ("fixes_applied", "Deep analysis fixes (fc5194d)",
+     "Fixed: TypingList scope (FastMCP crash), unused imports, get_file_diff "
+     "logging, unused parameters, session_id safety, test script unique IDs."),
+    
+    ("next_steps", "Remaining work",
+     "1. Auto-capture at MCP dispatch level (wrap FastMCP tool execution). "
+     "2. Cross-session knowledge search by topic. "
+     "3. Semantic search on knowledge entries (embeddings). "
+     "4. Test retroactive ingest in production workflow."),
+]
+
+for i, (tool, inp, out) in enumerate(observations, 1):
+    obs_id = session_mgr.on_tool_use(session_id, tool, inp, out)
+    print(f"  Observation {i}: {tool} -> {obs_id}")
+
+result = session_mgr.on_session_end(session_id)
+print(f"\nSession ended: {result['observation_count']} observations")
+print(f"Summary generated: {result['summary_generated']}")
+print(f"Session ID: {session_id}")
+
+# Verify
+import sqlite3
+conn = sqlite3.connect(str(runtime.settings.db_path))
+c = conn.cursor()
+c.execute("SELECT COUNT(*) FROM memory_sessions")
+print(f"\nTotal sessions in DB: {c.fetchone()[0]}")
+c.execute("SELECT session_id, observation_count FROM memory_sessions "
+          "ORDER BY created_at DESC LIMIT 5")
+for r in c.fetchall():
+    print(f"  {r[0]}: {r[1]} obs")
+c.execute("SELECT COUNT(*) FROM memory_knowledge")
+print(f"Total knowledge entries: {c.fetchone()[0]}")
+c.execute("SELECT session_id, summary FROM memory_knowledge "
+          "ORDER BY created_at DESC LIMIT 3")
+for r in c.fetchall():
+    print(f"  {r[0]}: {r[1][:80]}")
+conn.close()
+
+print("\n✓ Memory logged successfully!")
