@@ -405,14 +405,18 @@ def collab_list_sessions(
     status: Optional[str] = None,
     limit: int = 20,
 ) -> Dict:
-    """List collaboration sessions.
+    """List collaboration sessions. Browse sessions you've participated in.
 
-    Args:
-        status: Filter by status (active, completed, terminated)
-        limit: Maximum number of sessions to return
+    AUTOMATIC TRIGGERS - Call this when:
+    - User asks to see their sessions
+    - You want to find a specific session to rejoin
+    - Checking what sessions are active
 
-    Returns:
-        Dict with list of sessions
+    FOR SESSION DETAILS, use collab_get_session_context after finding the session_id.
+
+    PARAMETERS:
+    - status: Filter by status - "active", "completed", "terminated" (optional)
+    - limit: Max sessions to return (default: 20, max: 100)
     """
     try:
         limit = max(1, min(limit, 100))
@@ -428,13 +432,19 @@ def collab_list_sessions(
 
 @collab_mcp.tool()
 def collab_get_session_state(session_id: str, agent_id: str) -> Dict:
-    """Get the current state of a collaboration session.
+    """Get the current state of a collaboration session - tasks, agents, and session state.
 
-    Args:
-        session_id: ID of the session
+    AUTOMATIC TRIGGERS - Call this when:
+    - You need to see the task list and assignments
+    - Checking which agents are in the session
+    - Reviewing session metadata (status, created_at, etc.)
 
-    Returns:
-        Dict with session state, tasks, and agents
+    DIFFERENCE from collab_get_session_context: This returns raw structured data
+    (tasks, agents, state dict). Use get_session_context for a formatted narrative view.
+
+    PARAMETERS:
+    - session_id: ID of the session
+    - agent_id: Your agent ID (must belong to the session)
     """
     try:
         validate_session_id(session_id)
@@ -461,18 +471,20 @@ def collab_update_session_state(
     state: Dict,
     orchestrator_id: str,
 ) -> Dict:
-    """Update the session state (orchestrator only).
+    """Update the session state. Orchestrator only. The only way to modify session state.
 
-    This is the only way to modify session state. Only the orchestrator
-    can call this. The state is versioned with optimistic concurrency.
+    AUTOMATIC TRIGGERS - Call this when:
+    - You need to record progress updates
+    - Setting the current phase of work
+    - Storing session metadata (current step, active agents, etc.)
 
-    Args:
-        session_id: Target session
-        state: New state dict (will be merged with existing state)
-        orchestrator_id: The orchestrator's agent ID (for authorization)
+    ONLY the orchestrator can call this. State is versioned with optimistic concurrency
+    to prevent conflicts. If update fails, retry with latest state.
 
-    Returns:
-        Dict with updated state and version info
+    PARAMETERS:
+    - session_id: Target session
+    - state: New state dict (will be merged with existing state)
+    - orchestrator_id: The orchestrator's agent ID (for authorization)
     """
     try:
         validate_session_id(session_id)
@@ -613,17 +625,24 @@ def collab_read_messages(
     msg_types: Optional[List[str]] = None,
     from_agent: Optional[str] = None,
 ) -> Dict:
-    """Read new messages from a session (offset-based, only returns unseen messages).
+    """Read new messages from a session. Returns only unseen messages (offset-tracked).
 
-    Args:
-        session_id: Session to read from
-        limit: Max messages to return (default 50)
-        msg_types: Filter by message types (optional)
-        from_agent: Filter by sender (optional)
-        agent_id: Your agent ID (for offset tracking)
+    AUTOMATIC TRIGGERS - Call this when:
+    - Checking for new messages after sending a response
+    - Looking for task assignments or answers to your questions
+    - Periodic status check during active collaboration
 
-    Returns:
-        Dict with messages and your current offset
+    DIFFERENCE from collab_poll_messages: This returns immediately without waiting.
+    Use poll_messages for blocking waits in autonomous agent loops.
+
+    WORKFLOW POSITION: Call after sending messages, between work steps.
+
+    PARAMETERS:
+    - session_id: Session to read from
+    - agent_id: Your agent ID (required for authorization and offset tracking)
+    - limit: Max messages to return (default: 50, max: 200)
+    - msg_types: Filter by message types like ["task", "answer"] (optional)
+    - from_agent: Filter by specific sender (optional)
     """
     try:
         validate_session_id(session_id)
@@ -833,14 +852,21 @@ def collab_tail_messages(
     agent_id: str,
     n: int = 20,
 ) -> Dict:
-    """Read the last N messages from a session (quick status check).
+    """Read the last N messages from a session. Quick status check without offset tracking.
 
-    Args:
-        session_id: Session to read from
-        n: Number of messages (default 20)
+    AUTOMATIC TRIGGERS - Call this when:
+    - You just joined and want to see recent activity
+    - Quick glance at what's happening without tracking offsets
+    - Checking session state before full context load
 
-    Returns:
-        Dict with the last N messages
+    DIFFERENCE from collab_read_messages: This does NOT track your read offset
+    and always returns the most recent N messages regardless of what you've seen.
+    Use read_messages for tracking unseen messages.
+
+    PARAMETERS:
+    - session_id: Session to read from
+    - agent_id: Your agent ID (must belong to the session)
+    - n: Number of messages (default: 20, max: 100)
     """
     try:
         validate_session_id(session_id)
@@ -866,18 +892,21 @@ def collab_read_message_range(
     end_seq: int,
     agent_id: str,
 ) -> Dict:
-    """Read messages in a specific sequence range.
+    """Read messages in a specific sequence range. Zoom into a conversation section.
 
-    Use this to zoom into a specific part of the conversation
-    when you need more context than tail provides.
+    AUTOMATIC TRIGGERS - Call this when:
+    - You need context from a specific point in the conversation
+    - A message references an earlier seq number
+    - You want to review a specific exchange between agents
 
-    Args:
-        session_id: Session to read from
-        start_seq: Starting sequence number (inclusive)
-        end_seq: Ending sequence number (exclusive)
+    DIFFERENCE from collab_read_messages: This reads a specific range by sequence
+    numbers, not just "new" messages. Use for targeted context retrieval.
 
-    Returns:
-        Dict with messages in the specified range
+    PARAMETERS:
+    - session_id: Session to read from
+    - start_seq: Starting sequence number (inclusive) - get from message metadata
+    - end_seq: Ending sequence number (exclusive) - max range is 500 messages
+    - agent_id: Your agent ID (must belong to the session)
     """
     try:
         validate_session_id(session_id)
@@ -910,16 +939,22 @@ def collab_grep_messages(
     limit: int = 50,
     msg_types: Optional[List[str]] = None,
 ) -> Dict:
-    """Search session messages by keyword.
+    """Search session messages by keyword. FTS5 full-text search across all messages.
 
-    Args:
-        session_id: Session to search
-        pattern: Search term (supports FTS5 syntax)
-        limit: Max results (default 50)
-        msg_types: Filter by message types (optional)
+    AUTOMATIC TRIGGERS - Call this when:
+    - Looking for a specific topic, decision, or finding mentioned earlier
+    - You don't know the sequence number but remember keywords
+    - Checking if a topic has been discussed in the session
 
-    Returns:
-        Dict with matching messages
+    SEARCH TIPS: Use simple keywords. FTS5 supports: "word1 word2" (AND), "word1 OR word2".
+    Avoid complex syntax - use plain phrases.
+
+    PARAMETERS:
+    - session_id: Session to search
+    - pattern: Search term (use simple keywords)
+    - agent_id: Your agent ID (must belong to the session)
+    - limit: Max results (default: 50, max: 100)
+    - msg_types: Filter by message types like ["result", "artifact"] (optional)
     """
     try:
         validate_session_id(session_id)
@@ -1093,15 +1128,20 @@ def collab_list_artifacts(
     created_by: Optional[str] = None,
     artifact_type: Optional[str] = None,
 ) -> Dict:
-    """List artifacts in a session.
+    """List artifacts in a session. Browse saved work products, analyses, and summaries.
 
-    Args:
-        session_id: Target session
-        created_by: Filter by creator agent (optional)
-        artifact_type: Filter by type (optional)
+    AUTOMATIC TRIGGERS - Call this when:
+    - Checking what work has been saved in the session
+    - Looking for a specific analysis or report
+    - Before creating a new artifact to avoid duplicates
 
-    Returns:
-        Dict with list of artifacts
+    FOR ARTIFACT CONTENT, use collab_get_artifact after finding the artifact_id.
+
+    PARAMETERS:
+    - session_id: Target session
+    - agent_id: Your agent ID (must belong to the session)
+    - created_by: Filter by creator agent (optional) - "show artifacts by agent X"
+    - artifact_type: Filter by type like "research_summary", "analysis", "code" (optional)
     """
     try:
         validate_session_id(session_id)
@@ -1124,14 +1164,19 @@ def collab_get_artifact(
     artifact_id: str,
     agent_id: str,
 ) -> Dict:
-    """Get the full content of a specific artifact.
+    """Get the full content of a specific artifact. Retrieve saved analysis or report.
 
-    Args:
-        session_id: Session containing the artifact
-        artifact_id: ID of the artifact to retrieve
+    AUTOMATIC TRIGGERS - Call this when:
+    - You have an artifact_id from list_artifacts or a message reference
+    - Need to review another agent's completed work
+    - Reading detailed analysis that was saved as an artifact
 
-    Returns:
-        Dict with artifact content and metadata
+    WORKFLOW POSITION: Call after finding the artifact_id from list_artifacts or messages.
+
+    PARAMETERS:
+    - session_id: Session containing the artifact
+    - artifact_id: ID of the artifact (e.g., "art_001")
+    - agent_id: Your agent ID (must belong to the session)
     """
     try:
         validate_session_id(session_id)
@@ -1162,15 +1207,18 @@ def collab_grep_artifacts(
     agent_id: str,
     created_by: Optional[str] = None,
 ) -> Dict:
-    """Search artifact content by keyword.
+    """Search artifact content by keyword. Find saved work by topic or term.
 
-    Args:
-        session_id: Session to search
-        pattern: Search term
-        created_by: Filter by creator (optional)
+    AUTOMATIC TRIGGERS - Call this when:
+    - Looking for artifacts mentioning a specific topic
+    - Need to find prior analysis on a subject
+    - Searching across all saved work products in the session
 
-    Returns:
-        Dict with matching artifacts and their matching lines
+    PARAMETERS:
+    - session_id: Session to search
+    - pattern: Search term (use simple keywords)
+    - agent_id: Your agent ID (must belong to the session)
+    - created_by: Filter by creator agent (optional)
     """
     try:
         validate_session_id(session_id)
@@ -1196,15 +1244,20 @@ def collab_leave_session(
     agent_id: str,
     reason: Optional[str] = None,
 ) -> Dict:
-    """Leave a collaboration session gracefully.
+    """Leave a collaboration session gracefully. Clean exit for an agent.
 
-    Args:
-        session_id: Session to leave
-        agent_id: Your agent ID
-        reason: Optional reason for leaving
+    AUTOMATIC TRIGGERS - Call this when:
+    - Your assigned tasks are complete
+    - You're done with this session and moving to other work
+    - User asks you to leave the session
 
-    Returns:
-        Dict with confirmation
+    DIFFERENCE from collab_terminate_session: This is for individual agents leaving.
+    Only the orchestrator should call terminate_session to end the entire session.
+
+    PARAMETERS:
+    - session_id: Session to leave
+    - agent_id: Your agent ID
+    - reason: Optional reason for leaving (helps other agents understand)
     """
     try:
         validate_session_id(session_id)
@@ -1340,13 +1393,14 @@ def collab_export_to_library(
 
 @collab_mcp.tool()
 def collab_list_templates() -> Dict:
-    """List available session templates for quick session creation.
+    """List available session templates. Pre-built plans for common research patterns.
 
-    Templates provide predefined plans and rules for common research
-    patterns like deep research, code review, market analysis, etc.
+    AUTOMATIC TRIGGERS - Call this when:
+    - Starting a new session and want a structured plan
+    - User asks to use a template
+    - Looking for recommended workflows (deep_research, code_review, etc.)
 
-    Returns:
-        Dict with list of templates
+    After finding a template, use collab_create_session_from_template to start.
     """
     try:
         from .templates import list_templates
@@ -1361,13 +1415,15 @@ def collab_list_templates() -> Dict:
 
 @collab_mcp.tool()
 def collab_get_template(template_id: str) -> Dict:
-    """Get details of a specific session template.
+    """Get details of a specific session template. See the plan and rules before using.
 
-    Args:
-        template_id: Template identifier (e.g., 'deep_research', 'code_review')
+    AUTOMATIC TRIGGERS - Call this when:
+    - You want to review a template before creating a session
+    - Checking what tasks are in a template's plan
+    - User asks about a specific template
 
-    Returns:
-        Dict with template details including plan and rules
+    PARAMETERS:
+    - template_id: Template identifier (e.g., 'deep_research', 'code_review')
     """
     try:
         from .templates import get_template
@@ -1386,18 +1442,20 @@ def collab_create_session_from_template(
     task_description: str,
     created_by: str = "orchestrator",
 ) -> Dict:
-    """Create a session from a predefined template.
+    """Create a session from a predefined template. Structured plan + rules in one step.
 
-    The template provides the plan (tasks) and rules for the session.
+    AUTOMATIC TRIGGERS - Call this when:
+    - User asks to start a session with a template
+    - You want a pre-built plan instead of creating tasks manually
+    - Starting common workflows (deep research, code review, etc.)
 
-    Args:
-        template_id: Template to use (e.g., 'deep_research', 'code_review')
-        title: Session title
-        task_description: Specific task description for this session
-        created_by: Creator identifier
+    WORKFLOW POSITION: Alternative to collab_create_session when you want a structured plan.
 
-    Returns:
-        Dict with session info
+    PARAMETERS:
+    - template_id: Template to use (e.g., 'deep_research', 'code_review')
+    - title: Session title
+    - task_description: Specific task description for this session
+    - created_by: Creator identifier (default: "orchestrator")
     """
     try:
         if not title or not isinstance(title, str):
@@ -1445,16 +1503,17 @@ def collab_get_agent_sessions(
     requesting_agent_id: str,
     status: Optional[str] = None,
 ) -> Dict:
-    """Get all sessions an agent has participated in.
+    """Get all sessions an agent has participated in. Track agent's work history.
 
-    Useful for tracking an agent's work across multiple sessions.
+    AUTOMATIC TRIGGERS - Call this when:
+    - User asks "what sessions have I been in?"
+    - Looking for past work by a specific agent
+    - Finding related sessions to continue work
 
-    Args:
-        agent_id: Agent identifier
-        status: Filter by session status (optional)
-
-    Returns:
-        Dict with list of sessions and participation info
+    PARAMETERS:
+    - agent_id: Agent identifier
+    - requesting_agent_id: Must match agent_id (agents can only inspect their own sessions)
+    - status: Filter by session status - "active", "completed", "terminated" (optional)
     """
     try:
         validate_agent_id(agent_id)
@@ -1479,9 +1538,15 @@ def collab_get_agent_sessions(
 
 @collab_mcp.tool()
 def collab_get_active_sessions_summary(agent_id: str) -> Dict:
-    """Get a summary of all active sessions.
+    """Get a summary of all active sessions. Quick overview of ongoing work.
 
-    Returns counts of active sessions, agents, and messages.
+    AUTOMATIC TRIGGERS - Call this when:
+    - User asks "what's happening?" or "what sessions are active?"
+    - Checking workload before joining a new session
+    - Getting a high-level view of all current collaboration work
+
+    PARAMETERS:
+    - agent_id: Your agent ID (summary is scoped to sessions you joined)
     """
     try:
         validate_agent_id(agent_id)
@@ -1531,15 +1596,18 @@ def collab_search_sessions(
 
 @collab_mcp.tool()
 def collab_get_session_relationships(session_id: str, agent_id: str) -> Dict:
-    """Find sessions related to a given session.
+    """Find sessions related to a given session. Discover cross-session context.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - "What other sessions is this related to?"
+    - Looking for prior work by the same team
+    - Finding sessions that share agents or orchestrator
 
     Identifies related sessions based on shared agents or same orchestrator.
 
-    Args:
-        session_id: Base session to find relationships for
-
-    Returns:
-        Dict with related sessions grouped by relationship type
+    PARAMETERS:
+    - session_id: Base session to find relationships for
+    - agent_id: Your agent ID (must belong to the session)
     """
     try:
         validate_session_id(session_id)
@@ -1554,16 +1622,18 @@ def collab_get_session_relationships(session_id: str, agent_id: str) -> Dict:
 
 @collab_mcp.tool()
 def collab_get_session_statistics(session_id: str, agent_id: str) -> Dict:
-    """Get detailed statistics for a session.
+    """Get detailed statistics for a session. Messages, agents, artifacts, and timing.
 
-    Includes message counts, breakdown by type and agent,
-    artifact count, and time range.
+    AUTOMATIC TRIGGERS - Call this when:
+    - "How active was this session?"
+    - Measuring session productivity
+    - Comparing sessions by message volume
 
-    Args:
-        session_id: Session to get statistics for
+    Includes message counts, breakdown by type and agent, artifact count, and time range.
 
-    Returns:
-        Dict with session statistics
+    PARAMETERS:
+    - session_id: Session to get statistics for
+    - agent_id: Your agent ID (must belong to the session)
     """
     try:
         validate_session_id(session_id)
@@ -1585,22 +1655,22 @@ def collab_list_openrouter_models(
     is_free: bool = False,
     force_refresh: bool = False,
 ) -> Dict:
-    """List available models from OpenRouter API.
+    """Browse available models from OpenRouter API. Filter by provider, price, or context size.
 
-    Fetches the current model catalog and optionally filters by criteria.
-    Results are cached for 1 hour to avoid excessive API calls.
-    Requires OPENROUTER_API_KEY environment variable.
+    AUTOMATIC TRIGGERS - Call this when:
+    - User asks what models are available
+    - Choosing a model for a collab session
+    - Comparing model pricing or context limits
 
-    Args:
-        search: Search term in model name or description
-        provider: Filter by provider (e.g., 'openai', 'anthropic', 'google')
-        max_price_per_million: Max combined input+output price per 1M tokens
-        context_length_min: Minimum context length in tokens
-        is_free: Only include free models
-        force_refresh: Force fresh API call, ignoring cache
+    Requires OPENROUTER_API_KEY environment variable. Results cached for 1 hour.
 
-    Returns:
-        Dict with list of available models and their details
+    PARAMETERS:
+    - search: Search term in model name or description (optional)
+    - provider: Filter by provider like 'openai', 'anthropic', 'google' (optional)
+    - max_price_per_million: Max combined input+output price per 1M tokens (optional)
+    - context_length_min: Minimum context length in tokens (optional)
+    - is_free: Only include free models (default: False)
+    - force_refresh: Force fresh API call, ignoring cache (default: False)
     """
     try:
         sessions_dir = _get_sessions_dir()
@@ -1641,13 +1711,17 @@ def collab_list_openrouter_models(
 
 @collab_mcp.tool()
 def collab_get_openrouter_model_details(model_id: str) -> Dict:
-    """Get detailed information about a specific OpenRouter model.
+    """Get detailed information about a specific OpenRouter model. Pricing, context, description.
 
-    Args:
-        model_id: Full model ID (e.g., 'anthropic/claude-sonnet-4')
+    AUTOMATIC TRIGGERS - Call this when:
+    - You have a model ID and need full details
+    - Checking pricing or context limits for a specific model
+    - Evaluating if a model is suitable for a task
 
-    Returns:
-        Dict with model details including pricing, context, and description
+    Use collab_list_openrouter_models first to find model IDs.
+
+    PARAMETERS:
+    - model_id: Full model ID (e.g., 'anthropic/claude-sonnet-4')
     """
     try:
         sessions_dir = _get_sessions_dir()
@@ -1672,15 +1746,17 @@ def collab_get_openrouter_model_details(model_id: str) -> Dict:
 
 @collab_mcp.tool()
 def collab_get_recommended_models(task_type: str) -> Dict:
-    """Get recommended OpenRouter models for a specific task type.
+    """Get recommended OpenRouter models for a specific task type. Pre-filtered best choices.
 
-    Recommendations are based on model capabilities and typical use cases.
+    AUTOMATIC TRIGGERS - Call this when:
+    - "What model should I use for X?"
+    - Choosing models for a session without browsing the full catalog
+    - User asks for model recommendations
 
-    Args:
-        task_type: Task type (research, coding, analysis, writing, summarization, orchestrator, worker)
+    Task types: research, coding, analysis, writing, summarization, orchestrator, worker.
 
-    Returns:
-        Dict with recommended model IDs and their details
+    PARAMETERS:
+    - task_type: What the model will be used for
     """
     try:
         sessions_dir = _get_sessions_dir()
