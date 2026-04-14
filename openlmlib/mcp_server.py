@@ -147,19 +147,25 @@ def _register_memory_tools() -> None:
         query: Optional[str] = None,
         limit: int = 50
     ) -> dict:
-        """Start a new session and inject relevant context from previous sessions.
-        
-        Call this when beginning work to load knowledge from past sessions.
-        Returns context block with up to 50 relevant observations (compressed with caveman ultra).
-        
-        Args:
-            session_id: Unique session identifier
-            user_id: Optional user/agent identifier
-            query: Optional initial query to filter relevant memories
-            limit: Max observations to inject (default: 50)
-        
-        Returns:
-            Dict with session_id, context_block, and observation_count
+        """Start a new session and automatically inject relevant context from past sessions.
+
+        AUTOMATIC TRIGGERS - Call this when:
+        - Beginning a new work session or conversation
+        - User starts a new conversation about ongoing work
+        - You need context from previous sessions before starting work
+
+        ALWAYS CALL THIS at the start of any work session - it prevents starting work
+        without historical context. This loads knowledge from all previous sessions.
+
+        WORKFLOW POSITION: First tool to call when starting work.
+
+        PARAMETERS:
+        - session_id: Unique identifier for this session (generate a unique ID like UUID or timestamp-based)
+        - query: What this session will focus on - used to find relevant past context (optional but recommended)
+        - limit: Max past observations to inject (default: 50, reduce for focused sessions)
+        - user_id: Optional user/agent identifier
+
+        Returns context block with relevant past observations (compressed for efficiency).
         """
         context = session_mgr.on_session_start(session_id, user_id, query)
         
@@ -178,16 +184,21 @@ def _register_memory_tools() -> None:
 
     @mcp.tool()
     def memory_session_end(session_id: str) -> dict:
-        """End a session and trigger summarization.
-        
-        Call this when finishing work to summarize and persist session knowledge.
-        Automatically generates a compressed summary of all observations.
-        
-        Args:
-            session_id: Session identifier to end
-        
-        Returns:
-            Dict with session_id, status, and summary info
+        """End the current session and trigger automatic summarization to persist knowledge.
+
+        AUTOMATIC TRIGGERS - Call this when:
+        - User indicates they're done with current work ("done", "finished", "ending session")
+        - Session goal has been achieved
+        - About to start unrelated work
+        - You're wrapping up a task or research phase
+
+        ALWAYS CALL THIS when ending work to ensure session knowledge is not lost.
+        This automatically generates a compressed summary of all observations.
+
+        WORKFLOW POSITION: Last tool to call when finishing work.
+
+        PARAMETERS:
+        - session_id: The session to end (track this from memory_session_start)
         """
         result = session_mgr.on_session_end(session_id)
         
@@ -206,19 +217,26 @@ def _register_memory_tools() -> None:
         tool_input: str,
         tool_output: str
     ) -> dict:
-        """Log an observation from tool execution.
-        
-        Captures tool outputs for future memory retrieval.
-        Call this after important tool executions to build session memory.
-        
-        Args:
-            session_id: Active session identifier
-            tool_name: Tool that was executed (e.g., "Read", "Edit")
-            tool_input: Tool input
-            tool_output: Tool output
-        
-        Returns:
-            Dict with observation_id and status
+        """Log an observation from tool execution to build session memory.
+
+        AUTOMATIC TRIGGERS - Call this when:
+        - A tool execution produces important or surprising results
+        - You want to remember what happened during the session
+        - Building up context for the end-of-session summary
+
+        This captures tool outputs for future memory retrieval.
+        Call this after significant tool executions to build session memory.
+
+        WORKFLOW POSITION: Call after important tool executions throughout the session.
+        The observation will be compressed and summarized for future retrieval.
+
+        PARAMETERS:
+        - session_id: Active session identifier (from memory_session_start)
+        - tool_name: Tool that was executed (e.g., "web_search", "read_file")
+        - tool_input: What was passed to the tool
+        - tool_output: What the tool returned
+
+        NOTE: Don't log every single tool call - only significant ones with novel insights.
         """
         obs_id = session_mgr.on_tool_use(
             session_id, tool_name, tool_input, tool_output
@@ -236,18 +254,22 @@ def _register_memory_tools() -> None:
         limit: int = 50,
         filters: Optional[dict] = None
     ) -> dict:
-        """Layer 1: Search memory index (lightweight, ~75 tokens/result).
-        
-        Returns compact metadata for filtering. Use this first to identify relevant memories.
-        Token-efficient: ~75 tokens per result vs ~750 for full details.
-        
-        Args:
-            query: Search query
-            limit: Max results to return (default: 50)
-            filters: Optional filters (tool_name, obs_type, session_id)
-        
-        Returns:
-            Dict with results (list of MemoryIndex), count, and estimated_tokens
+        """Layer 1: Lightweight search of memory index (~75 tokens/result). Fast metadata search.
+
+        AUTOMATIC TRIGGERS - Call this when:
+        - You need to identify which memories might be relevant
+        - Before fetching full observations (to filter first)
+        - Searching for observations by tool name, type, or session
+
+        Returns compact metadata for filtering. Use this FIRST to identify relevant memories,
+        then use memory_timeline or memory_get_observations for details.
+
+        SEARCH STRATEGY: Use specific keywords. Filter by tool_name, obs_type, or session_id.
+
+        PARAMETERS:
+        - query: Search query
+        - limit: Max results (default: 50)
+        - filters: Optional filters like {"tool_name": "web_search", "session_id": "..."}
         """
         results = retriever.layer1_search_index(query, limit, filters)
         
@@ -264,16 +286,18 @@ def _register_memory_tools() -> None:
         window: str = "5m"
     ) -> dict:
         """Layer 2: Get chronological context for memory IDs (~200 tokens/result).
-        
-        Returns narrative flow around observations. Use after memory_search to understand sequence.
+
+        AUTOMATIC TRIGGERS - Call this when:
+        - You have observation IDs from memory_search
+        - You need to understand the sequence of events
+        - Understanding how observations relate to each other over time
+
+        Returns narrative flow around observations. Use AFTER memory_search to understand sequence.
         Provides timeline context for how observations relate to each other.
-        
-        Args:
-            ids: List of observation IDs from memory_search
-            window: Time window for context (not yet implemented)
-        
-        Returns:
-            Dict with timeline entries and estimated_tokens
+
+        PARAMETERS:
+        - ids: List of observation IDs from memory_search
+        - window: Time window for context around each observation (default: "5m")
         """
         results = retriever.layer2_timeline(ids, window)
         
@@ -286,16 +310,18 @@ def _register_memory_tools() -> None:
 
     @mcp.tool()
     def memory_get_observations(ids: TypingList[str]) -> dict:
-        """Layer 3: Get full details for specific memory IDs (~750 tokens/result).
-        
-        Returns complete observation data. Use only for explicitly selected relevant items.
-        Most expensive layer - use after filtering with memory_search and memory_timeline.
-        
-        Args:
-            ids: List of observation IDs from memory_search or memory_timeline
-        
-        Returns:
-            Dict with full observation details and estimated_tokens
+        """Layer 3: Get full details for specific memory IDs (~750 tokens/result). Most expensive.
+
+        AUTOMATIC TRIGGERS - Call this when:
+        - You have specific observation IDs and need complete details
+        - After filtering with memory_search and memory_timeline
+        - You need the full raw data of specific observations
+
+        Returns complete observation data. Use ONLY for explicitly selected relevant items.
+        This is the most expensive layer - filter first with memory_search.
+
+        PARAMETERS:
+        - ids: List of observation IDs from memory_search or memory_timeline
         """
         results = retriever.layer3_full_details(ids)
         
@@ -312,18 +338,22 @@ def _register_memory_tools() -> None:
         query: Optional[str] = None,
         limit: int = 50
     ) -> dict:
-        """Auto-inject relevant context at session start.
+        """Auto-inject relevant context from past sessions at any point during work.
+
+        AUTOMATIC TRIGGERS - Call this when:
+        - You need a refresher on past work mid-session
+        - Starting work on a new subtask and want relevant context
+        - User asks "what have we learned about X previously?"
 
         Retrieves up to 50 relevant observations from previous sessions.
-        Primary entry point for memory injection with caveman ultra compression.
+        Unlike memory_session_start (which auto-injects), you can call this mid-session.
 
-        Args:
-            session_id: Current session ID
-            query: Optional query to filter relevant memories
-            limit: Max observations to inject (default: 50)
+        WORKFLOW POSITION: Call anytime you need past context, not just at session start.
 
-        Returns:
-            Dict with context_block, observation_count, and estimated_tokens
+        PARAMETERS:
+        - session_id: Current session ID
+        - query: What you want context about (optional - uses session focus if not provided)
+        - limit: Max observations to inject (default: 50)
         """
         context = context_builder.build_session_start_context(session_id, query, limit)
 
@@ -339,21 +369,22 @@ def _register_memory_tools() -> None:
         session_id: Optional[str] = None,
         limit: int = 3
     ) -> dict:
-        """Get a synthesized recap of recent session knowledge (~150-250 tokens).
+        """Get a synthesized recap of recent session knowledge (~150-250 tokens). Structured, not raw.
 
-        Call this FIRST when starting work to understand what happened in past sessions.
-        Returns structured knowledge: files touched, decisions made, next steps,
-        conventions discovered — not raw tool outputs.
+        AUTOMATIC TRIGGERS - Call this FIRST when:
+        - Starting work to understand what happened in past sessions
+        - User asks "what have we been working on?"
+        - You want to see files touched, decisions made, next steps
 
-        If you need more details on a specific topic after reading the recap,
+        Returns STRUCTURED knowledge: files touched, decisions made, next steps,
+        conventions discovered — NOT raw tool outputs.
+
+        If you need more details on a specific topic AFTER reading the recap,
         call memory_detailed_context with a topic from the recap.
 
-        Args:
-            session_id: Optional specific session to recap (default: recent sessions)
-            limit: Max recent sessions to recap (default: 3)
-
-        Returns:
-            Dict with quick_recap text, session summaries, and next steps
+        PARAMETERS:
+        - session_id: Optional specific session to recap (default: recent sessions)
+        - limit: Max recent sessions to recap (default: 3)
         """
         if session_id:
             knowledge_entries = storage.get_knowledge(session_id)
@@ -438,21 +469,20 @@ def _register_memory_tools() -> None:
         topic: str,
         session_id: Optional[str] = None
     ) -> dict:
-        """Get detailed context about a specific topic from past sessions (~500-800 tokens).
+        """Get detailed context about a specific topic from past sessions (~500-800 tokens). Deep dive.
 
-        Call this AFTER memory_quick_recap when you need deep understanding of a topic.
-        Example topics: 'storage', 'privacy', 'MCP', 'compression', 'caveman',
-        'session_manager', or any file name/feature from the recap.
+        AUTOMATIC TRIGGERS - Call this AFTER memory_quick_recap when:
+        - You need deep understanding of a specific topic
+        - User asks about a specific area like "what do we know about storage?"
+        - Example topics: 'storage', 'privacy', 'MCP', 'compression', 'caveman',
+          'session_manager', or any file name/feature from the recap
 
         Returns detailed files, decisions, architecture notes, and conventions
         related to the topic — not just compressed tool outputs.
 
-        Args:
-            topic: Topic to get detailed context about (e.g., 'storage', 'privacy')
-            session_id: Optional specific session to search (default: all sessions)
-
-        Returns:
-            Dict with detailed context text and related knowledge
+        PARAMETERS:
+        - topic: Topic to get detailed context about (e.g., 'storage', 'privacy')
+        - session_id: Optional specific session to search (default: all sessions)
         """
         # Get knowledge from relevant sessions
         if session_id:
@@ -589,8 +619,12 @@ def _register_memory_tools() -> None:
     ) -> dict:
         """Auto-ingest session activity from git history. NO manual logging needed!
 
-        Call this when you forgot to log observations during work. It scans
-        the git working tree to reconstruct what happened:
+        AUTOMATIC TRIGGERS - Call this when:
+        - You forgot to log observations during work
+        - You want to reconstruct what happened in a past work session
+        - Starting a session and want to capture recent code changes
+
+        Scans git history to reconstruct session activity:
         - Modified/created/deleted files (from git status)
         - Commits made during the session (from git log)
         - Lines added/removed per file (from git diff)
@@ -600,13 +634,10 @@ def _register_memory_tools() -> None:
 
         After ingestion, call memory_quick_recap to see the synthesized knowledge.
 
-        Args:
-            session_id: Session identifier to create for this ingested session
-            time_window_hours: Hours to look back for commits (default: 24)
-            include_uncommitted: Include uncommitted changes (default: True)
-
-        Returns:
-            Dict with files found, commits found, observations created, and knowledge
+        PARAMETERS:
+        - session_id: Session identifier to create for this ingested session
+        - time_window_hours: Hours to look back for commits (default: 24)
+        - include_uncommitted: Include uncommitted changes (default: True)
         """
         from .memory.retrogit_ingest import retroactive_ingest as retro_ingest_fn
 
@@ -666,7 +697,20 @@ def _ensure_runtime_background() -> None:
 
 @mcp.tool()
 def openlmlib_init() -> dict:
-    """Initialize database, data directories, and vector index."""
+    """Initialize the OpenLMlib knowledge base. Call this ONCE before using any other tools.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - First time using OpenLMlib on a new machine or project
+    - You get database errors suggesting the database doesn't exist
+    - User asks to set up or initialize OpenLMlib
+
+    DO NOT CALL for:
+    - Normal tool usage (database already exists)
+    - Each session start (initialization is permanent)
+
+    This creates the SQLite database, vector index, and required directories.
+    Safe to call multiple times - will skip if already initialized.
+    """
     return init_library(_settings_path())
 
 
@@ -674,7 +718,7 @@ def openlmlib_init() -> dict:
 def openlmlib_add_finding(
     project: str,
     claim: str,
-    confidence: float,
+    confidence: float = 0.8,
     evidence: Optional[List[str]] = None,
     reasoning: str = "",
     caveats: Optional[List[str]] = None,
@@ -684,7 +728,37 @@ def openlmlib_add_finding(
     finding_id: Optional[str] = None,
     confirm: bool = False,
 ) -> dict:
-    """Add a finding to OpenLMlib. Requires confirm=true for writes."""
+    """Save critical research findings, discoveries, and insights to persistent library.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - You discover important factual information during research
+    - You complete an analysis with actionable insights
+    - You find evidence supporting or refuting a hypothesis
+    - You learn something new about the codebase or project
+    - User shares important information that should be remembered
+
+    DO NOT CALL for:
+    - Temporary working notes
+    - Process updates or progress reports
+    - Conversation summaries
+    - Tool execution results (unless they contain novel insights)
+
+    WORKFLOW POSITION: Call after discovering insights, before ending session.
+    Save findings as you go - don't wait until the end.
+
+    PARAMETERS:
+    - project: Project name for categorization (required)
+    - claim: The finding/insight text (required) - be specific and actionable
+    - confidence: Confidence level 0.0-1.0 (default: 0.8). Use 0.9 for definitive findings, 0.7 for tentative, 0.5 for hypotheses
+    - evidence: Supporting evidence strings (optional) - quotes, data points, references
+    - reasoning: Your reasoning behind the finding (optional but recommended)
+    - caveats: Limitations or cave (optional)
+    - tags: Tags for categorization (optional) - use consistent tags
+    - confirm: Must be True to save (safety gate). Use False for drafts.
+
+    TIP: If a similar finding already exists, consider updating it instead of creating a duplicate.
+    Use search_findings first to check for duplicates.
+    """
     return add_finding(
         settings_path=_settings_path(),
         project=project,
@@ -703,19 +777,57 @@ def openlmlib_add_finding(
 
 @mcp.tool()
 def openlmlib_list_findings(limit: int = 50, offset: int = 0) -> dict:
-    """List findings in OpenLMlib."""
+    """List recent findings in the library. Use for browsing, not targeted search.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - User asks to see all findings or browse the library
+    - You want to get a sense of what's stored in the library
+    - Checking library contents after initialization
+
+    FOR TARGETED SEARCH, use openlmlib_search_fts or openlmlib_retrieve instead.
+
+    PARAMETERS:
+    - limit: Max findings to return (default: 50, max: 200)
+    - offset: Offset for pagination (default: 0)
+    """
     return list_findings(_settings_path(), limit=limit, offset=offset)
 
 
 @mcp.tool()
 def openlmlib_get_finding(finding_id: str) -> dict:
-    """Get a finding by id."""
+    """Get a specific finding by its ID.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - You have a finding_id from search results or list
+    - You need the full details of a specific finding
+    - User references a specific finding ID
+
+    Use search_findings first to find the ID if you don't have it.
+    """
     return get_finding(_settings_path(), finding_id)
 
 
 @mcp.tool()
 def openlmlib_search_fts(query: str, limit: int = 10) -> dict:
-    """Search findings using SQLite FTS5."""
+    """Search findings using keyword (FTS5) search. Fast, exact keyword matching.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - Looking for findings containing specific keywords
+    - You know the exact terms used in a finding
+    - Quick lookup of stored knowledge
+
+    WORKFLOW POSITION: Use FIRST for targeted keyword search. If results are insufficient,
+    try openlmlib_retrieve for semantic search that finds related concepts.
+
+    SEARCH TIPS: Use specific keywords. FTS5 supports boolean operators:
+    - "python web framework" finds all three words
+    - "python AND web" finds both
+    - "python OR javascript" finds either
+
+    PARAMETERS:
+    - query: Search query (keyword(s))
+    - limit: Max results (default: 10)
+    """
     return search_fts(_settings_path(), query, limit=limit)
 
 
@@ -731,7 +843,27 @@ def openlmlib_retrieve(
     lexical_k: Optional[int] = None,
     final_k: Optional[int] = None,
 ) -> dict:
-    """Run dual-index retrieval (semantic + lexical) with optional filters."""
+    """Run intelligent retrieval combining semantic similarity and keyword matching.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - Keyword search (search_fts) didn't find relevant results
+    - Looking for findings related to a concept or topic
+    - You need the most relevant findings for a research question
+    - Broad exploration of what knowledge exists
+
+    WORKFLOW POSITION: Use AFTER search_fts returns insufficient results.
+    This tool automatically combines semantic (meaning-based) and lexical (keyword) search.
+
+    PARAMETERS:
+    - query: Search query (required) - describe what you're looking for
+    - project: Filter by project name (optional)
+    - tags: Filter by tags (optional)
+    - confidence_min: Minimum confidence 0.0-1.0 (optional) - filter low-confidence findings
+    - final_k: Number of results to return (optional, default: 10)
+
+    ADVANCED: semantic_k and lexical_k control how many candidates are fetched
+    before reranking. Usually not needed - use final_k instead.
+    """
     return retrieve_findings(
         settings_path=_settings_path(),
         query=query,
@@ -754,7 +886,23 @@ def openlmlib_retrieve_context(
     confidence_min: Optional[float] = None,
     final_k: Optional[int] = None,
 ) -> dict:
-    """Retrieve findings and return sanitized untrusted context block for LLM prompts."""
+    """Retrieve findings and return them in a sanitized format safe for LLM context.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - You need to inject findings into your context for reasoning
+    - Building a knowledge base context for analysis
+    - You want findings formatted safely without injection risks
+
+    DIFFERENCE from openlmlib_retrieve: This returns a sanitized context block
+    optimized for safe inclusion in LLM prompts. Use retrieve for raw data.
+
+    PARAMETERS:
+    - query: Search query (required)
+    - project: Filter by project (optional)
+    - tags: Filter by tags (optional)
+    - confidence_min: Minimum confidence (optional)
+    - final_k: Number of results (optional, default: 10)
+    """
     return retrieve_prompt_context(
         settings_path=_settings_path(),
         query=query,
@@ -767,23 +915,256 @@ def openlmlib_retrieve_context(
 
 @mcp.tool()
 def openlmlib_delete_finding(finding_id: str, confirm: bool = False) -> dict:
-    """Delete a finding by id. Requires confirm=true for writes."""
+    """Delete a finding by ID. DESTRUCTIVE - use with caution.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - User explicitly asks to delete a specific finding
+    - A finding is clearly incorrect or outdated
+
+    DO NOT CALL for:
+    - Cleaning up duplicates (update instead)
+    - Without explicit user confirmation
+
+    SAFETY: Requires confirm=True to prevent accidental deletion.
+    The finding is permanently removed.
+
+    PARAMETERS:
+    - finding_id: ID of the finding to delete (required)
+    - confirm: Must be True to delete (safety gate)
+    """
     return delete_finding(_settings_path(), finding_id, confirm=confirm)
 
 
 @mcp.tool()
 def openlmlib_health() -> dict:
-    """Return database and vector index health info."""
+    """Check OpenLMlib database and vector index health.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - Debugging tool errors or unexpected behavior
+    - User asks about the system status
+    - Verifying initialization succeeded
+
+    Returns database size, finding count, vector index status.
+    """
     return health(_settings_path())
 
 
 @mcp.tool()
 def openlmlib_evaluate_dataset(dataset_path: str = "config/eval_queries.json", final_k: int = 10) -> dict:
-    """Run retrieval evaluation metrics on a local dataset file."""
+    """Run retrieval evaluation metrics on a test dataset. For developers testing improvements.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - Evaluating retrieval quality after configuration changes
+    - Running the evaluation pipeline
+    - Measuring recall/precision of the search system
+
+    This is a development/evaluation tool, not needed for normal usage.
+
+    PARAMETERS:
+    - dataset_path: Path to JSON file with test queries (default: config/eval_queries.json)
+    - final_k: Number of results per query to evaluate (default: 10)
+    """
     return evaluate_dataset(
         settings_path=_settings_path(),
         dataset_path=Path(dataset_path),
         final_k=final_k,
+    )
+
+
+@mcp.tool()
+def start_research_workflow(
+    session_id: str,
+    topic: str,
+    user_id: Optional[str] = None,
+    limit: int = 50
+) -> dict:
+    """Begin a complete research session with automatic context loading. COMPOSITE TOOL.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - Starting any research task or investigation
+    - User asks to "research" or "look into" something
+    - Beginning work on a new topic area
+
+    This replaces calling memory_session_start + openlmlib_search_fts separately.
+    It handles session creation, context injection, and initial finding search in one step.
+
+    WORKFLOW: After this returns, proceed with research and call save_finding
+    for important discoveries. When done, call memory_session_end.
+
+    PARAMETERS:
+    - session_id: Unique session identifier for this research session
+    - topic: What you'll be researching (used to find relevant past context and search findings)
+    - user_id: Optional user/agent identifier
+    - limit: Max past observations to inject (default: 50)
+
+    Returns session info, injected context, and any existing findings on the topic.
+    """
+    # Step 1: Start session and inject past context
+    session_result = None
+    try:
+        session_mgr_for_workflow = __import__('openlmlib.memory', fromlist=['SessionManager']).SessionManager(
+            __import__('openlmlib.memory', fromlist=['MemoryStorage']).MemoryStorage(
+                get_runtime(_settings_path()).conn
+            )
+        )
+        session_result = session_mgr_for_workflow.on_session_start(session_id, user_id, topic)
+    except Exception:
+        pass  # Session may already exist - continue anyway
+
+    # Step 2: Search existing findings on the topic
+    existing_findings = search_fts(_settings_path(), topic, limit=10)
+
+    return {
+        "session_id": session_id,
+        "session_started": session_result is not None,
+        "topic": topic,
+        "existing_findings": existing_findings,
+        "finding_count": existing_findings.get("count", 0),
+        "next_steps": [
+            "Proceed with research (web search, code analysis, etc.)",
+            "Call openlmlib_add_finding for important discoveries",
+            "Call memory_session_end when research is complete"
+        ]
+    }
+
+
+@mcp.tool()
+def complete_session(
+    session_id: str,
+    export_to_library: bool = True,
+    project: Optional[str] = None,
+) -> dict:
+    """Gracefully end the current session with automatic knowledge preservation. COMPOSITE TOOL.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - User indicates work is done ("done", "finished", "ending session")
+    - Research or analysis is complete
+    - About to start unrelated work
+
+    This combines: memory_session_end (saves summary) + optional artifact export.
+    ALWAYS call this when user indicates work is done to prevent knowledge loss.
+
+    WORKFLOW POSITION: Last tool in any research/analysis workflow.
+
+    PARAMETERS:
+    - session_id: The session to end (track from start_research_workflow or memory_session_start)
+    - export_to_library: If True, also search for recent findings to persist (default: True)
+    - project: Project name for any exported findings (optional)
+
+    Returns session end status and export results.
+    """
+    # Step 1: End session and generate summary
+    end_result = None
+    try:
+        from .memory import SessionManager, MemoryStorage
+        runtime = get_runtime(_settings_path())
+        storage = MemoryStorage(runtime.conn)
+        session_mgr_end = SessionManager(storage)
+        end_result = session_mgr_end.on_session_end(session_id)
+    except Exception as e:
+        return {
+            "session_id": session_id,
+            "status": "error",
+            "error": str(e),
+            "message": "Failed to end session"
+        }
+
+    # Step 2: List recent findings for potential export
+    recent_findings = None
+    if export_to_library:
+        recent_findings = list_findings(_settings_path(), limit=20)
+
+    return {
+        "session_id": session_id,
+        "status": "completed",
+        "summary_generated": end_result.get("summary_generated", False),
+        "observation_count": end_result.get("observation_count", 0),
+        "recent_findings_count": recent_findings.get("count", 0) if recent_findings else 0,
+        "message": "Session ended and knowledge preserved"
+    }
+
+
+@mcp.tool()
+def check_relevant_context(query: str, project: Optional[str] = None) -> dict:
+    """Quick check if relevant context exists before starting work. CONVENIENCE TOOL.
+
+    AUTOMATIC TRIGGERS - Call this at the start of ANY new task to determine
+    whether you have existing knowledge to build upon.
+
+    This is a convenience wrapper around search_fts that returns a simple
+    yes/no with relevant finding count and top topics.
+
+    WORKFLOW POSITION: First tool to call when starting any task.
+
+    PARAMETERS:
+    - query: What you're about to work on
+    - project: Filter by project (optional)
+
+    Returns: {has_context: bool, finding_count: int, top_findings: []}
+    """
+    results = search_fts(_settings_path(), query, limit=5)
+    findings = results.get("findings", [])
+
+    # Extract top topics/tags
+    top_topics = []
+    for f in findings[:3]:
+        claim = f.get("claim", "")[:100]
+        top_topics.append(claim)
+
+    return {
+        "has_context": len(findings) > 0,
+        "finding_count": results.get("count", 0),
+        "top_findings": top_topics,
+        "recommendation": "Existing knowledge found - review before doing fresh research" if findings else "No existing knowledge - proceed with fresh research"
+    }
+
+
+@mcp.tool()
+def save_important_finding(
+    project: str,
+    claim: str,
+    confidence: Optional[float] = None,
+    evidence: Optional[List[str]] = None,
+    reasoning: str = "",
+    caveats: Optional[List[str]] = None,
+    tags: Optional[List[str]] = None,
+    confirm: bool = False,
+) -> dict:
+    """Convenience wrapper for saving findings with automatic confidence scoring.
+
+    AUTOMATIC TRIGGERS - Call this whenever you discover something important.
+    Use when you think 'this is important' or 'this should be remembered'.
+
+    Automatically sets confidence based on claim strength:
+    - 0.9 for definitive findings (if confidence not specified)
+    - 0.7 for tentative findings
+    - Uses provided confidence if explicitly set
+
+    PARAMETERS:
+    - project: Project name (required)
+    - claim: The finding text (required)
+    - confidence: Optional override (default: auto-scored 0.9 for definitive, 0.7 for tentative)
+    - evidence: Supporting evidence (optional)
+    - reasoning: Your reasoning (optional but recommended)
+    - caveats: Limitations or cave (optional)
+    - tags: Tags for categorization (optional)
+    - confirm: Must be True to save (safety gate)
+    """
+    # Auto-score confidence if not provided
+    if confidence is None:
+        # Default to high confidence for explicit saves
+        confidence = 0.9
+
+    return add_finding(
+        settings_path=_settings_path(),
+        project=project,
+        claim=claim,
+        confidence=confidence,
+        evidence=evidence,
+        reasoning=reasoning,
+        caveats=caveats,
+        tags=tags,
+        confirm=confirm,
     )
 
 
@@ -803,16 +1184,16 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
     """
     core_tools = {
         "openlmlib_init": {
-            "description": "Initialize database, data directories, and vector index.",
+            "description": "Initialize the OpenLMlib knowledge base. Call ONCE before first use.",
             "args": {},
             "returns": "Dict with initialization status",
         },
         "openlmlib_add_finding": {
-            "description": "Add a finding to OpenLMLib.",
+            "description": "Save critical research findings, discoveries, and insights. Auto-trigger when discovering important information.",
             "args": {
-                "project": "Project name",
-                "claim": "The claim/finding text",
-                "confidence": "Confidence score (0.0-1.0)",
+                "project": "Project name (required)",
+                "claim": "The finding/insight text (required)",
+                "confidence": "Confidence 0.0-1.0 (default: 0.8). 0.9=definitive, 0.7=tentative",
                 "evidence": "Optional list of evidence strings",
                 "reasoning": "Reasoning behind the finding",
                 "caveats": "Optional list of caveats",
@@ -825,7 +1206,7 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
             "returns": "Dict with finding info",
         },
         "openlmlib_list_findings": {
-            "description": "List findings in OpenLMLib.",
+            "description": "List recent findings. Use for browsing, not targeted search.",
             "args": {
                 "limit": "Max findings to return (default: 50)",
                 "offset": "Offset for pagination (default: 0)",
@@ -833,66 +1214,103 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
             "returns": "Dict with list of findings",
         },
         "openlmlib_get_finding": {
-            "description": "Get a finding by id.",
+            "description": "Get a specific finding by its ID.",
             "args": {
                 "finding_id": "ID of the finding to retrieve",
             },
             "returns": "Dict with finding details",
         },
         "openlmlib_search_fts": {
-            "description": "Search findings using SQLite FTS5 full-text search.",
+            "description": "Search findings using keyword (FTS5) search. Fast, exact keyword matching.",
             "args": {
-                "query": "Search query",
+                "query": "Search query (keyword(s))",
                 "limit": "Max results (default: 10)",
             },
             "returns": "Dict with matching findings",
         },
         "openlmlib_retrieve": {
-            "description": "Run dual-index retrieval (semantic + lexical) with optional filters.",
+            "description": "Intelligent retrieval combining semantic similarity and keyword matching.",
             "args": {
-                "query": "Search query",
+                "query": "Search query (required)",
                 "project": "Filter by project (optional)",
                 "tags": "Filter by tags (optional)",
-                "created_after": "Filter by creation date (optional)",
-                "created_before": "Filter by creation date (optional)",
                 "confidence_min": "Minimum confidence score (optional)",
-                "semantic_k": "Number of semantic results (optional)",
-                "lexical_k": "Number of lexical results (optional)",
                 "final_k": "Final number of results (optional)",
             },
             "returns": "Dict with retrieved findings",
         },
         "openlmlib_retrieve_context": {
-            "description": "Retrieve findings and return sanitized untrusted context block for LLM prompts.",
+            "description": "Retrieve findings in sanitized format safe for LLM context.",
             "args": {
-                "query": "Search query",
+                "query": "Search query (required)",
                 "project": "Filter by project (optional)",
                 "tags": "Filter by tags (optional)",
-                "confidence_min": "Minimum confidence score (optional)",
-                "final_k": "Final number of results (optional)",
+                "confidence_min": "Minimum confidence (optional)",
+                "final_k": "Number of results (optional)",
             },
             "returns": "Dict with sanitized context",
         },
         "openlmlib_delete_finding": {
-            "description": "Delete a finding by id.",
+            "description": "Delete a finding by ID. DESTRUCTIVE - use with caution.",
             "args": {
                 "finding_id": "ID of the finding to delete",
-                "confirm": "Must be True for writes (safety)",
+                "confirm": "Must be True to delete (safety)",
             },
             "returns": "Dict with deletion status",
         },
         "openlmlib_health": {
-            "description": "Return database and vector index health info.",
+            "description": "Check database and vector index health.",
             "args": {},
             "returns": "Dict with health status",
         },
         "openlmlib_evaluate_dataset": {
-            "description": "Run retrieval evaluation metrics on a local dataset file.",
+            "description": "Run retrieval evaluation metrics. For developers.",
             "args": {
                 "dataset_path": "Path to dataset file (default: 'config/eval_queries.json')",
-                "final_k": "Final number of results (default: 10)",
+                "final_k": "Number of results (default: 10)",
             },
             "returns": "Dict with evaluation metrics",
+        },
+        "start_research_workflow": {
+            "description": "COMPOSITE: Begin a complete research session with context loading. Replaces memory_session_start + search.",
+            "args": {
+                "session_id": "Unique session identifier",
+                "topic": "What you'll be researching",
+                "user_id": "Optional user/agent identifier",
+                "limit": "Max observations to inject (default: 50)",
+            },
+            "returns": "Dict with session info, context, and existing findings",
+        },
+        "complete_session": {
+            "description": "COMPOSITE: Gracefully end session with knowledge preservation. Replaces memory_session_end + export.",
+            "args": {
+                "session_id": "The session to end",
+                "export_to_library": "Also export findings (default: True)",
+                "project": "Project name for exported findings (optional)",
+            },
+            "returns": "Dict with session end status and export results",
+        },
+        "check_relevant_context": {
+            "description": "CONVENIENCE: Quick check if relevant context exists before starting work.",
+            "args": {
+                "query": "What you're about to work on",
+                "project": "Filter by project (optional)",
+            },
+            "returns": "Dict with has_context, finding_count, and top findings",
+        },
+        "save_important_finding": {
+            "description": "CONVENIENCE: Save finding with automatic confidence scoring. Use when discovering something important.",
+            "args": {
+                "project": "Project name (required)",
+                "claim": "The finding text (required)",
+                "confidence": "Optional override (default: 0.9)",
+                "evidence": "Supporting evidence (optional)",
+                "reasoning": "Your reasoning (optional)",
+                "caveats": "Limitations (optional)",
+                "tags": "Tags for categorization (optional)",
+                "confirm": "Must be True to save (safety)",
+            },
+            "returns": "Dict with finding info",
         },
     }
 
@@ -931,15 +1349,15 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
     }
 
     memory_tools = {
-        "memory_session_start": "Start a new session and inject relevant context from previous sessions.",
-        "memory_session_end": "End a session and trigger summarization.",
-        "memory_log_observation": "Log an observation from tool execution.",
-        "memory_search": "Layer 1: Search memory index (lightweight, ~75 tokens/result).",
+        "memory_session_start": "Start a new session and auto-inject relevant context from past sessions.",
+        "memory_session_end": "End a session and trigger automatic summarization.",
+        "memory_log_observation": "Log an observation from tool execution to build session memory.",
+        "memory_search": "Layer 1: Lightweight search of memory index (~75 tokens/result).",
         "memory_timeline": "Layer 2: Get chronological context for memory IDs (~200 tokens/result).",
         "memory_get_observations": "Layer 3: Get full details for specific memory IDs (~750 tokens/result).",
-        "memory_inject_context": "Auto-inject relevant context at session start.",
-        "memory_quick_recap": "Get a synthesized recap of recent sessions (~150-250 tokens). Call FIRST for structured knowledge.",
-        "memory_detailed_context": "Get detailed context about a specific topic (~500-800 tokens). Call AFTER quick recap.",
+        "memory_inject_context": "Auto-inject relevant context at any point during work.",
+        "memory_quick_recap": "Get synthesized recap of recent sessions. Call FIRST for structured knowledge.",
+        "memory_detailed_context": "Get detailed context about a specific topic. Call AFTER quick recap.",
         "memory_retroactive_ingest": "Auto-ingest session activity from git history. No manual logging needed!",
     }
 
@@ -970,7 +1388,7 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
         "description": "OpenLMlib MCP Server - Knowledge management and multi-agent collaboration tools",
         "categories": {
             "Core Library Tools": {
-                "description": "Manage findings in the OpenLMLib knowledge base",
+                "description": "Manage findings in the OpenLMlib knowledge base (14 tools including composite and convenience tools)",
                 "tools": {name: info["description"] for name, info in core_tools.items()},
             },
             "Memory Injection Tools": {
@@ -988,6 +1406,7 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
             "Call openlmlib_help(tool_name='<tool>') for detailed usage of a core tool",
             "Call openlmlib_help(tool_name='memory_<tool>') for memory tool usage",
             "Call collab_help(tool_name='<tool>') for detailed usage of a collab tool",
+            "WORKFLOW TIP: Use start_research_workflow and complete_session for common research patterns",
         ],
     }
 

@@ -281,20 +281,22 @@ def collab_create_session(
 ) -> Dict:
     """Create a new collaboration session for multi-agent research.
 
-    Args:
-        title: Short descriptive title for the session
-        task_description: Detailed description of the research task
-        plan: Optional list of task dicts, each with keys:
-              - step (int): step number
-              - task (str): task description
-              - assigned_to (str, optional): agent ID or "any"
-        rules: Optional session rules dict with keys like:
-               - max_agents (int): max agents allowed (default 5)
-               - require_assignment (bool): require task assignment
-        created_by: Identifier for the creating agent
+    AUTOMATIC TRIGGERS - Call this when:
+    - Starting a new multi-agent research task
+    - User asks to set up a collaboration session
+    - You need to coordinate work across multiple agents
 
-    Returns:
-        Dict with session_id, agent_id, and session info
+    WORKFLOW POSITION: First tool in any collaboration workflow.
+
+    PARAMETERS:
+    - title: Short descriptive title for the session
+    - task_description: Detailed description of the research task
+    - plan: Optional list of task dicts (step, task, assigned_to) - recommended for structured work
+    - rules: Optional session rules (max_agents, require_assignment)
+    - created_by: Your agent identifier (default: "orchestrator")
+
+    After creation, use collab_join_session for agents to join,
+    then collab_send_message to assign tasks.
     """
     try:
         if not title or not isinstance(title, str):
@@ -339,16 +341,22 @@ def collab_join_session(
     model: str,
     capabilities: Optional[List[str]] = None,
 ) -> Dict:
-    """Join an existing collaboration session.
+    """Join an existing collaboration session as an agent.
 
-    Args:
-        session_id: ID of the session to join
-        model: Your model identifier (e.g., 'gpt-codex', 'gemini-pro')
-        capabilities: Optional list of your capabilities
-                      (e.g., ['research', 'code_analysis'])
+    AUTOMATIC TRIGGERS - Call this when:
+    - You've been assigned work in a session
+    - You need to participate in an active collaboration
+    - Starting work as a worker or specialist in a multi-agent setup
 
-    Returns:
-        Dict with your agent_id and session context
+    WORKFLOW POSITION: Call after session is created and you have the session_id.
+
+    PARAMETERS:
+    - session_id: ID of the session to join
+    - model: Your model identifier (e.g., 'gpt-codex', 'gemini-pro')
+    - capabilities: Optional list of your capabilities (e.g., ['research', 'code_analysis'])
+
+    After joining, read the session_context above to understand current state,
+    then use collab_read_messages to check for new messages.
     """
     try:
         validate_session_id(session_id)
@@ -508,29 +516,36 @@ def collab_send_message(
     from_agent: str = "",
 ) -> Dict:
     # NOTE: from_agent should ideally be required for non-system calls
-    """Send a message to a collaboration session.
+    """Send a message to a collaboration session. Core communication tool.
 
-    Message types:
-        task: Assign work to an agent
-        result: Return findings or completed work
-        question: Ask for clarification
-        answer: Respond to a question
-        ack: Acknowledge a message
-        update: Progress update
-        artifact: Reference a saved artifact
-        complete: Mark a task as done
-        system: System notification (auto-generated)
+    AUTOMATIC TRIGGERS - Call this when:
+    - Assigning work to an agent (msg_type="task")
+    - Returning findings or completed work (msg_type="result")
+    - Asking for clarification (msg_type="question")
+    - Responding to a question (msg_type="answer")
+    - Providing progress updates (msg_type="update")
+    - Marking a task as done (msg_type="complete")
 
-    Args:
-        session_id: Target session
-        msg_type: Type of message (task, result, question, answer, ack, update, artifact, complete, system)
-        content: Message content
-        to_agent: Target agent ID (or None for broadcast)
-        metadata: Optional metadata dict
-        from_agent: Your agent ID (required for non-orchestrator calls)
+    MESSAGE TYPES:
+    - task: Assign work to an agent
+    - result: Return findings or completed work
+    - question: Ask for clarification
+    - answer: Respond to a question
+    - ack: Acknowledge a message
+    - update: Progress update
+    - artifact: Reference a saved artifact
+    - complete: Mark a task as done
+    - system: System notification (auto-generated)
 
-    Returns:
-        Dict with message info
+    WORKFLOW POSITION: Use throughout the session for all agent communication.
+
+    PARAMETERS:
+    - session_id: Target session
+    - msg_type: Type of message (see above)
+    - content: Message content
+    - to_agent: Target agent ID (or None for broadcast)
+    - from_agent: Your agent ID (required)
+    - metadata: Optional metadata dict
     """
     try:
         validate_session_id(session_id)
@@ -655,34 +670,31 @@ def collab_poll_messages(
     msg_types: Optional[List[str]] = None,
     from_agent: Optional[str] = None,
 ) -> Dict:
-    """Wait for and read new messages from a session (AUTONOMOUS LOOP tool).
+    """Wait for and read new messages from a session. AUTONOMOUS LOOP tool for agent communication.
 
-    This tool blocks until new messages arrive or the timeout expires.
-    It is the primary mechanism for agents to run continuous collaboration
-    without human intervention.
+    AUTOMATIC TRIGGERS - Call this when:
+    - You're running an autonomous agent loop
+    - Waiting for other agents to complete work
+    - Need real-time collaboration without human intervention
 
-    Usage pattern for autonomous agents:
+    This tool BLOCKS until new messages arrive or the timeout expires.
+    It is the primary mechanism for agents to run continuous collaboration.
+
+    USAGE PATTERN FOR AUTONOMOUS AGENTS:
         1. Call collab_poll_messages(session_id, agent_id, timeout=30)
         2. Process any returned messages
         3. Send responses via collab_send_message
         4. Repeat from step 1 until the session is complete
 
-    Args:
-        session_id: Session to monitor
-        agent_id: Your agent ID (for offset tracking)
-        timeout: Max seconds to wait for new messages (default: 30, 0 = no wait)
-        limit: Max messages to return once data arrives (default: 50)
-        msg_types: Filter by message types (optional)
-        from_agent: Filter by sender (optional)
+    WORKFLOW POSITION: Main loop tool for autonomous agents.
 
-    Returns:
-        Dict with:
-            - messages: list of new messages (empty if timeout)
-            - count: number of messages returned
-            - waited_seconds: how long we actually waited
-            - timed_out: True if no new messages arrived before timeout
-            - last_seq: latest message sequence number seen
-            - session_status: current session status (active/completed/etc)
+    PARAMETERS:
+    - session_id: Session to monitor
+    - agent_id: Your agent ID
+    - timeout: Max seconds to wait (default: 30, 0 = no wait)
+    - limit: Max messages to return (default: 50)
+    - msg_types: Filter by message types (optional)
+    - from_agent: Filter by sender (optional)
     """
     import time as _time
 
@@ -942,18 +954,23 @@ def collab_get_session_context(
     agent_id: str,
     max_messages: int = 20,
 ) -> Dict:
-    """Get a compiled context view of the session (summary + recent messages + state + tasks + artifacts).
+    """Get a compiled context view of the session. PRIMARY tool for understanding session state.
 
-    This is the PRIMARY tool agents should use to understand session state.
-    It compiles a complete, attribution-formatted view optimized for context windows.
+    AUTOMATIC TRIGGERS - Call this when:
+    - Joining a session and you need to understand current state
+    - Before starting work to see what's been done
+    - After being assigned a task to understand context
+    - Whenever you're unsure about session status
 
-    Args:
-        session_id: Session to get context for
-        agent_id: Your agent ID (for personalized context)
-        max_messages: Max recent messages to include (default 20)
+    This is the GO-TO tool for session understanding. Returns summary + recent messages
+    + state + tasks + artifacts in a formatted view optimized for context windows.
 
-    Returns:
-        Dict with structured context AND a prompt-ready formatted string
+    WORKFLOW POSITION: Call after joining, before starting work, and periodically.
+
+    PARAMETERS:
+    - session_id: Session to get context for
+    - agent_id: Your agent ID
+    - max_messages: Max recent messages to include (default: 20)
     """
     try:
         validate_session_id(session_id)
@@ -993,20 +1010,25 @@ def collab_add_artifact(
 ) -> Dict:
     """Save a research artifact (finding, analysis, summary) to the session.
 
+    AUTOMATIC TRIGGERS - Call this when:
+    - You complete a significant analysis or research summary
+    - You've written important code or documentation
+    - You want to save a detailed analysis (beyond a simple message)
+    - Completing a major deliverable
+
+    Use this for SIGNIFICANT work products, not for inline messages.
     Artifacts are stored as files with metadata indexed in SQLite.
-    Use this for significant work products, not for inline messages.
 
-    Args:
-        session_id: Target session
-        title: Descriptive title for the artifact
-        content: Full artifact content (markdown recommended)
-        created_by: Your agent ID
-        artifact_type: Optional type (research_summary, analysis, code, data, etc.)
-        tags: Optional tags for categorization
-        shared: If True, save to shared directory (default: False, saves to your workspace)
+    WORKFLOW POSITION: Call after completing substantial work.
 
-    Returns:
-        Dict with artifact info
+    PARAMETERS:
+    - session_id: Target session
+    - title: Descriptive title for the artifact
+    - content: Full artifact content (markdown recommended)
+    - created_by: Your agent ID
+    - artifact_type: Type like 'research_summary', 'analysis', 'code', 'data'
+    - tags: Tags for categorization
+    - shared: If True, save to shared directory (default: False)
     """
     try:
         validate_session_id(session_id)
@@ -1209,17 +1231,24 @@ def collab_terminate_session(
     orchestrator_id: str,
     summary: Optional[str] = None,
 ) -> Dict:
-    """Terminate and complete a collaboration session.
+    """Terminate and complete a collaboration session. Orchestrator only.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - All tasks in the session are completed
+    - You want to formally end the collaboration
+    - Session goal has been achieved
 
     Only the orchestrator should call this.
     All artifacts are preserved and can be exported to the main library.
 
-    Args:
-        session_id: Session to terminate
-        summary: Optional final summary of the session's work
+    WORKFLOW POSITION: Last tool in collaboration workflow (before export).
 
-    Returns:
-        Dict with termination confirmation
+    PARAMETERS:
+    - session_id: Session to terminate
+    - orchestrator_id: The orchestrator's agent ID
+    - summary: Optional final summary of the session's work
+
+    After termination, use collab_export_to_library to persist findings.
     """
     try:
         validate_session_id(session_id)
@@ -1255,19 +1284,23 @@ def collab_export_to_library(
 ) -> Dict:
     """Export session artifacts as findings in the main OpenLMLib library.
 
+    AUTOMATIC TRIGGERS - Call this when:
+    - A collaboration session is completed
+    - You want to persist session work to the main knowledge base
+    - Future sessions might need this knowledge
+
     After a session completes, use this to permanently store the
     research outputs in the main library for future retrieval.
 
-    Args:
-        session_id: Completed session to export
-        project: Project name for findings (defaults to session title)
-        confidence: Default confidence score (default 0.8)
-        tags: Additional tags to apply to all findings
-        artifact_ids: Specific artifacts to export (None = all)
-        include_summary: Also export the session summary as a finding
+    WORKFLOW POSITION: After session termination, before starting new work.
 
-    Returns:
-        Dict with export results (exported count, failures, finding IDs)
+    PARAMETERS:
+    - session_id: Completed session to export
+    - project: Project name for findings (defaults to session title)
+    - confidence: Default confidence 0.0-1.0 (default: 0.8)
+    - tags: Additional tags to apply to all findings
+    - artifact_ids: Specific artifacts to export (None = all)
+    - include_summary: Also export the session summary as a finding (default: True)
     """
     try:
         validate_session_id(session_id)
@@ -1704,7 +1737,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
     """
     tools_info = {
         "collab_create_session": {
-            "description": "Create a new collaboration session for multi-agent research.",
+            "description": "Create a new collaboration session for multi-agent research. First tool in collaboration workflow.",
             "args": {
                 "title": "Short descriptive title for the session",
                 "task_description": "Detailed description of the research task",
@@ -1715,7 +1748,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             "returns": "Dict with session_id, agent_id, and session info",
         },
         "collab_join_session": {
-            "description": "Join an existing collaboration session.",
+            "description": "Join an existing collaboration session as an agent.",
             "args": {
                 "session_id": "ID of the session to join",
                 "model": "Your model identifier (e.g., 'gpt-codex', 'gemini-pro')",
@@ -1749,7 +1782,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             "returns": "Dict with updated state and version info",
         },
         "collab_send_message": {
-            "description": "Send a message to a collaboration session.",
+            "description": "Send a message to a collaboration session. Core communication tool.",
             "args": {
                 "session_id": "Target session",
                 "msg_type": "Type: task, result, question, answer, ack, update, artifact, complete, system",
@@ -1772,16 +1805,16 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             "returns": "Dict with messages and your current offset",
         },
         "collab_poll_messages": {
-            "description": "Wait for and read new messages from a session (AUTONOMOUS LOOP tool). Blocks until new messages arrive or timeout expires. Use this for continuous agent-to-agent communication without human intervention.",
+            "description": "Wait for and read new messages (AUTONOMOUS LOOP tool). Blocks until new messages arrive. Use for continuous agent communication.",
             "args": {
                 "session_id": "Session to monitor",
                 "agent_id": "Your agent ID (required for offset tracking)",
-                "timeout": "Max seconds to wait for new messages (default: 30, 0 = no wait)",
-                "limit": "Max messages to return once data arrives (default: 50)",
+                "timeout": "Max seconds to wait (default: 30, 0 = no wait)",
+                "limit": "Max messages to return (default: 50)",
                 "msg_types": "Filter by message types (optional)",
                 "from_agent": "Filter by sender (optional)",
             },
-            "usage": "Call in a loop: poll → process messages → send response → poll again. Keeps running until session completes.",
+            "usage": "Call in loop: poll → process → respond → repeat. Runs until session completes.",
             "returns": "Dict with messages, waited_seconds, timed_out flag, and session_status",
         },
         "collab_tail_messages": {
@@ -1815,7 +1848,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             "returns": "Dict with matching messages",
         },
         "collab_get_session_context": {
-            "description": "Get a compiled context view of the session (PRIMARY tool for understanding session state).",
+            "description": "Get compiled context view of session. PRIMARY tool for understanding session state.",
             "args": {
                 "session_id": "Session to get context for",
                 "agent_id": "Your agent ID (for personalized context)",
