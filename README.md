@@ -12,7 +12,7 @@ Store, retrieve, and collaborate on findings with semantic search, full-text sea
 
 - **Knowledge Base**: SQLite metadata + JSON findings + FAISS/Numpy vector index
 - **Semantic Retrieval**: Multi-phase retrieval with semantic + lexical search, deduplication, and reranking
-- **MCP Server**: 52 tools for AI assistants (11 core + 10 memory + 31 collaboration)
+- **MCP Server**: 56 tools for AI assistants (15 core + 10 memory + 31 collaboration)
 - **CollabSessions**: Multi-agent collaboration with message passing, artifacts, and templates
 - **CLI**: Full command-line interface for management and diagnostics
 - **Portable**: Findings exportable as JSON, easy backup and restore
@@ -118,17 +118,19 @@ openlmlib query "retrieval" \
 
 ### 🤖 Use with AI Assistants
 
-42 MCP tools let AI assistants securely access and modify your knowledge base:
+56 MCP tools let AI assistants securely access and modify your knowledge base:
 
-**Core Tools (11)**:
+**Core Tools (15)**:
 - `init_library`, `health` - Setup and diagnostics
 - `save_finding`, `delete_finding` - Write operations (require confirmation)
 - `retrieve_findings`, `search_findings` - Retrieval and search
 - `list_findings`, `get_finding` - Browse findings
 - `retrieve_context` - Format findings for LLM prompts
+- `start_research`, `end_session` - Composite workflow tools
+- `check_context`, `save_finding_auto` - Convenience tools
 - `evaluate_retrieval`, `help_library` - Utilities
 
-📖 **[See all 52 tools →](docs/MCP_TOOLS.md)**
+📖 **[See all 56 tools →](docs/MCP_TOOLS.md)**
 
 ### 👥 Multi-Agent Collaboration
 
@@ -178,16 +180,16 @@ OpenLMlib includes a powerful memory system that persists session knowledge acro
 
 **Memory Tools** (10 tools):
 ```
-session_start       - Start session with context from previous sessions
-session_end         - End session and auto-generate summary
-log_observation     - Log tool executions for memory building
-search_memory              - Layer 1: Search index (~75 tokens/result)
-memory_timeline            - Layer 2: Chronological context (~200 tokens/result)
-get_observations    - Layer 3: Full details (~750 tokens/result)
-inject_context      - Auto-inject relevant context at session start
-session_recap         - Synthesized recap of recent sessions (~150-250 tokens)
-topic_context    - Deep dive on specific topics (~500-800 tokens)
-ingest_git_history  - Auto-ingest from git history (no manual logging!)
+session_start           - Start session with context from previous sessions
+session_end             - End session and auto-generate summary
+log_observation         - Log tool executions for memory building
+search_memory           - Layer 1: Search index (~75 tokens/result)
+memory_timeline         - Layer 2: Chronological context (~200 tokens/result)
+get_observations        - Layer 3: Full details (~750 tokens/result)
+inject_context          - Auto-inject relevant context at session start
+session_recap           - Synthesized recap of recent sessions (~150-250 tokens)
+topic_context           - Deep dive on specific topics (~500-800 tokens)
+ingest_git_history      - Auto-ingest from git history (no manual logging!)
 ```
 
 **Example Workflow**:
@@ -222,7 +224,7 @@ session_recap(limit=3)
 - Layer 1+2+3: 1,025 tokens/result (full details only for relevant items)
 - **vs. full dump**: 3-13x token savings!
 
-📖 **[Memory System Guide →](MEMORY_QUICKSTART.md)**
+📖 **[Memory System Guide →](docs/MEMORY_QUICKSTART.md)**
 
 ---
 
@@ -235,8 +237,8 @@ OpenLMlib
 │   ├── FAISS/Numpy (vector index)
 │   └── JSON findings (portable, human-readable)
 │
-├── MCP Server (52 tools)
-│   ├── 11 core library tools
+├── MCP Server (56 tools)
+│   ├── 15 core library tools
 │   ├── 10 memory tools (session lifecycle, progressive retrieval, retroactive ingestion)
 │   └── 31 collaboration tools
 │
@@ -259,7 +261,7 @@ OpenLMlib
 📚 **Complete documentation is in the [docs/](docs/README.md) folder:**
 
 - **[docs/README.md](docs/README.md)** - Documentation index and quick reference
-- **[docs/MCP_TOOLS.md](docs/MCP_TOOLS.md)** - Complete reference for all 42 MCP tools
+- **[docs/MCP_TOOLS.md](docs/MCP_TOOLS.md)** - Complete reference for all 56 MCP tools
 - **[docs/COLLAB_SESSIONS.md](docs/COLLAB_SESSIONS.md)** - Multi-agent collaboration guide
 - **[docs/SYSTEM_PROMPT.md](docs/SYSTEM_PROMPT.md)** - Agent instruction templates
 
