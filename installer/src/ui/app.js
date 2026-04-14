@@ -30,7 +30,7 @@ function App({ pythonCheck, hasPackageManager, installerDir }) {
   const [wizardConfig, setWizardConfig] = useState({
     embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
     vectorBackend: 'numpy',
-    mcpClients: ['vscode'],
+    mcpClients: ['vscode', 'claude_code', 'gemini_cli', 'qwen_code', 'opencode'],
   });
 
   useEffect(() => {

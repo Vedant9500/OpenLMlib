@@ -6,6 +6,41 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-04-14
+
+### Added
+- **MCP CLI Integration**: Global MCP configuration for 6 popular CLI coding tools
+  - Claude Code (`~/.claude.json`)
+  - Gemini CLI (`~/.gemini/settings.json`)
+  - Qwen Code (`~/.qwen/settings.json`)
+  - OpenCode (`~/.config/opencode/opencode.json`)
+  - Codex CLI (`~/.codex/config.toml` with TOML support)
+  - Aider (`~/.aider.conf.yml`)
+- **Memory System MCP Tools**: 10 new memory tools exposed via MCP
+  - `memory_session_start`, `memory_session_end` - Session lifecycle
+  - `memory_log_observation` - Tool execution logging
+  - `memory_search`, `memory_timeline`, `memory_get_observations` - Progressive retrieval (3-layer)
+  - `memory_inject_context`, `memory_quick_recap`, `memory_detailed_context` - Context injection
+  - `memory_retroactive_ingest` - Git history ingestion (no manual logging!)
+- **TOML Support**: Native TOML parsing and serialization for Codex CLI configuration
+- **Documentation**: Complete memory system guide, updated MCP tools reference (52 tools)
+
+### Changed
+- **Version bump**: 0.2.0 → 0.2.5
+- **MCP tool count**: Fixed from 41 to 52 (11 core + 10 memory + 31 collab)
+- **Documentation structure**: Moved memory docs to `docs/`, cleaned up internal implementation docs
+- **requirements.txt**: Aligned version constraints with `pyproject.toml`
+- **README.md**: Updated installation instructions for npm package workflow
+
+### Removed
+- Internal implementation summaries (`MEMORY_*`, `CAVEMAN_*`, `IMPLEMENTATION_PLAN.md`)
+- Temporary test/refactor scripts
+
+### Fixed
+- `count_mcp_tools.py` now expects 52 tools and tracks memory tools separately
+- CLI help text updated to include all 16 supported clients
+- `package.json` at root marked as private (actual npm package in `installer/`)
+
 ## [0.2.0] - 2026-04-08
 
 ### Added

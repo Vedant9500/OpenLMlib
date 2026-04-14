@@ -23,13 +23,15 @@ Store, retrieve, and collaborate on findings with semantic search, full-text sea
 
 ### Installation
 
-**Option 1: npm (Recommended)**
+**Option 1: npm (Recommended — includes interactive setup wizard)**
 ```bash
-npm install -g openlmlib
-openlmlib setup  # Initialize and configure
+cd installer
+npm pack
+npm install -g ./openlmlib-0.2.5.tgz
+openlmlib setup  # Interactive wizard with React TUI
 ```
 
-**Option 2: pipx**
+**Option 2: pipx (Python only)**
 ```bash
 pipx install openlmlib
 openlmlib setup
@@ -126,7 +128,7 @@ openlmlib query "retrieval" \
 - `openlmlib_retrieve_context` - Format findings for LLM prompts
 - `openlmlib_evaluate_dataset`, `openlmlib_help` - Utilities
 
-📖 **[See all 42 tools →](docs/MCP_TOOLS.md)**
+📖 **[See all 52 tools →](docs/MCP_TOOLS.md)**
 
 ### 👥 Multi-Agent Collaboration
 

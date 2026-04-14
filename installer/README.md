@@ -41,11 +41,11 @@
 ### Installing from the Package
 
 ```bash
-npm install -g ./openlmlib-0.1.6.tgz
+npm install -g ./openlmlib-0.2.5.tgz
 openlmlib setup
 ```
 
-Then **restart your IDE** to see all 41 MCP tools.
+Then **restart your IDE** to see all 52 MCP tools.
 
 ## How It Works
 
