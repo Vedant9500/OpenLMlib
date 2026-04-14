@@ -1,0 +1,9 @@
+{
+  "name": "openlmlib-root",
+  "private": true,
+  "description": "OpenLMlib Python source repository. See installer/package.json for the npm package.",
+  "scripts": {
+    "pack": "cd installer && npm pack",
+    "test:installer": "cd installer && node test-install.js"
+  }
+}

@@ -21,16 +21,23 @@ const VECTOR_BACKENDS = [
 ];
 
 const MCP_CLIENTS = [
+  // IDEs
   { label: 'VS Code', value: 'vscode' },
   { label: 'Cursor', value: 'cursor' },
   { label: 'Claude Desktop', value: 'claude_desktop' },
-  { label: 'Claude Code', value: 'claude_code' },
   { label: 'Kiro', value: 'kiro' },
   { label: 'Antigravity', value: 'antigravity' },
   { label: 'Windsurf', value: 'windsurf' },
   { label: 'Zed', value: 'zed' },
   { label: 'Cline', value: 'cline' },
   { label: 'OpenClaw', value: 'openclaw' },
+  // CLI Coding Tools
+  { label: 'Claude Code', value: 'claude_code' },
+  { label: 'Gemini CLI', value: 'gemini_cli' },
+  { label: 'Qwen Code', value: 'qwen_code' },
+  { label: 'OpenCode', value: 'opencode' },
+  { label: 'Codex CLI', value: 'codex_cli' },
+  { label: 'Aider', value: 'aider' },
 ];
 
 const STEPS = ['Embedding Model', 'Vector Backend', 'MCP Clients', 'Review', 'Install'];
@@ -442,7 +449,7 @@ function SetupWizard() {
   const [config, setConfig] = useState({
     embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
     vectorBackend: 'numpy',
-    mcpClients: ['vscode'],
+    mcpClients: ['vscode', 'claude_code', 'gemini_cli', 'qwen_code', 'opencode'],
   });
   const [installSuccess, setInstallSuccess] = useState(null);
 

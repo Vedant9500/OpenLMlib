@@ -161,26 +161,26 @@ CREATE TABLE session_state (
 
 ```
 User → Orchestrator LLM (e.g., Opus 4.6)
-  → LLM calls collab_create_session via MCP
+  → LLM calls create_session via MCP
     → INSERT into sessions table (SQLite transaction)
     → INSERT initial system message into messages table
     → INSERT session_state row
     → Write JSONL shadow log
     → Create artifact directories
     → Return session_id to LLM
-    → LLM writes initial plan via collab_update_session_state
+    → LLM writes initial plan via update_session_state
 ```
 
 ### 2.2 Agent Joining
 
 ```
 User → Helper LLM (e.g., Codex/Gemini) in different IDE
-  → LLM calls collab_list_sessions
+  → LLM calls list_sessions
   → User selects session
-  → LLM calls collab_join_session
+  → LLM calls join_session
     → INSERT into agents table
     → System message logged: "agent_X joined"
-    → LLM calls collab_get_session_context
+    → LLM calls session_context
       → Returns: session summary + last 20 messages + current state + artifact list
     → LLM can now participate
 ```
@@ -204,7 +204,7 @@ All inter-agent communication goes through the **append-only messages table** in
 
 ```
 Orchestrator evaluates results
-  → Calls collab_terminate_session
+  → Calls terminate_session
     → System message: "Session completed"
     → Final summary generated and stored
     → Session status → "completed"
@@ -250,20 +250,20 @@ Agents get these tools to explore session context efficiently:
 
 | Tool | Purpose | When to Use |
 |------|---------|-------------|
-| `collab_get_session_context` | Get compiled view: summary + recent messages + state + artifact list | First thing after joining, or every turn |
-| `collab_read_messages` | Read new messages since last check (offset-based) | Every turn to catch up |
-| `collab_tail_messages` | Read last N messages | Quick status check |
-| `collab_grep_messages` | Search messages by keyword | Find specific discussions |
-| `collab_read_message_range` | Read messages in a sequence range | Zoom into a specific conversation |
-| `collab_get_artifact` | Get full artifact content | When you need to read a specific artifact |
-| `collab_grep_artifacts` | Search across all artifact content | Find relevant research outputs |
+| `session_context` | Get compiled view: summary + recent messages + state + artifact list | First thing after joining, or every turn |
+| `read_messages` | Read new messages since last check (offset-based) | Every turn to catch up |
+| `tail_messages` | Read last N messages | Quick status check |
+| `grep_messages` | Search messages by keyword | Find specific discussions |
+| `read_message_range` | Read messages in a sequence range | Zoom into a specific conversation |
+| `get_artifact` | Get full artifact content | When you need to read a specific artifact |
+| `grep_artifacts` | Search across all artifact content | Find relevant research outputs |
 
 **Agent reading policy** (encoded in system prompt):
-1. Start with `collab_get_session_context` — get the compiled view
-2. Use `collab_tail_messages` for a quick status check
-3. Use `collab_grep_messages` to find specific topics
-4. Use `collab_read_message_range` to zoom into relevant sections
-5. Use `collab_get_artifact` only when you need full content
+1. Start with `session_context` — get the compiled view
+2. Use `tail_messages` for a quick status check
+3. Use `grep_messages` to find specific topics
+4. Use `read_message_range` to zoom into relevant sections
+5. Use `get_artifact` only when you need full content
 6. NEVER read the entire message history in one call
 
 ### 3.4 Automatic Session Summarization (Compaction)
@@ -295,7 +295,7 @@ def auto_compact_session(session_id, messages_since_last_summary=30):
 
 - Artifacts are stored as files, NOT in the message content
 - Messages contain only lightweight references: `{"artifact_id": "art_001", "title": "...", "summary": "..."}`
-- Agents load full artifact content on-demand via `collab_get_artifact`
+- Agents load full artifact content on-demand via `get_artifact`
 - This keeps message content small and context windows lean
 
 ---
@@ -336,7 +336,7 @@ def auto_compact_session(session_id, messages_since_last_summary=30):
 - **Task-scoped**: Messages with `metadata.task_id` field; filtered queries
 - **Private**: File-based workspace at `sessions/{id}/artifacts/{agent_id}/`
 
-Each agent's `collab_get_session_context` call returns:
+Each agent's `session_context` call returns:
 1. Global context (summary + recent broadcast messages + state)
 2. Task-scoped context (messages for their assigned tasks)
 3. Private context pointer (path to their workspace)
@@ -476,46 +476,46 @@ Note how messages are attributed (`[opus-4.6 → all]`), not presented as the cu
 
 | Category | Tool | Description |
 |----------|------|-------------|
-| **Session** | `collab_create_session` | Create session with title, description, plan |
-| | `collab_join_session` | Register as participant |
-| | `collab_list_sessions` | List sessions (filter by status) |
-| | `collab_leave_session` | Leave gracefully |
-| | `collab_terminate_session` | End and archive |
-| **Messages** | `collab_send_message` | Append message to session |
-| | `collab_read_messages` | Read new messages (offset-based, filterable) |
-| | `collab_tail_messages` | Read last N messages |
-| | `collab_grep_messages` | Search messages by keyword |
-| | `collab_read_message_range` | Read messages by sequence range |
-| **State** | `collab_get_session_state` | Get current state |
-| | `collab_update_session_state` | Update state (orchestrator only) |
-| **Artifacts** | `collab_add_artifact` | Save artifact (content → file, metadata → DB) |
-| | `collab_list_artifacts` | List artifacts (filter by agent, type, tags) |
-| | `collab_get_artifact` | Get full artifact content |
-| | `collab_grep_artifacts` | Search across artifact content |
-| **Context** | `collab_get_session_context` | **Primary tool**: compiled view for the agent |
+| **Session** | `create_session` | Create session with title, description, plan |
+| | `join_session` | Register as participant |
+| | `list_sessions` | List sessions (filter by status) |
+| | `leave_session` | Leave gracefully |
+| | `terminate_session` | End and archive |
+| **Messages** | `send_message` | Append message to session |
+| | `read_messages` | Read new messages (offset-based, filterable) |
+| | `tail_messages` | Read last N messages |
+| | `grep_messages` | Search messages by keyword |
+| | `read_message_range` | Read messages by sequence range |
+| **State** | `get_session_state` | Get current state |
+| | `update_session_state` | Update state (orchestrator only) |
+| **Artifacts** | `save_artifact` | Save artifact (content → file, metadata → DB) |
+| | `list_artifacts` | List artifacts (filter by agent, type, tags) |
+| | `get_artifact` | Get full artifact content |
+| | `grep_artifacts` | Search across artifact content |
+| **Context** | `session_context` | **Primary tool**: compiled view for the agent |
 
 ### 8.2 Tool Usage Pattern
 
 **Orchestrator workflow:**
 ```
-1. collab_create_session → get session_id
-2. collab_update_session_state → set plan and tasks
-3. collab_send_message(type="task", to="agent_X") → assign work
-4. collab_read_messages → check agent responses
+1. create_session → get session_id
+2. update_session_state → set plan and tasks
+3. send_message(type="task", to="agent_X") → assign work
+4. read_messages → check agent responses
 5. Repeat 3-4 until plan complete
-6. collab_terminate_session → wrap up
+6. terminate_session → wrap up
 ```
 
 **Worker workflow:**
 ```
-1. collab_list_sessions → find session to join
-2. collab_join_session → register
-3. collab_get_session_context → understand current state
-4. collab_read_messages → catch up on activity
-5. Do work → collab_add_artifact → save output
-6. collab_send_message(type="result") → report back
+1. list_sessions → find session to join
+2. join_session → register
+3. session_context → understand current state
+4. read_messages → catch up on activity
+5. Do work → save_artifact → save output
+6. send_message(type="result") → report back
 7. Repeat 3-6 until task complete
-8. collab_send_message(type="complete") → mark done
+8. send_message(type="complete") → mark done
 ```
 
 ---
@@ -590,7 +590,7 @@ openlmlib/
 - Append-only message bus with FTS5
 - JSONL shadow log for debugging
 - Basic MCP tools: create, join, list, send, read
-- Context compiler: `collab_get_session_context`
+- Context compiler: `session_context`
 - Unit tests
 
 ### Phase 2: Coordination Features (Week 3-4)
@@ -675,9 +675,9 @@ YOUR RESPONSIBILITIES:
 5. Terminate the session when research is complete
 
 CONTEXT MANAGEMENT:
-- Use collab_get_session_context to get a compiled view each turn
-- Use collab_tail_messages for quick status checks
-- Use collab_grep_messages to find specific discussions
+- Use session_context to get a compiled view each turn
+- Use tail_messages for quick status checks
+- Use grep_messages to find specific discussions
 - NEVER read the entire message history in one call
 
 BEST PRACTICES:
@@ -689,14 +689,14 @@ BEST PRACTICES:
 - Export important findings to the main library when done
 
 AVAILABLE TOOLS:
-- collab_get_session_context: Get compiled view of session
-- collab_send_message: Communicate with agents
-- collab_read_messages: See what agents have done
-- collab_update_session_state: Update task assignments and plan
-- collab_add_artifact: Save important findings
-- collab_tail_messages: Quick status check (last N messages)
-- collab_grep_messages: Search for specific topics
-- collab_terminate_session: End the session
+- session_context: Get compiled view of session
+- send_message: Communicate with agents
+- read_messages: See what agents have done
+- update_session_state: Update task assignments and plan
+- save_artifact: Save important findings
+- tail_messages: Quick status check (last N messages)
+- grep_messages: Search for specific topics
+- terminate_session: End the session
 ```
 
 ### 12.2 Worker Agent
@@ -716,10 +716,10 @@ YOUR RESPONSIBILITIES:
 4. Report progress and results clearly
 
 CONTEXT MANAGEMENT:
-- ALWAYS start with collab_get_session_context
-- Use collab_tail_messages for a quick status check
-- Use collab_grep_messages to find specific discussions
-- Use collab_get_artifact to read specific artifacts
+- ALWAYS start with session_context
+- Use tail_messages for a quick status check
+- Use grep_messages to find specific discussions
+- Use get_artifact to read specific artifacts
 - NEVER read the entire message history in one call
 
 BEST PRACTICES:
@@ -731,15 +731,15 @@ BEST PRACTICES:
 - Use your private workspace for drafts before sharing
 
 AVAILABLE TOOLS:
-- collab_get_session_context: Get compiled view of session
-- collab_read_messages: Catch up on session activity
-- collab_send_message: Report results or ask questions
-- collab_add_artifact: Save your research outputs
-- collab_get_artifact: Read a specific artifact's full content
-- collab_tail_messages: Quick status check (last N messages)
-- collab_grep_messages: Search for specific topics
-- collab_get_session_state: Check current session status
-- collab_leave_session: Leave when your work is done
+- session_context: Get compiled view of session
+- read_messages: Catch up on session activity
+- send_message: Report results or ask questions
+- save_artifact: Save your research outputs
+- get_artifact: Read a specific artifact's full content
+- tail_messages: Quick status check (last N messages)
+- grep_messages: Search for specific topics
+- get_session_state: Check current session status
+- leave_session: Leave when your work is done
 ```
 
 ---

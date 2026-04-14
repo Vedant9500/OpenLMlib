@@ -38,13 +38,13 @@ When connected to the OpenLMLib MCP server, agents have access to these tools:
 
 | Category | Tools |
 |----------|-------|
-| Session | `collab_create_session`, `collab_join_session`, `collab_list_sessions`, `collab_leave_session`, `collab_terminate_session` |
-| Messages | `collab_send_message`, `collab_read_messages`, `collab_tail_messages`, `collab_grep_messages`, `collab_read_message_range` |
-| Context | `collab_get_session_context` (primary tool) |
-| State | `collab_get_session_state`, `collab_update_session_state` |
-| Artifacts | `collab_add_artifact`, `collab_list_artifacts`, `collab_get_artifact`, `collab_grep_artifacts` |
-| Templates | `collab_list_templates`, `collab_get_template`, `collab_create_session_from_template` |
-| Export | `collab_export_to_library` |
+| Session | `create_session`, `join_session`, `list_sessions`, `leave_session`, `terminate_session` |
+| Messages | `send_message`, `read_messages`, `tail_messages`, `grep_messages`, `read_message_range` |
+| Context | `session_context` (primary tool) |
+| State | `get_session_state`, `update_session_state` |
+| Artifacts | `save_artifact`, `list_artifacts`, `get_artifact`, `grep_artifacts` |
+| Templates | `list_templates`, `get_template`, `create_from_template` |
+| Export | `export_to_library` |
 
 Read APIs are membership-gated. Agents must pass their own `agent_id` to session state, message, artifact, and multi-session read tools, and those tools only return data for sessions the agent has joined.
 

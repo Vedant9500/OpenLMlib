@@ -38,9 +38,9 @@ console.log(hasPyproject ? '✓ pyproject.toml included' : '✗ pyproject.toml M
 console.log(hasMcpServer ? '✓ mcp_server.py included' : '✗ mcp_server.py MISSING');
 
 if (hasCollabMcp && hasPyproject && hasMcpServer) {
-  console.log('\n✅ Tarball contains all necessary files for 41 tools!');
+  console.log('\n✅ Tarball contains all necessary files for 52 tools!');
   console.log('\nTo test actual installation:');
-  console.log('  npm install -g ./openlmlib-0.1.6.tgz');
+  console.log('  npm install -g ./openlmlib-0.2.5.tgz');
   console.log('  Then restart your IDE to refresh MCP tool cache\n');
 } else {
   console.log('\n❌ Tarball is missing required files!');

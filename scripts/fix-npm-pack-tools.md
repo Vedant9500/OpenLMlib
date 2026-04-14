@@ -80,8 +80,8 @@ npm pack
 
 ### Tool Breakdown
 
-- **11 core tools**: `openlmlib_init`, `openlmlib_add_finding`, etc.
-- **30 collab tools**: `collab_create_session`, `collab_send_message`, etc.
+- **11 core tools**: `init_library`, `save_finding`, etc.
+- **30 collab tools**: `create_session`, `send_message`, etc.
 
 ## For Users
 

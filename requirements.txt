@@ -1,6 +1,7 @@
-numpy>=1.23
-mcp>=1.0.0
-sentence-transformers>=2.2
-rich>=12.0.0
-# Optional: faiss-cpu (or faiss-gpu) for vector search
+numpy>=1.23,<3.0
+mcp>=1.0.0,<2.0.0
+sentence-transformers>=2.2,<5.0
+rich>=12.0.0,<15.0.0
+# Optional: faiss-cpu>=1.7.4 (or faiss-gpu) for vector search
 # Optional: hnswlib as a lightweight ANN alternative
+# Dev: pytest>=7.0, pytest-cov>=4.0

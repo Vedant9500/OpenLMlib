@@ -139,8 +139,8 @@ function validateInstalledOpenLMlib(VENV_PYTHON) {
   const scriptPath = path.join(os.tmpdir(), `openlmlib-validate-${Date.now()}.py`);
   const checkScript = [
     'import openlmlib.mcp_server as m',
-    'required_core = ["openlmlib_init", "openlmlib_add_finding", "openlmlib_retrieve", "openlmlib_health"]',
-    'required_collab = ["collab_create_session", "collab_help"]',
+    'required_core = ["init_library", "save_finding", "retrieve_findings", "health"]',
+    'required_collab = ["create_session", "help_collab"]',
     'missing_core = [name for name in required_core if not hasattr(m, name)]',
     'missing_collab = [name for name in required_collab if not hasattr(m, name)]',
     'if missing_core:',
@@ -356,12 +356,16 @@ print("ok")`;
   console.log(chalk.green.bold('  ✔  OpenLMlib installed successfully!'));
   console.log('');
   console.log(chalk.bold.cyan('  Quick Start:'));
-  console.log(chalk.gray('    openlmlib setup'));
+  console.log(chalk.gray('    openlmlib setup          # Interactive setup (configure more IDEs/CLI tools)'));
   console.log(chalk.gray('    openlmlib add --project myproj --claim "..." --confidence 0.8'));
   console.log(chalk.gray('    openlmlib query "your search query"'));
   console.log(chalk.gray('    openlmlib doctor'));
   console.log('');
-  console.log(chalk.gray('  Run "openlmlib setup" to configure MCP clients for your IDEs.'));
+  console.log(chalk.bold.cyan('  MCP Clients Configured:'));
+  console.log(chalk.gray('    VS Code, Claude Code, Gemini CLI, Qwen Code, OpenCode'));
+  console.log(chalk.gray('    Run "openlmlib mcp-config --ide all" to configure all 15 clients.'));
+  console.log('');
+  console.log(chalk.gray('  Restart your IDEs/CLI tools to activate MCP servers.'));
   console.log('');
 }
 

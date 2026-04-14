@@ -18,21 +18,30 @@ class McpClientSpec:
 
 
 CLIENT_SPECS = (
+    # IDEs (existing)
     McpClientSpec(id="vscode", label="VS Code", root_key="servers"),
     McpClientSpec(id="cursor", label="Cursor", root_key="mcpServers"),
     McpClientSpec(id="kiro", label="Kiro", root_key="mcpServers"),
     McpClientSpec(id="claude_desktop", label="Claude Desktop", root_key="mcpServers"),
-    McpClientSpec(id="claude_code", label="Claude Code", root_key="mcpServers"),
     McpClientSpec(id="antigravity", label="Antigravity", root_key="mcpServers"),
     McpClientSpec(id="windsurf", label="Windsurf", root_key="mcpServers"),
     McpClientSpec(id="zed", label="Zed", root_key="context_servers"),
     McpClientSpec(id="cline", label="Cline", root_key="mcpServers"),
     McpClientSpec(id="openclaw", label="OpenClaw", root_key="mcpServers"),
+    
+    # CLI Coding Tools (NEW - Global configs)
+    McpClientSpec(id="claude_code", label="Claude Code", root_key="mcpServers"),
+    McpClientSpec(id="gemini_cli", label="Gemini CLI", root_key="mcpServers"),
+    McpClientSpec(id="qwen_code", label="Qwen Code", root_key="mcpServers"),
+    McpClientSpec(id="opencode", label="OpenCode", root_key="mcpServers"),
+    McpClientSpec(id="codex_cli", label="Codex CLI", root_key="mcpServers"),
+    McpClientSpec(id="aider", label="Aider", root_key="mcp_servers"),
 )
 
 CLIENTS_BY_ID = {client.id: client for client in CLIENT_SPECS}
 
 CLIENT_ALIASES = {
+    # IDEs (existing)
     "code": "vscode",
     "vscode": "vscode",
     "vs-code": "vscode",
@@ -41,8 +50,6 @@ CLIENT_ALIASES = {
     "claude": "claude_desktop",
     "claude-desktop": "claude_desktop",
     "claude_desktop": "claude_desktop",
-    "claude-code": "claude_code",
-    "claude_code": "claude_code",
     "antigravity": "antigravity",
     "windsurf": "windsurf",
     "zed": "zed",
@@ -50,6 +57,23 @@ CLIENT_ALIASES = {
     "cline": "cline",
     "openclaw": "openclaw",
     "open-claw": "openclaw",
+    
+    # CLI Coding Tools (NEW)
+    "claude-code": "claude_code",
+    "claude_code": "claude_code",
+    "gemini": "gemini_cli",
+    "gemini-cli": "gemini_cli",
+    "gemini_cli": "gemini_cli",
+    "qwen": "qwen_code",
+    "qwen-code": "qwen_code",
+    "qwen_code": "qwen_code",
+    "opencode": "opencode",
+    "open-code": "opencode",
+    "open_code": "opencode",
+    "codex": "codex_cli",
+    "codex-cli": "codex_cli",
+    "codex_cli": "codex_cli",
+    "aider": "aider",
 }
 
 
@@ -127,13 +151,41 @@ def client_config_path(
         return None
 
     if client_id == "claude_code":
+        # Global config: ~/.claude.json (primary) or ~/.claude/settings.json (fallback)
+        # See: https://github.com/anthropics/claude-code/issues/15797
+        return home / ".claude.json"
+
+    if client_id == "gemini_cli":
+        # Global config: ~/.gemini/settings.json
+        # Applies to all Gemini CLI sessions for current user
+        return home / ".gemini" / "settings.json"
+
+    if client_id == "qwen_code":
+        # Global config: ~/.qwen/settings.json
+        # Applies to all Qwen Code sessions for current user
+        return home / ".qwen" / "settings.json"
+
+    if client_id == "opencode":
+        # Global config: ~/.config/opencode/opencode.json (Linux/macOS)
+        # On Windows: %APPDATA%/opencode/opencode.json
         if platform == "win32":
             appdata = env.get("APPDATA")
             base = Path(appdata) if appdata else home / "AppData" / "Roaming"
-            return base / "Claude" / "settings.json"
-        if platform == "darwin":
-            return home / "Library" / "Application Support" / "Claude" / "settings.json"
-        return home / ".claude" / "settings.json"
+            return base / "opencode" / "opencode.json"
+        return home / ".config" / "opencode" / "opencode.json"
+
+    if client_id == "codex_cli":
+        # Global config: ~/.codex/config.toml
+        # CODEX_HOME env var overrides, defaults to ~/.codex
+        codex_home = env.get("CODEX_HOME")
+        if codex_home:
+            return Path(codex_home) / "config.toml"
+        return home / ".codex" / "config.toml"
+
+    if client_id == "aider":
+        # Global config: ~/.aider.conf.yml
+        # Can also use ~/.aider.conf.json or ~/.aider.conf.toml
+        return home / ".aider.conf.yml"
 
     if client_id == "antigravity":
         return home / ".gemini" / "antigravity" / "mcp_config.json"
@@ -165,7 +217,7 @@ def client_config_path(
     raise ValueError(f"Unknown client id: {client_id}")
 
 
-def _load_existing_config(path: Path) -> Dict[str, object]:
+def _load_existing_config(path: Path, client_id: str = "") -> Dict[str, object]:
     if not path.exists():
         return {}
 
@@ -173,6 +225,19 @@ def _load_existing_config(path: Path) -> Dict[str, object]:
     if not raw_text.strip():
         return {}
 
+    # Handle TOML format for Codex CLI
+    if client_id == "codex_cli" or path.suffix == ".toml":
+        try:
+            import tomllib
+        except ImportError:
+            import tomli as tomllib  # Python < 3.11 fallback
+        
+        payload = tomllib.loads(raw_text)
+        if not isinstance(payload, dict):
+            raise ValueError(f"Expected a TOML object in {path}")
+        return payload
+
+    # Default JSON handling
     payload = json.loads(raw_text)
     if not isinstance(payload, dict):
         raise ValueError(f"Expected a JSON object in {path}")
@@ -221,7 +286,7 @@ def install_client_config(
         }
 
     try:
-        payload = _load_existing_config(target_path)
+        payload = _load_existing_config(target_path, client_id)
         payload = _prepare_config_root(client, payload)
         root = payload[client.root_key]
         assert isinstance(root, dict)
@@ -231,7 +296,53 @@ def install_client_config(
 
         if changed or not target_path.exists():
             target_path.parent.mkdir(parents=True, exist_ok=True)
-            target_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            
+            # Handle TOML serialization for Codex CLI
+            if client_id == "codex_cli" or target_path.suffix == ".toml":
+                try:
+                    import tomli_w
+                except ImportError:
+                    # Fallback: try tomllib (write not supported), use simple serializer
+                    try:
+                        import tomllib
+                    except ImportError:
+                        import tomli as tomllib
+                    
+                    # Simple TOML serializer for basic dict structures
+                    def _serialize_toml(data: dict, indent: int = 0) -> str:
+                        lines = []
+                        prefix = "  " * indent
+                        for key, value in data.items():
+                            if isinstance(value, dict):
+                                lines.append(f"{prefix}[{key}]")
+                                lines.append(_serialize_toml(value, indent + 1))
+                            elif isinstance(value, str):
+                                lines.append(f'{prefix}{key} = "{value}"')
+                            elif isinstance(value, list):
+                                lines.append(f"{prefix}{key} = {value}")
+                            elif isinstance(value, bool):
+                                lines.append(f"{prefix}{key} = {'true' if value else 'false'}")
+                            elif isinstance(value, (int, float)):
+                                lines.append(f"{prefix}{key} = {value}")
+                        return "\n".lines()
+                    
+                    tomli_w = None
+                
+                if tomli_w:
+                    target_path.write_text(tomli_w.dumps(payload), encoding="utf-8")
+                else:
+                    # Simple TOML writer for MCP config
+                    lines = []
+                    lines.append("# OpenLMlib MCP Server Configuration")
+                    lines.append("")
+                    lines.append("[mcpServers.openlmlib]")
+                    lines.append(f'command = "{new_entry["command"]}"')
+                    args_list = ', '.join(f'"{arg}"' for arg in new_entry["args"])
+                    lines.append(f"args = [{args_list}]")
+                    target_path.write_text("\n".join(lines), encoding="utf-8")
+            else:
+                # Default JSON serialization
+                target_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
         return {
             "client": client.id,
@@ -309,10 +420,11 @@ def install_or_refresh_default_client_configs(
     home: Optional[Path] = None,
 ) -> Dict[str, object]:
     # Upgrade MCP entries for clients the user already configured.
-    # If no client config exists yet, seed VS Code by default.
+    # If no client config exists yet, seed VS Code + popular CLI tools by default.
     client_ids = discover_existing_client_ids(platform=platform, env=env, home=home)
     if not client_ids:
-        client_ids = ["vscode"]
+        # Default to VS Code + top CLI tools with native MCP support
+        client_ids = ["vscode", "claude_code", "gemini_cli", "qwen_code", "opencode"]
 
     return install_client_configs(
         client_ids,

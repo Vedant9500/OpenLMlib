@@ -1021,14 +1021,14 @@ class TestCollabMCP(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_orchestrator_can_update_state_with_returned_agent_id(self):
-        create_resp = self.collab_mcp_module.collab_create_session(
+        create_resp = self.collab_mcp_module.create_session(
             title="MCP Session",
             task_description="Validate orchestrator auth",
             created_by="orch-model",
         )
         self.assertTrue(create_resp["success"])
 
-        update_resp = self.collab_mcp_module.collab_update_session_state(
+        update_resp = self.collab_mcp_module.update_session_state(
             session_id=create_resp["session_id"],
             state={"current_phase": "running"},
             orchestrator_id=create_resp["your_agent_id"],
@@ -1037,37 +1037,37 @@ class TestCollabMCP(unittest.TestCase):
         self.assertEqual(update_resp["state"]["current_phase"], "running")
 
     def test_read_messages_filtered_does_not_advance_stored_offset(self):
-        create_resp = self.collab_mcp_module.collab_create_session(
+        create_resp = self.collab_mcp_module.create_session(
             title="Offset Session",
             task_description="Check filtered reads",
             created_by="orch-model",
         )
-        join_resp = self.collab_mcp_module.collab_join_session(
+        join_resp = self.collab_mcp_module.join_session(
             session_id=create_resp["session_id"],
             model="worker-model",
         )
 
-        self.collab_mcp_module.collab_send_message(
+        self.collab_mcp_module.send_message(
             session_id=create_resp["session_id"],
             msg_type="task",
             content="Task message",
             from_agent=create_resp["your_agent_id"],
         )
-        self.collab_mcp_module.collab_send_message(
+        self.collab_mcp_module.send_message(
             session_id=create_resp["session_id"],
             msg_type="result",
             content="Result message",
             from_agent=join_resp["agent_id"],
         )
 
-        filtered = self.collab_mcp_module.collab_read_messages(
+        filtered = self.collab_mcp_module.read_messages(
             session_id=create_resp["session_id"],
             agent_id=join_resp["agent_id"],
             msg_types=["result"],
         )
         self.assertFalse(filtered["offset_updated"])
 
-        unfiltered = self.collab_mcp_module.collab_read_messages(
+        unfiltered = self.collab_mcp_module.read_messages(
             session_id=create_resp["session_id"],
             agent_id=join_resp["agent_id"],
         )
@@ -1076,12 +1076,12 @@ class TestCollabMCP(unittest.TestCase):
         self.assertIn("Result message", contents)
 
     def test_send_message_sanitizes_content(self):
-        create_resp = self.collab_mcp_module.collab_create_session(
+        create_resp = self.collab_mcp_module.create_session(
             title="Sanitize Session",
             task_description="Check message sanitization",
             created_by="orch-model",
         )
-        send_resp = self.collab_mcp_module.collab_send_message(
+        send_resp = self.collab_mcp_module.send_message(
             session_id=create_resp["session_id"],
             msg_type="update",
             content="Unsafe <script>alert('x')</script> ```payload```",
@@ -1089,7 +1089,7 @@ class TestCollabMCP(unittest.TestCase):
         )
         self.assertTrue(send_resp["success"])
 
-        tail_resp = self.collab_mcp_module.collab_tail_messages(
+        tail_resp = self.collab_mcp_module.tail_messages(
             session_id=create_resp["session_id"],
             agent_id=create_resp["your_agent_id"],
             n=5,
@@ -1099,18 +1099,18 @@ class TestCollabMCP(unittest.TestCase):
         self.assertNotIn("```", stored)
 
     def test_session_reads_require_membership(self):
-        create_resp = self.collab_mcp_module.collab_create_session(
+        create_resp = self.collab_mcp_module.create_session(
             title="Auth Session",
             task_description="Check session read auth",
             created_by="orch-model",
         )
-        outsider = self.collab_mcp_module.collab_create_session(
+        outsider = self.collab_mcp_module.create_session(
             title="Other Session",
             task_description="Create outsider",
             created_by="outsider-model",
         )
 
-        denied = self.collab_mcp_module.collab_get_session_state(
+        denied = self.collab_mcp_module.get_session_state(
             session_id=create_resp["session_id"],
             agent_id=outsider["your_agent_id"],
         )

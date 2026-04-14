@@ -9,16 +9,27 @@ Complete documentation for OpenLMlib - Local knowledge and research library for 
 - **[Installation Guide](#installation)** - Detailed installation options
 
 ### Core Features
-- **[MCP Tools Reference](MCP_TOOLS.md)** - Complete reference for all 42 MCP tools
+- **[MCP Tools Reference](MCP_TOOLS.md)** - Complete reference for all 52 MCP tools
 - **[Knowledge Base Guide](#knowledge-base)** - Managing findings and retrieval
+- **[Memory System Quickstart](MEMORY_QUICKSTART.md)** - Session persistence and progressive retrieval
 
 ### Collaboration
 - **[CollabSessions Guide](COLLAB_SESSIONS.md)** - Multi-agent collaboration
 - **[Session Templates](COLLAB_SESSIONS.md#available-templates)** - Predefined session plans
 
+### Memory System
+- **[Memory Quickstart](MEMORY_QUICKSTART.md)** - Session persistence, progressive retrieval, retroactive ingestion
+- **[Caveman Compression](CAVEMAN_COMPRESSION.md)** - Token-efficient linguistic compression
+
 ### Agent Integration
 - **[System Prompt Templates](SYSTEM_PROMPT.md)** - Agent instruction templates
 - **[MCP Configuration](#mcp-client-configuration)** - IDE/client setup
+- **[CLI MCP Integration](../CLI_MCP_GLOBAL_CONFIG.md)** - Global MCP config for CLI tools
+
+### Development
+- **[CHANGELOG](../CHANGELOG.md)** - Release history
+- **[Contributing Guide](../CONTRIBUTING.md)** - How to contribute
+- **[MCP CLI Research](MCP_CLI_INTEGRATION_RESEARCH.md)** - Market research on CLI tool MCP integration
 
 ---
 
@@ -76,19 +87,19 @@ openlmlib doctor
 
 ```bash
 # Create session
-openlmlib-mcp --call collab_create_session '{...}'
+openlmlib-mcp --call create_session '{...}'
 
 # Join session
-openlmlib-mcp --call collab_join_session '{...}'
+openlmlib-mcp --call join_session '{...}'
 
 # Send message
-openlmlib-mcp --call collab_send_message '{...}'
+openlmlib-mcp --call send_message '{...}'
 
 # Poll messages
-openlmlib-mcp --call collab_poll_messages '{...}'
+openlmlib-mcp --call poll_messages '{...}'
 
 # Add artifact
-openlmlib-mcp --call collab_add_artifact '{...}'
+openlmlib-mcp --call save_artifact '{...}'
 ```
 
 ---
@@ -213,7 +224,7 @@ OpenLMlib
 
 ### 2. Multi-Agent Research
 ```
-1. collab_create_session_from_template("deep_research")
+1. create_from_template("deep_research")
 2. Agents join and execute tasks
 3. Share artifacts (reports, analysis)
 4. Terminate with summary
@@ -222,7 +233,7 @@ OpenLMlib
 
 ### 3. Code Review
 ```
-1. collab_create_session_from_template("code_review")
+1. create_from_template("code_review")
 2. Agents review architecture, security, performance
 3. Consolidated report created
 4. Findings added to knowledge base
@@ -245,7 +256,7 @@ OpenLMlib
 ### Session issues?
 - Check agent is joined to session
 - Verify session is active
-- Use `collab_help` for tool documentation
+- Use `help_collab` for tool documentation
 
 ---
 
@@ -263,4 +274,4 @@ OpenLMlib
 - **Documentation**: You're reading it!
 - **Issues**: [GitHub Issues](https://github.com/Vedant9500/LMlib/issues)
 - **CLI Help**: `openlmlib --help` or `openlmlib help`
-- **MCP Help**: `openlmlib-mcp --call openlmlib_help` or `collab_help`
+- **MCP Help**: `openlmlib-mcp --call help_library` or `help_collab`

@@ -61,6 +61,11 @@ class MessageBus:
                 expected_version=state_row["version"],
             ):
                 return
+        
+        logger.error(
+            "Failed to increment message count for session %s after 5 optimistic concurrency retries.", 
+            session_id
+        )
 
     def send(
         self,

@@ -120,17 +120,11 @@ def read_notification(
 
 
 def clear_notification(sessions_dir: Path, session_id: str) -> None:
-    """Remove the notification file after it's been processed.
-
-    Safe to call even if the file doesn't exist.
+    """DEPRECATED: Notifications are now persistent to prevent race conditions.
+    
+    This function is kept as a no-op for backward compatibility.
     """
-    try:
-        _validate_session_id(session_id)
-        notify_file = _notify_path(sessions_dir, session_id)
-        # unlink(missing_ok=True) avoids TOCTOU race (Python 3.8+)
-        notify_file.unlink(missing_ok=True)
-    except Exception as e:
-        logger.debug("Failed to clear notification for %s: %s", session_id, e)
+    pass
 
 
 def wait_for_notification(
@@ -138,6 +132,7 @@ def wait_for_notification(
     session_id: str,
     timeout: float = 30.0,
     poll_interval: float = 0.5,
+    last_seq: int = -1,
 ) -> Optional[Dict]:
     """Block and wait for a notification to appear.
 
@@ -159,14 +154,17 @@ def wait_for_notification(
 
     # timeout=0 means "check once, don't wait"
     if timeout == 0:
-        return read_notification(sessions_dir, session_id)
+        notification = read_notification(sessions_dir, session_id)
+        if notification is not None and notification.get("seq", -1) > last_seq:
+            return notification
+        return None
 
     # Negative timeout = wait forever (unlikely but supported)
     deadline = None if timeout < 0 else time.monotonic() + timeout
 
     while True:
         notification = read_notification(sessions_dir, session_id)
-        if notification is not None:
+        if notification is not None and notification.get("seq", -1) > last_seq:
             return notification
 
         if deadline is not None and time.monotonic() >= deadline:

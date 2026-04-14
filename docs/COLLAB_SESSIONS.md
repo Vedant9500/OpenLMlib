@@ -16,7 +16,7 @@ CollabSessions provides:
 ### Create a Session
 
 ```bash
-openlmlib-mcp --call collab_create_session '{
+openlmlib-mcp --call create_session '{
   "title": "Research on Retrieval",
   "created_by": "gpt-4",
   "description": "Multi-agent research on contextual retrieval"
@@ -26,7 +26,7 @@ openlmlib-mcp --call collab_create_session '{
 Or use a template:
 
 ```bash
-openlmlib-mcp --call collab_create_session_from_template '{
+openlmlib-mcp --call create_from_template '{
   "template_id": "deep_research",
   "title": "Deep Research on Topic X",
   "created_by": "claude-3-opus"
@@ -36,7 +36,7 @@ openlmlib-mcp --call collab_create_session_from_template '{
 ### Join a Session
 
 ```bash
-openlmlib-mcp --call collab_join_session '{
+openlmlib-mcp --call join_session '{
   "session_id": "sess_20260409_abc12345",
   "model": "claude-3-sonnet",
   "role": "worker"
@@ -47,7 +47,7 @@ openlmlib-mcp --call collab_join_session '{
 
 ```bash
 # Send a task result
-openlmlib-mcp --call collab_send_message '{
+openlmlib-mcp --call send_message '{
   "session_id": "sess_20260409_abc12345",
   "from_agent": "agent_claude-3-sonnet_xyz",
   "msg_type": "result",
@@ -55,7 +55,7 @@ openlmlib-mcp --call collab_send_message '{
 }'
 
 # Poll for new messages
-openlmlib-mcp --call collab_poll_messages '{
+openlmlib-mcp --call poll_messages '{
   "session_id": "sess_20260409_abc12345",
   "agent_id": "agent_claude-3-sonnet_xyz"
 }'
@@ -64,7 +64,7 @@ openlmlib-mcp --call collab_poll_messages '{
 ### Add Artifacts
 
 ```bash
-openlmlib-mcp --call collab_add_artifact '{
+openlmlib-mcp --call save_artifact '{
   "session_id": "sess_20260409_abc12345",
   "agent_id": "agent_claude-3-sonnet_xyz",
   "title": "Literature Review Summary",
@@ -77,7 +77,7 @@ openlmlib-mcp --call collab_add_artifact '{
 ### Terminate Session
 
 ```bash
-openlmlib-mcp --call collab_terminate_session '{
+openlmlib-mcp --call terminate_session '{
   "session_id": "sess_20260409_abc12345",
   "summary": "Research complete with 15 papers analyzed"
 }'
@@ -114,7 +114,7 @@ Systematic academic literature review
 
 List all templates:
 ```bash
-openlmlib-mcp --call collab_list_templates
+openlmlib-mcp --call list_templates
 ```
 
 ## Message Types
@@ -169,7 +169,7 @@ For long-running sessions, agents can generate summaries to manage context windo
 
 ```bash
 # Generate session summary
-openlmlib-mcp --call collab_get_session_context '{
+openlmlib-mcp --call session_context '{
   "session_id": "sess_20260409_abc12345",
   "from_seq": 0
 }'
@@ -188,7 +188,7 @@ This returns:
 
 ```bash
 # Get sessions related to current one
-openlmlib-mcp --call collab_get_session_relationships '{
+openlmlib-mcp --call session_relationships '{
   "session_id": "sess_20260409_abc12345"
 }'
 ```
@@ -201,7 +201,7 @@ Returns sessions with:
 ### Search Sessions
 
 ```bash
-openlmlib-mcp --call collab_search_sessions '{
+openlmlib-mcp --call search_sessions '{
   "query": "retrieval research",
   "limit": 10
 }'
@@ -212,7 +212,7 @@ openlmlib-mcp --call collab_search_sessions '{
 Get session statistics:
 
 ```bash
-openlmlib-mcp --call collab_get_session_statistics '{
+openlmlib-mcp --call session_statistics '{
   "session_id": "sess_20260409_abc12345"
 }'
 ```
@@ -228,7 +228,7 @@ Returns:
 Track an agent's activity across all sessions:
 
 ```bash
-openlmlib-mcp --call collab_get_agent_sessions '{
+openlmlib-mcp --call get_agent_sessions '{
   "agent_id": "agent_claude-3-sonnet_xyz",
   "limit": 10
 }'
@@ -239,7 +239,7 @@ openlmlib-mcp --call collab_get_agent_sessions '{
 ### For Orchestrators
 1. Define clear task plans with specific assignments
 2. Set session rules (max agents, message limits, compaction thresholds)
-3. Monitor progress with `collab_get_session_state`
+3. Monitor progress with `get_session_state`
 4. Generate summaries periodically for long sessions
 5. Terminate with comprehensive summary
 

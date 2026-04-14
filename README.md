@@ -12,7 +12,7 @@ Store, retrieve, and collaborate on findings with semantic search, full-text sea
 
 - **Knowledge Base**: SQLite metadata + JSON findings + FAISS/Numpy vector index
 - **Semantic Retrieval**: Multi-phase retrieval with semantic + lexical search, deduplication, and reranking
-- **MCP Server**: 42 tools for AI assistants (11 core + 31 collaboration)
+- **MCP Server**: 52 tools for AI assistants (11 core + 10 memory + 31 collaboration)
 - **CollabSessions**: Multi-agent collaboration with message passing, artifacts, and templates
 - **CLI**: Full command-line interface for management and diagnostics
 - **Portable**: Findings exportable as JSON, easy backup and restore
@@ -23,13 +23,15 @@ Store, retrieve, and collaborate on findings with semantic search, full-text sea
 
 ### Installation
 
-**Option 1: npm (Recommended)**
+**Option 1: npm (Recommended — includes interactive setup wizard)**
 ```bash
-npm install -g openlmlib
-openlmlib setup  # Initialize and configure
+cd installer
+npm pack
+npm install -g ./openlmlib-0.2.5.tgz
+openlmlib setup  # Interactive wizard with React TUI
 ```
 
-**Option 2: pipx**
+**Option 2: pipx (Python only)**
 ```bash
 pipx install openlmlib
 openlmlib setup
@@ -119,14 +121,14 @@ openlmlib query "retrieval" \
 42 MCP tools let AI assistants securely access and modify your knowledge base:
 
 **Core Tools (11)**:
-- `openlmlib_init`, `openlmlib_health` - Setup and diagnostics
-- `openlmlib_add_finding`, `openlmlib_delete_finding` - Write operations (require confirmation)
-- `openlmlib_retrieve`, `openlmlib_search_fts` - Retrieval and search
-- `openlmlib_list_findings`, `openlmlib_get_finding` - Browse findings
-- `openlmlib_retrieve_context` - Format findings for LLM prompts
-- `openlmlib_evaluate_dataset`, `openlmlib_help` - Utilities
+- `init_library`, `health` - Setup and diagnostics
+- `save_finding`, `delete_finding` - Write operations (require confirmation)
+- `retrieve_findings`, `search_findings` - Retrieval and search
+- `list_findings`, `get_finding` - Browse findings
+- `retrieve_context` - Format findings for LLM prompts
+- `evaluate_retrieval`, `help_library` - Utilities
 
-📖 **[See all 42 tools →](docs/MCP_TOOLS.md)**
+📖 **[See all 52 tools →](docs/MCP_TOOLS.md)**
 
 ### 👥 Multi-Agent Collaboration
 
@@ -134,25 +136,25 @@ CollabSessions enable structured collaboration between multiple LLM agents:
 
 ```bash
 # Create session from template
-openlmlib-mcp --call collab_create_session_from_template '{
+openlmlib-mcp --call create_from_template '{
   "template_id": "deep_research",
   "title": "Research on Retrieval",
   "created_by": "gpt-4"
 }'
 
 # Join session
-openlmlib-mcp --call collab_join_session '{
+openlmlib-mcp --call join_session '{
   "session_id": "sess_20260409_abc12345",
   "model": "claude-3",
   "role": "worker"
 }'
 
 # Send and receive messages
-openlmlib-mcp --call collab_send_message '{...}'
-openlmlib-mcp --call collab_poll_messages '{...}'
+openlmlib-mcp --call send_message '{...}'
+openlmlib-mcp --call poll_messages '{...}'
 
 # Add artifacts (reports, analysis)
-openlmlib-mcp --call collab_add_artifact '{...}'
+openlmlib-mcp --call save_artifact '{...}'
 ```
 
 **Available Templates**:
@@ -163,6 +165,64 @@ openlmlib-mcp --call collab_add_artifact '{...}'
 - `literature_review` - Academic literature review (6 steps, 5 agents)
 
 📖 **[Full CollabSessions guide →](docs/COLLAB_SESSIONS.md)**
+
+### 🧠 Memory System (Session Persistence & Retrieval)
+
+OpenLMlib includes a powerful memory system that persists session knowledge across work sessions, enabling AI assistants to "remember" what happened in previous sessions and continue work seamlessly.
+
+**Key Features**:
+- **Session Lifecycle**: Start/end sessions with automatic context injection and summarization
+- **Progressive Retrieval**: 3-layer disclosure (search index → timeline → full details) for token efficiency
+- **Retroactive Ingestion**: Auto-ingest session activity from git history — no manual logging needed!
+- **Caveman Compression**: Ultra-compressed context injection (46% token savings)
+
+**Memory Tools** (10 tools):
+```
+session_start       - Start session with context from previous sessions
+session_end         - End session and auto-generate summary
+log_observation     - Log tool executions for memory building
+search_memory              - Layer 1: Search index (~75 tokens/result)
+memory_timeline            - Layer 2: Chronological context (~200 tokens/result)
+get_observations    - Layer 3: Full details (~750 tokens/result)
+inject_context      - Auto-inject relevant context at session start
+session_recap         - Synthesized recap of recent sessions (~150-250 tokens)
+topic_context    - Deep dive on specific topics (~500-800 tokens)
+ingest_git_history  - Auto-ingest from git history (no manual logging!)
+```
+
+**Example Workflow**:
+```python
+# Start of session - automatically loads relevant context
+session_start(
+    session_id="sess_20260414_001",
+    query="memory retrieval optimization"
+)
+# Returns: Context from previous sessions with relevant observations
+
+# During work - observations are logged automatically
+log_observation(
+    session_id="sess_20260414_001",
+    tool_name="Edit",
+    tool_input="Modified memory_retriever.py",
+    tool_output="Added auto_inject_context method"
+)
+
+# End of session - auto-generates summary
+session_end(session_id="sess_20260414_001")
+# Creates synthesized knowledge: files touched, decisions, next steps
+
+# Next session - continue seamlessly
+session_recap(limit=3)
+# Returns: Structured knowledge from last 3 sessions
+```
+
+**Token Efficiency**:
+- Layer 1 only: 75 tokens/result (search index for filtering)
+- Layer 1+2: 275 tokens/result (timeline context)
+- Layer 1+2+3: 1,025 tokens/result (full details only for relevant items)
+- **vs. full dump**: 3-13x token savings!
+
+📖 **[Memory System Guide →](MEMORY_QUICKSTART.md)**
 
 ---
 
@@ -175,8 +235,9 @@ OpenLMlib
 │   ├── FAISS/Numpy (vector index)
 │   └── JSON findings (portable, human-readable)
 │
-├── MCP Server (42 tools)
+├── MCP Server (52 tools)
 │   ├── 11 core library tools
+│   ├── 10 memory tools (session lifecycle, progressive retrieval, retroactive ingestion)
 │   └── 31 collaboration tools
 │
 ├── CLI
