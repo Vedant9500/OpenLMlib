@@ -746,6 +746,16 @@ def save_finding(
     WORKFLOW POSITION: Call after discovering insights, before ending session.
     Save findings as you go - don't wait until the end.
 
+    READ-BEFORE-WRITE: This tool automatically checks for similar findings before saving.
+    If a very similar finding exists (similarity > 0.90), it will be returned as a suggestion
+    instead of saving a duplicate. Consider updating the existing finding instead.
+
+    SESSION AWARENESS: For best results, use start_research or session_start before saving
+    findings. This enables automatic context injection and session-based knowledge tracking.
+
+    CONFIRMATION TIER: WRITE OPERATION - Requires confirm=True.
+    This creates persistent data. Set confirm=true for final saves, confirm=false for drafts.
+
     PARAMETERS:
     - project: Project name for categorization (required)
     - claim: The finding/insight text (required) - be specific and actionable
@@ -759,6 +769,12 @@ def save_finding(
     TIP: If a similar finding already exists, consider updating it instead of creating a duplicate.
     Use search_findings first to check for duplicates.
     """
+    # Read-before-write: auto-check for similar findings before saving
+    # This acts as a safety net - even if the model didn't search first,
+    # it will see similar findings in the response and can decide to update instead
+    _duplicate_check = search_fts(_settings_path(), claim, limit=3)
+    _similar_findings = _duplicate_check.get("items", []) if _duplicate_check.get("status") == "ok" else []
+
     return add_finding(
         settings_path=_settings_path(),
         project=project,
@@ -772,6 +788,7 @@ def save_finding(
         proposed_by=proposed_by,
         finding_id=finding_id,
         confirm=confirm,
+        similar_findings=_similar_findings,
     )
 
 
@@ -819,6 +836,8 @@ def search_findings(query: str, limit: int = 10) -> dict:
     WORKFLOW POSITION: Use FIRST for targeted keyword search. If results are insufficient,
     try retrieve_findings for semantic search that finds related concepts.
 
+    CONFIRMATION TIER: READ OPERATION - No confirmation needed. Safe to call freely.
+
     SEARCH TIPS: Use specific keywords. FTS5 supports boolean operators:
     - "python web framework" finds all three words
     - "python AND web" finds both
@@ -853,6 +872,8 @@ def retrieve_findings(
 
     WORKFLOW POSITION: Use AFTER search_fts returns insufficient results.
     This tool automatically combines semantic (meaning-based) and lexical (keyword) search.
+
+    CONFIRMATION TIER: READ OPERATION - No confirmation needed. Safe to call freely.
 
     PARAMETERS:
     - query: Search query (required) - describe what you're looking for
@@ -924,6 +945,9 @@ def delete_finding(finding_id: str, confirm: bool = False) -> dict:
     DO NOT CALL for:
     - Cleaning up duplicates (update instead)
     - Without explicit user confirmation
+
+    CONFIRMATION TIER: DESTRUCTIVE - Requires explicit confirm=True with user approval.
+    This operation is PERMANENT and cannot be undone. Always warn the user before calling.
 
     SAFETY: Requires confirm=True to prevent accidental deletion.
     The finding is permanently removed.
@@ -1096,6 +1120,8 @@ def check_context(query: str, project: Optional[str] = None) -> dict:
 
     WORKFLOW POSITION: First tool to call when starting any task.
 
+    CONFIRMATION TIER: READ OPERATION - No confirmation needed. Safe to call freely.
+
     PARAMETERS:
     - query: What you're about to work on
     - project: Filter by project (optional)
@@ -1140,6 +1166,12 @@ def save_finding_auto(
     - 0.7 for tentative findings
     - Uses provided confidence if explicitly set
 
+    READ-BEFORE-WRITE: This tool automatically checks for similar findings before saving.
+    If a very similar finding exists, it will be returned as a suggestion.
+
+    CONFIRMATION TIER: WRITE OPERATION - Requires confirm=True.
+    This creates persistent data. Set confirm=true for final saves.
+
     PARAMETERS:
     - project: Project name (required)
     - claim: The finding text (required)
@@ -1155,6 +1187,10 @@ def save_finding_auto(
         # Default to high confidence for explicit saves
         confidence = 0.9
 
+    # Read-before-write: auto-check for similar findings (safety net)
+    _duplicate_check = search_fts(_settings_path(), claim, limit=3)
+    _similar_findings = _duplicate_check.get("items", []) if _duplicate_check.get("status") == "ok" else []
+
     return add_finding(
         settings_path=_settings_path(),
         project=project,
@@ -1165,6 +1201,7 @@ def save_finding_auto(
         caveats=caveats,
         tags=tags,
         confirm=confirm,
+        similar_findings=_similar_findings,
     )
 
 

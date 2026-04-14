@@ -302,6 +302,35 @@ def _serialize_issues(issues) -> List[Dict[str, str]]:
     ]
 
 
+# Threshold for read-before-write duplicate detection
+DUPLICATE_SIMILARITY_THRESHOLD = 0.90
+
+
+def _check_duplicate_warning(similar_findings: Optional[List[Dict[str, Any]]], claim: str) -> Optional[Dict[str, Any]]:
+    """Check if similar findings suggest this might be a duplicate.
+
+    Returns a warning dict if a very similar finding exists, otherwise None.
+    FTS5 rank: lower is better. rank <= 2.0 indicates very high similarity.
+    """
+    if not similar_findings:
+        return None
+
+    for finding in similar_findings[:3]:
+        # Check if the finding has a high similarity score (from FTS rank)
+        rank = finding.get("rank")
+        # FTS5 rank: lower is better, rank <= 2.0 indicates very high similarity
+        if rank is not None and rank <= 2.0:
+            return {
+                "message": f"A very similar finding already exists (id={finding.get('id')}). "
+                          f"Consider updating it instead of creating a duplicate.",
+                "existing_finding_id": finding.get("id"),
+                "similarity_rank": rank,
+                "claim_preview": finding.get("claim", "")[:150],
+            }
+
+    return None
+
+
 def add_finding(
     settings_path: Path,
     project: str,
@@ -321,6 +350,9 @@ def add_finding(
     paper_url: str = "",
     paper_also_covers: Optional[List[str]] = None,
     related_papers: Optional[List[Dict[str, str]]] = None,
+    # Read-before-write: similar findings check (safety net)
+    similar_findings: Optional[List[Dict[str, Any]]] = None,
+    session_warning: Optional[str] = None,  # Deprecated, kept for backward compat
 ) -> Dict[str, Any]:
     if not confirm:
         return {
@@ -488,6 +520,9 @@ def add_finding(
         "id": finding.id,
         "confidence": finding.confidence,
         "issues": issues_payload,
+        "similar_findings_count": len(similar_findings) if similar_findings else 0,
+        "similar_findings": similar_findings[:3] if similar_findings else [],
+        "duplicate_warning": _check_duplicate_warning(similar_findings, claim) if similar_findings else False,
     }
 
 

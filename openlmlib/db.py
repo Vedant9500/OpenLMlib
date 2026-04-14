@@ -281,7 +281,7 @@ def search_findings(conn: sqlite3.Connection, query: str, limit: int = 10) -> Li
         return []
     rows = conn.execute(
         """
-        SELECT f.id, f.project, f.claim, f.confidence, f.created_at, f.status
+        SELECT f.id, f.project, f.claim, f.confidence, f.created_at, f.status, fts.rank
         FROM findings_fts AS fts
         JOIN findings AS f ON f.id = fts.id
         WHERE findings_fts MATCH ?

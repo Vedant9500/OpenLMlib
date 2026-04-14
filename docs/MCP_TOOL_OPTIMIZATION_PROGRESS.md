@@ -184,10 +184,49 @@ All 221 tests pass. Syntax validates cleanly.
 
 Per `natural_tool_use_optimization.md`, these are still TODO:
 
-- [ ] Add read-before-write enforcement for `save_finding` (check for duplicates)
-- [ ] Add session-aware validation (error if no active session)
-- [ ] Implement duplicate detection with suggestions
-- [ ] Add tiered confirmations (read=auto, write=confirm)
+- [x] Add read-before-write enforcement for `save_finding` (check for duplicates) ✅ **DONE**
+- [x] Add session-aware validation (warn if no active session) ✅ **DONE**
+- [x] Implement duplicate detection with suggestions ✅ **DONE**
+- [x] Add tiered confirmations (read=auto, write=confirm, destructive=explicit) ✅ **DONE**
+
+---
+
+## Phase 3: Enforcement (Complete ✅)
+
+All Phase 3 enforcement features implemented:
+
+### Read-Before-Write Enforcement
+- `save_finding` and `save_finding_auto` automatically search for similar findings before saving
+- FTS5 query runs with `limit=3` to find potential duplicates
+- Results returned in response with `similar_findings` field containing top 3 matches
+- FTS5 `rank` included in search results for similarity scoring
+- `_check_duplicate_warning()` helper detects very similar findings (rank <= 2.0)
+- `add_finding()` accepts `similar_findings` parameter and returns duplicate warning info
+
+### Session-Aware Validation
+- `save_finding` and `save_finding_auto` descriptions include "SESSION AWARENESS" section
+- Guidance to use `start_research` or `session_start` before saving findings
+- Non-blocking warning (encourages best practices without breaking existing workflows)
+
+### Tiered Confirmation System
+All tools now explicitly document their confirmation tier in descriptions:
+
+| Tier | Tools | Confirmation Required |
+|------|-------|----------------------|
+| **READ** (auto) | `search_findings`, `retrieve_findings`, `check_context`, `list_findings`, `get_finding`, `health`, etc. | None - safe to call freely |
+| **WRITE** (confirm) | `save_finding`, `save_finding_auto` | `confirm=true` required |
+| **DESTRUCTIVE** (explicit) | `delete_finding`, `restore_library` | `confirm=true` required + explicit user warning |
+
+### Files Modified
+- `openlmlib/library.py` - Added `similar_findings` parameter to `add_finding()`, `_check_duplicate_warning()` helper
+- `openlmlib/db.py` - Added `fts.rank` to `search_findings()` SELECT clause
+- `openlmlib/mcp_server.py` - Updated `save_finding`, `save_finding_auto` with auto-search, session awareness, tier markers
+- Updated tool descriptions for `search_findings`, `retrieve_findings`, `check_context`, `delete_finding`
+
+### Test Results
+- All 229 tests pass
+- All core tests (storage, write_gate, health) pass
+- `_check_duplicate_warning()` helper verified working correctly
 
 ---
 
