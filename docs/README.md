@@ -9,16 +9,27 @@ Complete documentation for OpenLMlib - Local knowledge and research library for 
 - **[Installation Guide](#installation)** - Detailed installation options
 
 ### Core Features
-- **[MCP Tools Reference](MCP_TOOLS.md)** - Complete reference for all 42 MCP tools
+- **[MCP Tools Reference](MCP_TOOLS.md)** - Complete reference for all 52 MCP tools
 - **[Knowledge Base Guide](#knowledge-base)** - Managing findings and retrieval
+- **[Memory System Quickstart](MEMORY_QUICKSTART.md)** - Session persistence and progressive retrieval
 
 ### Collaboration
 - **[CollabSessions Guide](COLLAB_SESSIONS.md)** - Multi-agent collaboration
 - **[Session Templates](COLLAB_SESSIONS.md#available-templates)** - Predefined session plans
 
+### Memory System
+- **[Memory Quickstart](MEMORY_QUICKSTART.md)** - Session persistence, progressive retrieval, retroactive ingestion
+- **[Caveman Compression](CAVEMAN_COMPRESSION.md)** - Token-efficient linguistic compression
+
 ### Agent Integration
 - **[System Prompt Templates](SYSTEM_PROMPT.md)** - Agent instruction templates
 - **[MCP Configuration](#mcp-client-configuration)** - IDE/client setup
+- **[CLI MCP Integration](../CLI_MCP_GLOBAL_CONFIG.md)** - Global MCP config for CLI tools
+
+### Development
+- **[CHANGELOG](../CHANGELOG.md)** - Release history
+- **[Contributing Guide](../CONTRIBUTING.md)** - How to contribute
+- **[MCP CLI Research](MCP_CLI_INTEGRATION_RESEARCH.md)** - Market research on CLI tool MCP integration
 
 ---
 

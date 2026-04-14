@@ -12,7 +12,7 @@ Store, retrieve, and collaborate on findings with semantic search, full-text sea
 
 - **Knowledge Base**: SQLite metadata + JSON findings + FAISS/Numpy vector index
 - **Semantic Retrieval**: Multi-phase retrieval with semantic + lexical search, deduplication, and reranking
-- **MCP Server**: 42 tools for AI assistants (11 core + 31 collaboration)
+- **MCP Server**: 52 tools for AI assistants (11 core + 10 memory + 31 collaboration)
 - **CollabSessions**: Multi-agent collaboration with message passing, artifacts, and templates
 - **CLI**: Full command-line interface for management and diagnostics
 - **Portable**: Findings exportable as JSON, easy backup and restore
@@ -164,6 +164,64 @@ openlmlib-mcp --call collab_add_artifact '{...}'
 
 📖 **[Full CollabSessions guide →](docs/COLLAB_SESSIONS.md)**
 
+### 🧠 Memory System (Session Persistence & Retrieval)
+
+OpenLMlib includes a powerful memory system that persists session knowledge across work sessions, enabling AI assistants to "remember" what happened in previous sessions and continue work seamlessly.
+
+**Key Features**:
+- **Session Lifecycle**: Start/end sessions with automatic context injection and summarization
+- **Progressive Retrieval**: 3-layer disclosure (search index → timeline → full details) for token efficiency
+- **Retroactive Ingestion**: Auto-ingest session activity from git history — no manual logging needed!
+- **Caveman Compression**: Ultra-compressed context injection (46% token savings)
+
+**Memory Tools** (10 tools):
+```
+memory_session_start       - Start session with context from previous sessions
+memory_session_end         - End session and auto-generate summary
+memory_log_observation     - Log tool executions for memory building
+memory_search              - Layer 1: Search index (~75 tokens/result)
+memory_timeline            - Layer 2: Chronological context (~200 tokens/result)
+memory_get_observations    - Layer 3: Full details (~750 tokens/result)
+memory_inject_context      - Auto-inject relevant context at session start
+memory_quick_recap         - Synthesized recap of recent sessions (~150-250 tokens)
+memory_detailed_context    - Deep dive on specific topics (~500-800 tokens)
+memory_retroactive_ingest  - Auto-ingest from git history (no manual logging!)
+```
+
+**Example Workflow**:
+```python
+# Start of session - automatically loads relevant context
+memory_session_start(
+    session_id="sess_20260414_001",
+    query="memory retrieval optimization"
+)
+# Returns: Context from previous sessions with relevant observations
+
+# During work - observations are logged automatically
+memory_log_observation(
+    session_id="sess_20260414_001",
+    tool_name="Edit",
+    tool_input="Modified memory_retriever.py",
+    tool_output="Added auto_inject_context method"
+)
+
+# End of session - auto-generates summary
+memory_session_end(session_id="sess_20260414_001")
+# Creates synthesized knowledge: files touched, decisions, next steps
+
+# Next session - continue seamlessly
+memory_quick_recap(limit=3)
+# Returns: Structured knowledge from last 3 sessions
+```
+
+**Token Efficiency**:
+- Layer 1 only: 75 tokens/result (search index for filtering)
+- Layer 1+2: 275 tokens/result (timeline context)
+- Layer 1+2+3: 1,025 tokens/result (full details only for relevant items)
+- **vs. full dump**: 3-13x token savings!
+
+📖 **[Memory System Guide →](MEMORY_QUICKSTART.md)**
+
 ---
 
 ## Architecture
@@ -175,8 +233,9 @@ OpenLMlib
 │   ├── FAISS/Numpy (vector index)
 │   └── JSON findings (portable, human-readable)
 │
-├── MCP Server (42 tools)
+├── MCP Server (52 tools)
 │   ├── 11 core library tools
+│   ├── 10 memory tools (session lifecycle, progressive retrieval, retroactive ingestion)
 │   └── 31 collaboration tools
 │
 ├── CLI

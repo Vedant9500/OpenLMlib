@@ -909,7 +909,7 @@ def build_parser() -> argparse.ArgumentParser:
     setup_parser.add_argument(
         "--ide",
         action="append",
-        help="IDE/client to configure globally. Repeat or pass a comma-separated list. Use 'all' to install for every available client (vscode, cursor, kiro, claude_desktop, claude_code, antigravity, windsurf, zed, cline, openclaw).",
+        help="IDE/client to configure globally. Repeat or pass a comma-separated list. Use 'all' to install for every available client (vscode, cursor, kiro, claude_desktop, claude_code, antigravity, windsurf, zed, cline, openclaw, gemini_cli, qwen_code, opencode, codex_cli, aider).",
     )
     setup_parser.set_defaults(func=cmd_setup)
 

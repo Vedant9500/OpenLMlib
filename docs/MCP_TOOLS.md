@@ -1,10 +1,14 @@
 # MCP Tools Reference
 
-Complete reference for all 42 MCP tools available in OpenLMlib.
+Complete reference for all 52 MCP tools available in OpenLMlib.
 
 ## Table of Contents
 
 - [Core Library Tools (11)](#core-library-tools)
+- [Memory System Tools (10)](#memory-system-tools)
+  - [Session Lifecycle (3)](#session-lifecycle)
+  - [Progressive Retrieval (4)](#progressive-retrieval)
+  - [Context Injection (3)](#context-injection)
 - [Collaboration Session Tools (31)](#collaboration-session-tools)
   - [Session Management (7)](#session-management)
   - [Message Operations (7)](#message-operations)
@@ -147,6 +151,220 @@ Get help documentation for tools.
 - `tool_name` (string, optional): Specific tool to get help for (or all tools if omitted)
 
 **Returns:** Tool descriptions and usage examples
+
+---
+
+## Memory System Tools
+
+Session persistence, progressive retrieval, and retroactive ingestion tools. These tools enable AI assistants to maintain context across work sessions without manual logging.
+
+### Session Lifecycle
+
+#### `memory_session_start`
+Start a new session and inject relevant context from previous sessions.
+
+**Parameters:**
+- `session_id` (string): Unique session identifier
+- `user_id` (string, optional): User/agent identifier
+- `query` (string, optional): Initial query to filter relevant memories
+- `limit` (int, default 50): Max observations to inject
+
+**Returns:** Session ID, context block, observation count, injection status
+
+**Example:**
+```python
+memory_session_start(
+    session_id="sess_20260414_001",
+    query="memory retrieval optimization",
+    limit=30
+)
+```
+
+---
+
+#### `memory_session_end`
+End a session and trigger automatic summarization.
+
+**Parameters:**
+- `session_id` (string): Session identifier to end
+
+**Returns:** Session ID, status, summary generation status, observation count
+
+**Example:**
+```python
+memory_session_end(session_id="sess_20260414_001")
+```
+
+---
+
+#### `memory_log_observation`
+Log an observation from tool execution for memory building.
+
+**Parameters:**
+- `session_id` (string): Active session identifier
+- `tool_name` (string): Tool that was executed (e.g., "Read", "Edit")
+- `tool_input` (string): Tool input
+- `tool_output` (string): Tool output
+
+**Returns:** Observation ID, logging status
+
+**Example:**
+```python
+memory_log_observation(
+    session_id="sess_20260414_001",
+    tool_name="Edit",
+    tool_input="Modified memory_retriever.py",
+    tool_output="Added auto_inject_context method"
+)
+```
+
+---
+
+### Progressive Retrieval
+
+Three-layer disclosure system for token-efficient memory retrieval.
+
+#### `memory_search` (Layer 1)
+Search memory index with compact metadata (~75 tokens/result).
+
+**Parameters:**
+- `query` (string): Search query
+- `limit` (int, default 50): Max results to return
+- `filters` (dict, optional): Filters (tool_name, obs_type, session_id)
+
+**Returns:** Search results with id, title, type, timestamp, confidence, estimated tokens
+
+**Token Efficiency:** ~75 tokens per result (vs ~750 for full details)
+
+**Example:**
+```python
+memory_search(query="retrieval optimization", limit=20)
+```
+
+---
+
+#### `memory_timeline` (Layer 2)
+Get chronological context for memory IDs (~200 tokens/result).
+
+**Parameters:**
+- `ids` (array of strings): Observation IDs from memory_search
+- `window` (string, default "5m"): Time window for context
+
+**Returns:** Timeline entries with narrative flow and related concepts
+
+**Token Efficiency:** ~200 tokens per entry
+
+**Example:**
+```python
+# After memory_search, get timeline for top 5 results
+memory_timeline(ids=[...], window="10m")
+```
+
+---
+
+#### `memory_get_observations` (Layer 3)
+Get full details for specific memory IDs (~750 tokens/result).
+
+**Parameters:**
+- `ids` (array of strings): Observation IDs from memory_search or memory_timeline
+
+**Returns:** Full observation data with tool inputs, outputs, facts, concepts
+
+**Token Efficiency:** ~750 tokens per observation (use only for explicitly selected items)
+
+**Example:**
+```python
+# After filtering with layers 1-2, get full details for top 2
+memory_get_observations(ids=[...])
+```
+
+---
+
+### Context Injection & Synthesis
+
+#### `memory_inject_context`
+Auto-inject relevant context at session start with progressive compression.
+
+**Parameters:**
+- `session_id` (string): Current session ID
+- `query` (string, optional): Query to filter relevant memories
+- `limit` (int, default 50): Max observations to inject
+
+**Returns:** Context block, observation count, estimated tokens
+
+**Example:**
+```python
+memory_inject_context(
+    session_id="sess_20260414_001",
+    query="caveman compression",
+    limit=20
+)
+```
+
+---
+
+#### `memory_quick_recap`
+Get synthesized recap of recent sessions (~150-250 tokens). **Call FIRST** when starting work.
+
+Returns structured knowledge: files touched, decisions made, next steps, conventions discovered — not raw tool outputs.
+
+**Parameters:**
+- `session_id` (string, optional): Specific session to recap (default: recent sessions)
+- `limit` (int, default 3): Max recent sessions to recap
+
+**Returns:** Quick recap text, session summaries, next steps, decisions, files touched
+
+**Example:**
+```python
+# Start of session - get overview of what happened recently
+memory_quick_recap(limit=3)
+```
+
+---
+
+#### `memory_detailed_context`
+Get detailed context about a specific topic from past sessions (~500-800 tokens). **Call AFTER** memory_quick_recap.
+
+Returns detailed files, decisions, architecture notes, and conventions related to the topic.
+
+**Parameters:**
+- `topic` (string): Topic to get detailed context about (e.g., 'storage', 'privacy', 'MCP')
+- `session_id` (string, optional): Specific session to search (default: all sessions)
+
+**Returns:** Detailed context text, related knowledge, sessions searched, observations found
+
+**Example:**
+```python
+# Deep dive on a topic from the recap
+memory_detailed_context(topic="memory retrieval", session_id="sess_20260414_001")
+```
+
+---
+
+#### `memory_retroactive_ingest`
+Auto-ingest session activity from git history. **No manual logging needed!**
+
+Scans git working tree to reconstruct what happened: modified/created/deleted files, commits, lines added/removed. Works with ANY tool/agent because it reads actual codebase state.
+
+**Parameters:**
+- `session_id` (string): Session identifier for ingested session
+- `time_window_hours` (int, default 24): Hours to look back for commits
+- `include_uncommitted` (boolean, default true): Include uncommitted changes
+
+**Returns:** Files found, commits found, observations created, knowledge saved
+
+**Example:**
+```python
+# Forgot to log observations? Ingest from git history!
+memory_retroactive_ingest(
+    session_id="sess_retroactive_001",
+    time_window_hours=12,
+    include_uncommitted=True
+)
+
+# Then check what was found
+memory_quick_recap(session_id="sess_retroactive_001")
+```
 
 ---
 
