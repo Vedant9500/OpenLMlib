@@ -121,12 +121,12 @@ openlmlib query "retrieval" \
 42 MCP tools let AI assistants securely access and modify your knowledge base:
 
 **Core Tools (11)**:
-- `openlmlib_init`, `openlmlib_health` - Setup and diagnostics
-- `openlmlib_add_finding`, `openlmlib_delete_finding` - Write operations (require confirmation)
-- `openlmlib_retrieve`, `openlmlib_search_fts` - Retrieval and search
-- `openlmlib_list_findings`, `openlmlib_get_finding` - Browse findings
-- `openlmlib_retrieve_context` - Format findings for LLM prompts
-- `openlmlib_evaluate_dataset`, `openlmlib_help` - Utilities
+- `init_library`, `health` - Setup and diagnostics
+- `save_finding`, `delete_finding` - Write operations (require confirmation)
+- `retrieve_findings`, `search_findings` - Retrieval and search
+- `list_findings`, `get_finding` - Browse findings
+- `retrieve_context` - Format findings for LLM prompts
+- `evaluate_retrieval`, `help_library` - Utilities
 
 📖 **[See all 52 tools →](docs/MCP_TOOLS.md)**
 
@@ -136,25 +136,25 @@ CollabSessions enable structured collaboration between multiple LLM agents:
 
 ```bash
 # Create session from template
-openlmlib-mcp --call collab_create_session_from_template '{
+openlmlib-mcp --call create_from_template '{
   "template_id": "deep_research",
   "title": "Research on Retrieval",
   "created_by": "gpt-4"
 }'
 
 # Join session
-openlmlib-mcp --call collab_join_session '{
+openlmlib-mcp --call join_session '{
   "session_id": "sess_20260409_abc12345",
   "model": "claude-3",
   "role": "worker"
 }'
 
 # Send and receive messages
-openlmlib-mcp --call collab_send_message '{...}'
-openlmlib-mcp --call collab_poll_messages '{...}'
+openlmlib-mcp --call send_message '{...}'
+openlmlib-mcp --call poll_messages '{...}'
 
 # Add artifacts (reports, analysis)
-openlmlib-mcp --call collab_add_artifact '{...}'
+openlmlib-mcp --call save_artifact '{...}'
 ```
 
 **Available Templates**:
@@ -178,29 +178,29 @@ OpenLMlib includes a powerful memory system that persists session knowledge acro
 
 **Memory Tools** (10 tools):
 ```
-memory_session_start       - Start session with context from previous sessions
-memory_session_end         - End session and auto-generate summary
-memory_log_observation     - Log tool executions for memory building
-memory_search              - Layer 1: Search index (~75 tokens/result)
+session_start       - Start session with context from previous sessions
+session_end         - End session and auto-generate summary
+log_observation     - Log tool executions for memory building
+search_memory              - Layer 1: Search index (~75 tokens/result)
 memory_timeline            - Layer 2: Chronological context (~200 tokens/result)
-memory_get_observations    - Layer 3: Full details (~750 tokens/result)
-memory_inject_context      - Auto-inject relevant context at session start
-memory_quick_recap         - Synthesized recap of recent sessions (~150-250 tokens)
-memory_detailed_context    - Deep dive on specific topics (~500-800 tokens)
-memory_retroactive_ingest  - Auto-ingest from git history (no manual logging!)
+get_observations    - Layer 3: Full details (~750 tokens/result)
+inject_context      - Auto-inject relevant context at session start
+session_recap         - Synthesized recap of recent sessions (~150-250 tokens)
+topic_context    - Deep dive on specific topics (~500-800 tokens)
+ingest_git_history  - Auto-ingest from git history (no manual logging!)
 ```
 
 **Example Workflow**:
 ```python
 # Start of session - automatically loads relevant context
-memory_session_start(
+session_start(
     session_id="sess_20260414_001",
     query="memory retrieval optimization"
 )
 # Returns: Context from previous sessions with relevant observations
 
 # During work - observations are logged automatically
-memory_log_observation(
+log_observation(
     session_id="sess_20260414_001",
     tool_name="Edit",
     tool_input="Modified memory_retriever.py",
@@ -208,11 +208,11 @@ memory_log_observation(
 )
 
 # End of session - auto-generates summary
-memory_session_end(session_id="sess_20260414_001")
+session_end(session_id="sess_20260414_001")
 # Creates synthesized knowledge: files touched, decisions, next steps
 
 # Next session - continue seamlessly
-memory_quick_recap(limit=3)
+session_recap(limit=3)
 # Returns: Structured knowledge from last 3 sessions
 ```
 

@@ -139,8 +139,8 @@ function validateInstalledOpenLMlib(VENV_PYTHON) {
   const scriptPath = path.join(os.tmpdir(), `openlmlib-validate-${Date.now()}.py`);
   const checkScript = [
     'import openlmlib.mcp_server as m',
-    'required_core = ["openlmlib_init", "openlmlib_add_finding", "openlmlib_retrieve", "openlmlib_health"]',
-    'required_collab = ["collab_create_session", "collab_help"]',
+    'required_core = ["init_library", "save_finding", "retrieve_findings", "health"]',
+    'required_collab = ["create_session", "help_collab"]',
     'missing_core = [name for name in required_core if not hasattr(m, name)]',
     'missing_collab = [name for name in required_collab if not hasattr(m, name)]',
     'if missing_core:',

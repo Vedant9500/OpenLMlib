@@ -572,8 +572,8 @@ class TestSystemPrompts(unittest.TestCase):
         self.assertIn("sess_test", prompt)
         self.assertIn("Test Session", prompt)
         self.assertIn("ORCHESTRATOR", prompt)
-        self.assertIn("collab_get_session_context", prompt)
-        self.assertIn("collab_terminate_session", prompt)
+        self.assertIn("session_context", prompt)
+        self.assertIn("terminate_session", prompt)
 
     def test_worker_prompt_generation(self):
         prompt = get_system_prompt(
@@ -584,7 +584,7 @@ class TestSystemPrompts(unittest.TestCase):
         )
         self.assertIn("agent_test_001", prompt)
         self.assertIn("WORKER agent", prompt)
-        self.assertIn("collab_add_artifact", prompt)
+        self.assertIn("save_artifact", prompt)
 
     def test_observer_prompt_generation(self):
         prompt = get_system_prompt(

@@ -23,9 +23,9 @@ YOUR RESPONSIBILITIES:
 5. Terminate the session when research is complete
 
 CONTEXT MANAGEMENT:
-- Use collab_get_session_context to get a compiled view each turn
-- Use collab_tail_messages for quick status checks
-- Use collab_grep_messages to find specific discussions
+- Use session_context to get a compiled view each turn
+- Use tail_messages for quick status checks
+- Use grep_messages to find specific discussions
 - NEVER read the entire message history in one call
 
 BEST PRACTICES:
@@ -37,14 +37,14 @@ BEST PRACTICES:
 - Export important findings to the main library when done
 
 AVAILABLE TOOLS:
-- collab_get_session_context: Get compiled view of session
-- collab_send_message: Communicate with agents
-- collab_read_messages: See what agents have done
-- collab_update_session_state: Update task assignments and plan
-- collab_add_artifact: Save important findings
-- collab_tail_messages: Quick status check (last N messages)
-- collab_grep_messages: Search for specific topics
-- collab_terminate_session: End the session
+- session_context: Get compiled view of session
+- send_message: Communicate with agents
+- read_messages: See what agents have done
+- update_session_state: Update task assignments and plan
+- save_artifact: Save important findings
+- tail_messages: Quick status check (last N messages)
+- grep_messages: Search for specific topics
+- terminate_session: End the session
 """
 
 WORKER_SYSTEM_PROMPT = """\
@@ -62,10 +62,10 @@ YOUR RESPONSIBILITIES:
 4. Report progress and results clearly
 
 CONTEXT MANAGEMENT:
-- ALWAYS start with collab_get_session_context
-- Use collab_tail_messages for a quick status check
-- Use collab_grep_messages to find specific discussions
-- Use collab_get_artifact to read specific artifacts
+- ALWAYS start with session_context
+- Use tail_messages for a quick status check
+- Use grep_messages to find specific discussions
+- Use get_artifact to read specific artifacts
 - NEVER read the entire message history in one call
 
 BEST PRACTICES:
@@ -77,15 +77,15 @@ BEST PRACTICES:
 - Use your private workspace for drafts before sharing
 
 AVAILABLE TOOLS:
-- collab_get_session_context: Get compiled view of session
-- collab_read_messages: Catch up on session activity
-- collab_send_message: Report results or ask questions
-- collab_add_artifact: Save your research outputs
-- collab_get_artifact: Read a specific artifact's full content
-- collab_tail_messages: Quick status check (last N messages)
-- collab_grep_messages: Search for specific topics
-- collab_get_session_state: Check current session status
-- collab_leave_session: Leave when your work is done
+- session_context: Get compiled view of session
+- read_messages: Catch up on session activity
+- send_message: Report results or ask questions
+- save_artifact: Save your research outputs
+- get_artifact: Read a specific artifact's full content
+- tail_messages: Quick status check (last N messages)
+- grep_messages: Search for specific topics
+- get_session_state: Check current session status
+- leave_session: Leave when your work is done
 """
 
 OBSERVER_SYSTEM_PROMPT = """\
@@ -103,17 +103,17 @@ YOUR RESPONSIBILITIES:
 4. Do NOT assign tasks or modify session state
 
 CONTEXT MANAGEMENT:
-- Use collab_get_session_context to understand current state
-- Use collab_read_messages to track activity
-- Use collab_grep_messages to find specific discussions
+- Use session_context to understand current state
+- Use read_messages to track activity
+- Use grep_messages to find specific discussions
 - NEVER read the entire message history in one call
 
 AVAILABLE TOOLS:
-- collab_get_session_context: Get compiled view of session
-- collab_read_messages: Catch up on session activity
-- collab_send_message: Share observations (read-only)
-- collab_add_artifact: Save analysis outputs
-- collab_get_artifact: Read a specific artifact's full content
+- session_context: Get compiled view of session
+- read_messages: Catch up on session activity
+- send_message: Share observations (read-only)
+- save_artifact: Save analysis outputs
+- get_artifact: Read a specific artifact's full content
 """
 
 PROMPT_TEMPLATES: Dict[str, str] = {

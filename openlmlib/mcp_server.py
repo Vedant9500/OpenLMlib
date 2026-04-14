@@ -47,70 +47,70 @@ def _register_collab_tools() -> None:
         return
 
     from .collab.collab_mcp import (
-        collab_add_artifact,
-        collab_create_session,
-        collab_create_session_from_template,
-        collab_export_to_library,
-        collab_get_active_sessions_summary,
-        collab_get_agent_sessions,
-        collab_get_artifact,
-        collab_get_openrouter_model_details,
-        collab_get_recommended_models,
-        collab_get_session_context,
-        collab_get_session_relationships,
-        collab_get_session_state,
-        collab_get_session_statistics,
-        collab_get_template,
-        collab_grep_artifacts,
-        collab_grep_messages,
-        collab_help as collab_help,
-        collab_join_session,
-        collab_leave_session,
-        collab_list_artifacts,
-        collab_list_openrouter_models,
-        collab_list_sessions,
-        collab_list_templates,
-        collab_poll_messages,
-        collab_read_message_range,
-        collab_read_messages,
-        collab_search_sessions,
-        collab_send_message,
-        collab_tail_messages,
-        collab_terminate_session,
-        collab_update_session_state,
+        save_artifact,
+        create_session,
+        create_from_template,
+        export_to_library,
+        sessions_summary,
+        get_agent_sessions,
+        get_artifact,
+        get_model_details,
+        recommended_models,
+        session_context,
+        session_relationships,
+        get_session_state,
+        session_statistics,
+        get_template,
+        grep_artifacts,
+        grep_messages,
+        help_collab as help_collab,
+        join_session,
+        leave_session,
+        list_artifacts,
+        list_models,
+        list_sessions,
+        list_templates,
+        poll_messages,
+        read_message_range,
+        read_messages,
+        search_sessions,
+        send_message,
+        tail_messages,
+        terminate_session,
+        update_session_state,
     )
 
-    mcp.tool()(collab_create_session)
-    mcp.tool()(collab_join_session)
-    mcp.tool()(collab_list_sessions)
-    mcp.tool()(collab_get_session_state)
-    mcp.tool()(collab_update_session_state)
-    mcp.tool()(collab_send_message)
-    mcp.tool()(collab_read_messages)
-    mcp.tool()(collab_poll_messages)
-    mcp.tool()(collab_tail_messages)
-    mcp.tool()(collab_read_message_range)
-    mcp.tool()(collab_grep_messages)
-    mcp.tool()(collab_get_session_context)
-    mcp.tool()(collab_add_artifact)
-    mcp.tool()(collab_list_artifacts)
-    mcp.tool()(collab_get_artifact)
-    mcp.tool()(collab_grep_artifacts)
-    mcp.tool()(collab_leave_session)
-    mcp.tool()(collab_terminate_session)
-    mcp.tool()(collab_export_to_library)
-    mcp.tool()(collab_list_templates)
-    mcp.tool()(collab_get_template)
-    mcp.tool()(collab_create_session_from_template)
-    mcp.tool()(collab_get_agent_sessions)
-    mcp.tool()(collab_get_active_sessions_summary)
-    mcp.tool()(collab_search_sessions)
-    mcp.tool()(collab_get_session_relationships)
-    mcp.tool()(collab_get_session_statistics)
-    mcp.tool()(collab_list_openrouter_models)
-    mcp.tool()(collab_get_openrouter_model_details)
-    mcp.tool()(collab_get_recommended_models)
-    mcp.tool()(collab_help)
+    mcp.tool()(create_session)
+    mcp.tool()(join_session)
+    mcp.tool()(list_sessions)
+    mcp.tool()(get_session_state)
+    mcp.tool()(update_session_state)
+    mcp.tool()(send_message)
+    mcp.tool()(read_messages)
+    mcp.tool()(poll_messages)
+    mcp.tool()(tail_messages)
+    mcp.tool()(read_message_range)
+    mcp.tool()(grep_messages)
+    mcp.tool()(session_context)
+    mcp.tool()(save_artifact)
+    mcp.tool()(list_artifacts)
+    mcp.tool()(get_artifact)
+    mcp.tool()(grep_artifacts)
+    mcp.tool()(leave_session)
+    mcp.tool()(terminate_session)
+    mcp.tool()(export_to_library)
+    mcp.tool()(list_templates)
+    mcp.tool()(get_template)
+    mcp.tool()(create_from_template)
+    mcp.tool()(get_agent_sessions)
+    mcp.tool()(sessions_summary)
+    mcp.tool()(search_sessions)
+    mcp.tool()(session_relationships)
+    mcp.tool()(session_statistics)
+    mcp.tool()(list_models)
+    mcp.tool()(get_model_details)
+    mcp.tool()(recommended_models)
+    mcp.tool()(help_collab)
 
     _collab_registered = True
 
@@ -141,7 +141,7 @@ def _register_memory_tools() -> None:
     context_builder = ContextBuilder(retriever)
 
     @mcp.tool()
-    def memory_session_start(
+    def session_start(
         session_id: str,
         user_id: Optional[str] = None,
         query: Optional[str] = None,
@@ -183,7 +183,7 @@ def _register_memory_tools() -> None:
         }
 
     @mcp.tool()
-    def memory_session_end(session_id: str) -> dict:
+    def session_end(session_id: str) -> dict:
         """End the current session and trigger automatic summarization to persist knowledge.
 
         AUTOMATIC TRIGGERS - Call this when:
@@ -198,7 +198,7 @@ def _register_memory_tools() -> None:
         WORKFLOW POSITION: Last tool to call when finishing work.
 
         PARAMETERS:
-        - session_id: The session to end (track this from memory_session_start)
+        - session_id: The session to end (track this from session_start)
         """
         result = session_mgr.on_session_end(session_id)
         
@@ -211,7 +211,7 @@ def _register_memory_tools() -> None:
         }
 
     @mcp.tool()
-    def memory_log_observation(
+    def log_observation(
         session_id: str,
         tool_name: str,
         tool_input: str,
@@ -231,7 +231,7 @@ def _register_memory_tools() -> None:
         The observation will be compressed and summarized for future retrieval.
 
         PARAMETERS:
-        - session_id: Active session identifier (from memory_session_start)
+        - session_id: Active session identifier (from session_start)
         - tool_name: Tool that was executed (e.g., "web_search", "read_file")
         - tool_input: What was passed to the tool
         - tool_output: What the tool returned
@@ -249,7 +249,7 @@ def _register_memory_tools() -> None:
         }
 
     @mcp.tool()
-    def memory_search(
+    def search_memory(
         query: str,
         limit: int = 50,
         filters: Optional[dict] = None
@@ -262,7 +262,7 @@ def _register_memory_tools() -> None:
         - Searching for observations by tool name, type, or session
 
         Returns compact metadata for filtering. Use this FIRST to identify relevant memories,
-        then use memory_timeline or memory_get_observations for details.
+        then use memory_timeline or get_observations for details.
 
         SEARCH STRATEGY: Use specific keywords. Filter by tool_name, obs_type, or session_id.
 
@@ -288,15 +288,15 @@ def _register_memory_tools() -> None:
         """Layer 2: Get chronological context for memory IDs (~200 tokens/result).
 
         AUTOMATIC TRIGGERS - Call this when:
-        - You have observation IDs from memory_search
+        - You have observation IDs from search_memory
         - You need to understand the sequence of events
         - Understanding how observations relate to each other over time
 
-        Returns narrative flow around observations. Use AFTER memory_search to understand sequence.
+        Returns narrative flow around observations. Use AFTER search_memory to understand sequence.
         Provides timeline context for how observations relate to each other.
 
         PARAMETERS:
-        - ids: List of observation IDs from memory_search
+        - ids: List of observation IDs from search_memory
         - window: Time window for context around each observation (default: "5m")
         """
         results = retriever.layer2_timeline(ids, window)
@@ -309,19 +309,19 @@ def _register_memory_tools() -> None:
         }
 
     @mcp.tool()
-    def memory_get_observations(ids: TypingList[str]) -> dict:
+    def get_observations(ids: TypingList[str]) -> dict:
         """Layer 3: Get full details for specific memory IDs (~750 tokens/result). Most expensive.
 
         AUTOMATIC TRIGGERS - Call this when:
         - You have specific observation IDs and need complete details
-        - After filtering with memory_search and memory_timeline
+        - After filtering with search_memory and memory_timeline
         - You need the full raw data of specific observations
 
         Returns complete observation data. Use ONLY for explicitly selected relevant items.
-        This is the most expensive layer - filter first with memory_search.
+        This is the most expensive layer - filter first with search_memory.
 
         PARAMETERS:
-        - ids: List of observation IDs from memory_search or memory_timeline
+        - ids: List of observation IDs from search_memory or memory_timeline
         """
         results = retriever.layer3_full_details(ids)
         
@@ -333,7 +333,7 @@ def _register_memory_tools() -> None:
         }
 
     @mcp.tool()
-    def memory_inject_context(
+    def inject_context(
         session_id: str,
         query: Optional[str] = None,
         limit: int = 50
@@ -346,7 +346,7 @@ def _register_memory_tools() -> None:
         - User asks "what have we learned about X previously?"
 
         Retrieves up to 50 relevant observations from previous sessions.
-        Unlike memory_session_start (which auto-injects), you can call this mid-session.
+        Unlike session_start (which auto-injects), you can call this mid-session.
 
         WORKFLOW POSITION: Call anytime you need past context, not just at session start.
 
@@ -365,7 +365,7 @@ def _register_memory_tools() -> None:
         }
 
     @mcp.tool()
-    def memory_quick_recap(
+    def session_recap(
         session_id: Optional[str] = None,
         limit: int = 3
     ) -> dict:
@@ -380,7 +380,7 @@ def _register_memory_tools() -> None:
         conventions discovered — NOT raw tool outputs.
 
         If you need more details on a specific topic AFTER reading the recap,
-        call memory_detailed_context with a topic from the recap.
+        call topic_context with a topic from the recap.
 
         PARAMETERS:
         - session_id: Optional specific session to recap (default: recent sessions)
@@ -395,7 +395,7 @@ def _register_memory_tools() -> None:
             return {
                 "quick_recap": "No synthesized knowledge from previous sessions found.",
                 "sessions_recapped": 0,
-                "message": "Call memory_log_observation during work to build knowledge.",
+                "message": "Call log_observation during work to build knowledge.",
                 "estimated_tokens": 15,
             }
 
@@ -459,19 +459,19 @@ def _register_memory_tools() -> None:
             "estimated_tokens": token_estimate,
             "message": (
                 f"Recapped {len(knowledge_entries)} session(s). "
-                "Call memory_detailed_context(topic='X') for deep dive on a topic, "
-                "or memory_get_observations(ids=[...]) for raw observation details."
+                "Call topic_context(topic='X') for deep dive on a topic, "
+                "or get_observations(ids=[...]) for raw observation details."
             ),
         }
 
     @mcp.tool()
-    def memory_detailed_context(
+    def topic_context(
         topic: str,
         session_id: Optional[str] = None
     ) -> dict:
         """Get detailed context about a specific topic from past sessions (~500-800 tokens). Deep dive.
 
-        AUTOMATIC TRIGGERS - Call this AFTER memory_quick_recap when:
+        AUTOMATIC TRIGGERS - Call this AFTER session_recap when:
         - You need deep understanding of a specific topic
         - User asks about a specific area like "what do we know about storage?"
         - Example topics: 'storage', 'privacy', 'MCP', 'compression', 'caveman',
@@ -494,7 +494,7 @@ def _register_memory_tools() -> None:
             return {
                 "detailed_context": f"No knowledge found for topic: {topic}",
                 "topic": topic,
-                "message": "Call memory_log_observation during work to build knowledge.",
+                "message": "Call log_observation during work to build knowledge.",
                 "estimated_tokens": 15,
             }
 
@@ -590,7 +590,7 @@ def _register_memory_tools() -> None:
             return {
                 "detailed_context": (
                     f"No knowledge or observations found related to '{topic}'. "
-                    "Try a different topic, or call memory_search for raw text search."
+                    "Try a different topic, or call search_memory for raw text search."
                 ),
                 "topic": topic,
                 "estimated_tokens": 25,
@@ -607,12 +607,12 @@ def _register_memory_tools() -> None:
             "estimated_tokens": token_estimate,
             "message": (
                 f"Detailed context for '{topic}'. "
-                "Call memory_get_observations(ids=[...]) for full raw observation details."
+                "Call get_observations(ids=[...]) for full raw observation details."
             ),
         }
 
     @mcp.tool()
-    def memory_retroactive_ingest(
+    def ingest_git_history(
         session_id: str,
         time_window_hours: int = 24,
         include_uncommitted: bool = True
@@ -632,7 +632,7 @@ def _register_memory_tools() -> None:
         Works with ANY tool/agent (Qwen Code, Claude Code, manual edits)
         because it reads the actual codebase state, not tool call logs.
 
-        After ingestion, call memory_quick_recap to see the synthesized knowledge.
+        After ingestion, call session_recap to see the synthesized knowledge.
 
         PARAMETERS:
         - session_id: Session identifier to create for this ingested session
@@ -696,7 +696,7 @@ def _ensure_runtime_background() -> None:
 
 
 @mcp.tool()
-def openlmlib_init() -> dict:
+def init_library() -> dict:
     """Initialize the OpenLMlib knowledge base. Call this ONCE before using any other tools.
 
     AUTOMATIC TRIGGERS - Call this when:
@@ -715,7 +715,7 @@ def openlmlib_init() -> dict:
 
 
 @mcp.tool()
-def openlmlib_add_finding(
+def save_finding(
     project: str,
     claim: str,
     confidence: float = 0.8,
@@ -776,7 +776,7 @@ def openlmlib_add_finding(
 
 
 @mcp.tool()
-def openlmlib_list_findings(limit: int = 50, offset: int = 0) -> dict:
+def list_findings(limit: int = 50, offset: int = 0) -> dict:
     """List recent findings in the library. Use for browsing, not targeted search.
 
     AUTOMATIC TRIGGERS - Call this when:
@@ -784,7 +784,7 @@ def openlmlib_list_findings(limit: int = 50, offset: int = 0) -> dict:
     - You want to get a sense of what's stored in the library
     - Checking library contents after initialization
 
-    FOR TARGETED SEARCH, use openlmlib_search_fts or openlmlib_retrieve instead.
+    FOR TARGETED SEARCH, use search_findings or retrieve_findings instead.
 
     PARAMETERS:
     - limit: Max findings to return (default: 50, max: 200)
@@ -794,7 +794,7 @@ def openlmlib_list_findings(limit: int = 50, offset: int = 0) -> dict:
 
 
 @mcp.tool()
-def openlmlib_get_finding(finding_id: str) -> dict:
+def get_finding(finding_id: str) -> dict:
     """Get a specific finding by its ID.
 
     AUTOMATIC TRIGGERS - Call this when:
@@ -808,7 +808,7 @@ def openlmlib_get_finding(finding_id: str) -> dict:
 
 
 @mcp.tool()
-def openlmlib_search_fts(query: str, limit: int = 10) -> dict:
+def search_findings(query: str, limit: int = 10) -> dict:
     """Search findings using keyword (FTS5) search. Fast, exact keyword matching.
 
     AUTOMATIC TRIGGERS - Call this when:
@@ -817,7 +817,7 @@ def openlmlib_search_fts(query: str, limit: int = 10) -> dict:
     - Quick lookup of stored knowledge
 
     WORKFLOW POSITION: Use FIRST for targeted keyword search. If results are insufficient,
-    try openlmlib_retrieve for semantic search that finds related concepts.
+    try retrieve_findings for semantic search that finds related concepts.
 
     SEARCH TIPS: Use specific keywords. FTS5 supports boolean operators:
     - "python web framework" finds all three words
@@ -832,7 +832,7 @@ def openlmlib_search_fts(query: str, limit: int = 10) -> dict:
 
 
 @mcp.tool()
-def openlmlib_retrieve(
+def retrieve_findings(
     query: str,
     project: Optional[str] = None,
     tags: Optional[List[str]] = None,
@@ -879,7 +879,7 @@ def openlmlib_retrieve(
 
 
 @mcp.tool()
-def openlmlib_retrieve_context(
+def retrieve_context(
     query: str,
     project: Optional[str] = None,
     tags: Optional[List[str]] = None,
@@ -893,7 +893,7 @@ def openlmlib_retrieve_context(
     - Building a knowledge base context for analysis
     - You want findings formatted safely without injection risks
 
-    DIFFERENCE from openlmlib_retrieve: This returns a sanitized context block
+    DIFFERENCE from retrieve_findings: This returns a sanitized context block
     optimized for safe inclusion in LLM prompts. Use retrieve for raw data.
 
     PARAMETERS:
@@ -914,7 +914,7 @@ def openlmlib_retrieve_context(
 
 
 @mcp.tool()
-def openlmlib_delete_finding(finding_id: str, confirm: bool = False) -> dict:
+def delete_finding(finding_id: str, confirm: bool = False) -> dict:
     """Delete a finding by ID. DESTRUCTIVE - use with caution.
 
     AUTOMATIC TRIGGERS - Call this when:
@@ -936,7 +936,7 @@ def openlmlib_delete_finding(finding_id: str, confirm: bool = False) -> dict:
 
 
 @mcp.tool()
-def openlmlib_health() -> dict:
+def health() -> dict:
     """Check OpenLMlib database and vector index health.
 
     AUTOMATIC TRIGGERS - Call this when:
@@ -950,7 +950,7 @@ def openlmlib_health() -> dict:
 
 
 @mcp.tool()
-def openlmlib_evaluate_dataset(dataset_path: str = "config/eval_queries.json", final_k: int = 10) -> dict:
+def evaluate_retrieval(dataset_path: str = "config/eval_queries.json", final_k: int = 10) -> dict:
     """Run retrieval evaluation metrics on a test dataset. For developers testing improvements.
 
     AUTOMATIC TRIGGERS - Call this when:
@@ -972,7 +972,7 @@ def openlmlib_evaluate_dataset(dataset_path: str = "config/eval_queries.json", f
 
 
 @mcp.tool()
-def start_research_workflow(
+def start_research(
     session_id: str,
     topic: str,
     user_id: Optional[str] = None,
@@ -985,11 +985,11 @@ def start_research_workflow(
     - User asks to "research" or "look into" something
     - Beginning work on a new topic area
 
-    This replaces calling memory_session_start + openlmlib_search_fts separately.
+    This replaces calling session_start + search_findings separately.
     It handles session creation, context injection, and initial finding search in one step.
 
     WORKFLOW: After this returns, proceed with research and call save_finding
-    for important discoveries. When done, call memory_session_end.
+    for important discoveries. When done, call session_end.
 
     PARAMETERS:
     - session_id: Unique session identifier for this research session
@@ -1022,14 +1022,14 @@ def start_research_workflow(
         "finding_count": existing_findings.get("count", 0),
         "next_steps": [
             "Proceed with research (web search, code analysis, etc.)",
-            "Call openlmlib_add_finding for important discoveries",
-            "Call memory_session_end when research is complete"
+            "Call save_finding for important discoveries",
+            "Call session_end when research is complete"
         ]
     }
 
 
 @mcp.tool()
-def complete_session(
+def end_session(
     session_id: str,
     export_to_library: bool = True,
     project: Optional[str] = None,
@@ -1041,13 +1041,13 @@ def complete_session(
     - Research or analysis is complete
     - About to start unrelated work
 
-    This combines: memory_session_end (saves summary) + optional artifact export.
+    This combines: session_end (saves summary) + optional artifact export.
     ALWAYS call this when user indicates work is done to prevent knowledge loss.
 
     WORKFLOW POSITION: Last tool in any research/analysis workflow.
 
     PARAMETERS:
-    - session_id: The session to end (track from start_research_workflow or memory_session_start)
+    - session_id: The session to end (track from start_research or session_start)
     - export_to_library: If True, also search for recent findings to persist (default: True)
     - project: Project name for any exported findings (optional)
 
@@ -1085,7 +1085,7 @@ def complete_session(
 
 
 @mcp.tool()
-def check_relevant_context(query: str, project: Optional[str] = None) -> dict:
+def check_context(query: str, project: Optional[str] = None) -> dict:
     """Quick check if relevant context exists before starting work. CONVENIENCE TOOL.
 
     AUTOMATIC TRIGGERS - Call this at the start of ANY new task to determine
@@ -1120,7 +1120,7 @@ def check_relevant_context(query: str, project: Optional[str] = None) -> dict:
 
 
 @mcp.tool()
-def save_important_finding(
+def save_finding_auto(
     project: str,
     claim: str,
     confidence: Optional[float] = None,
@@ -1169,7 +1169,7 @@ def save_important_finding(
 
 
 @mcp.tool()
-def openlmlib_help(tool_name: Optional[str] = None) -> dict:
+def help_library(tool_name: Optional[str] = None) -> dict:
     """Get help about all OpenLMlib MCP tools or a specific tool.
 
     Call this with no arguments to see all available tools organized by category.
@@ -1177,18 +1177,18 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
 
     Args:
         tool_name: Optional specific tool name to get help for
-                   (e.g., 'openlmlib_add_finding', 'collab_create_session')
+                   (e.g., 'save_finding', 'create_session')
 
     Returns:
         Dict with tool descriptions and usage information
     """
     core_tools = {
-        "openlmlib_init": {
+        "init_library": {
             "description": "Initialize the OpenLMlib knowledge base. Call ONCE before first use.",
             "args": {},
             "returns": "Dict with initialization status",
         },
-        "openlmlib_add_finding": {
+        "save_finding": {
             "description": "Save critical research findings, discoveries, and insights. Auto-trigger when discovering important information.",
             "args": {
                 "project": "Project name (required)",
@@ -1205,7 +1205,7 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
             },
             "returns": "Dict with finding info",
         },
-        "openlmlib_list_findings": {
+        "list_findings": {
             "description": "List recent findings. Use for browsing, not targeted search.",
             "args": {
                 "limit": "Max findings to return (default: 50)",
@@ -1213,14 +1213,14 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
             },
             "returns": "Dict with list of findings",
         },
-        "openlmlib_get_finding": {
+        "get_finding": {
             "description": "Get a specific finding by its ID.",
             "args": {
                 "finding_id": "ID of the finding to retrieve",
             },
             "returns": "Dict with finding details",
         },
-        "openlmlib_search_fts": {
+        "search_findings": {
             "description": "Search findings using keyword (FTS5) search. Fast, exact keyword matching.",
             "args": {
                 "query": "Search query (keyword(s))",
@@ -1228,7 +1228,7 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
             },
             "returns": "Dict with matching findings",
         },
-        "openlmlib_retrieve": {
+        "retrieve_findings": {
             "description": "Intelligent retrieval combining semantic similarity and keyword matching.",
             "args": {
                 "query": "Search query (required)",
@@ -1239,7 +1239,7 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
             },
             "returns": "Dict with retrieved findings",
         },
-        "openlmlib_retrieve_context": {
+        "retrieve_context": {
             "description": "Retrieve findings in sanitized format safe for LLM context.",
             "args": {
                 "query": "Search query (required)",
@@ -1250,7 +1250,7 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
             },
             "returns": "Dict with sanitized context",
         },
-        "openlmlib_delete_finding": {
+        "delete_finding": {
             "description": "Delete a finding by ID. DESTRUCTIVE - use with caution.",
             "args": {
                 "finding_id": "ID of the finding to delete",
@@ -1258,12 +1258,12 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
             },
             "returns": "Dict with deletion status",
         },
-        "openlmlib_health": {
+        "health": {
             "description": "Check database and vector index health.",
             "args": {},
             "returns": "Dict with health status",
         },
-        "openlmlib_evaluate_dataset": {
+        "evaluate_retrieval": {
             "description": "Run retrieval evaluation metrics. For developers.",
             "args": {
                 "dataset_path": "Path to dataset file (default: 'config/eval_queries.json')",
@@ -1271,8 +1271,8 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
             },
             "returns": "Dict with evaluation metrics",
         },
-        "start_research_workflow": {
-            "description": "COMPOSITE: Begin a complete research session with context loading. Replaces memory_session_start + search.",
+        "start_research": {
+            "description": "COMPOSITE: Begin a complete research session with context loading. Replaces session_start + search.",
             "args": {
                 "session_id": "Unique session identifier",
                 "topic": "What you'll be researching",
@@ -1281,8 +1281,8 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
             },
             "returns": "Dict with session info, context, and existing findings",
         },
-        "complete_session": {
-            "description": "COMPOSITE: Gracefully end session with knowledge preservation. Replaces memory_session_end + export.",
+        "end_session": {
+            "description": "COMPOSITE: Gracefully end session with knowledge preservation. Replaces session_end + export.",
             "args": {
                 "session_id": "The session to end",
                 "export_to_library": "Also export findings (default: True)",
@@ -1290,7 +1290,7 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
             },
             "returns": "Dict with session end status and export results",
         },
-        "check_relevant_context": {
+        "check_context": {
             "description": "CONVENIENCE: Quick check if relevant context exists before starting work.",
             "args": {
                 "query": "What you're about to work on",
@@ -1298,7 +1298,7 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
             },
             "returns": "Dict with has_context, finding_count, and top findings",
         },
-        "save_important_finding": {
+        "save_finding_auto": {
             "description": "CONVENIENCE: Save finding with automatic confidence scoring. Use when discovering something important.",
             "args": {
                 "project": "Project name (required)",
@@ -1315,50 +1315,50 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
     }
 
     collab_tools_summary = {
-        "collab_create_session": "Create a new collaboration session for multi-agent research.",
-        "collab_join_session": "Join an existing collaboration session.",
-        "collab_list_sessions": "List collaboration sessions.",
-        "collab_get_session_state": "Get the current state of a collaboration session for a joined agent.",
-        "collab_update_session_state": "Update the session state (orchestrator only).",
-        "collab_send_message": "Send a message to a collaboration session.",
-        "collab_read_messages": "Read new messages from a joined session (offset-based).",
-        "collab_poll_messages": "Wait for new messages with timeout (AUTONOMOUS LOOP - use for continuous agent communication).",
-        "collab_tail_messages": "Read the last N messages from a joined session (quick status check).",
-        "collab_read_message_range": "Read messages in a specific sequence range from a joined session.",
-        "collab_grep_messages": "Search messages in a joined session by keyword.",
-        "collab_get_session_context": "Get a compiled context view of the session (PRIMARY tool for understanding session state).",
-        "collab_add_artifact": "Save a research artifact (finding, analysis, summary) to the session.",
-        "collab_list_artifacts": "List artifacts in a joined session.",
-        "collab_get_artifact": "Get the full content of a specific artifact from a joined session.",
-        "collab_grep_artifacts": "Search artifact content in a joined session by keyword.",
-        "collab_leave_session": "Leave a collaboration session gracefully.",
-        "collab_terminate_session": "Terminate and complete a collaboration session (orchestrator only).",
-        "collab_export_to_library": "Export session artifacts as findings in the main OpenLMLib library.",
-        "collab_list_templates": "List available session templates for quick session creation.",
-        "collab_get_template": "Get details of a specific session template.",
-        "collab_create_session_from_template": "Create a session from a predefined template.",
-        "collab_get_agent_sessions": "Get all sessions the requesting agent has participated in.",
-        "collab_get_active_sessions_summary": "Get a summary of active sessions joined by the requesting agent.",
-        "collab_search_sessions": "Search joined sessions by message content using FTS5.",
-        "collab_get_session_relationships": "Find sessions related to a joined session.",
-        "collab_get_session_statistics": "Get detailed statistics for a joined session.",
-        "collab_list_openrouter_models": "List available models from OpenRouter API.",
-        "collab_get_openrouter_model_details": "Get detailed information about a specific OpenRouter model.",
-        "collab_get_recommended_models": "Get recommended OpenRouter models for a specific task type.",
-        "collab_help": "Get help about collab MCP tools.",
+        "create_session": "Create a new collaboration session for multi-agent research.",
+        "join_session": "Join an existing collaboration session.",
+        "list_sessions": "List collaboration sessions.",
+        "get_session_state": "Get the current state of a collaboration session for a joined agent.",
+        "update_session_state": "Update the session state (orchestrator only).",
+        "send_message": "Send a message to a collaboration session.",
+        "read_messages": "Read new messages from a joined session (offset-based).",
+        "poll_messages": "Wait for new messages with timeout (AUTONOMOUS LOOP - use for continuous agent communication).",
+        "tail_messages": "Read the last N messages from a joined session (quick status check).",
+        "read_message_range": "Read messages in a specific sequence range from a joined session.",
+        "grep_messages": "Search messages in a joined session by keyword.",
+        "session_context": "Get a compiled context view of the session (PRIMARY tool for understanding session state).",
+        "save_artifact": "Save a research artifact (finding, analysis, summary) to the session.",
+        "list_artifacts": "List artifacts in a joined session.",
+        "get_artifact": "Get the full content of a specific artifact from a joined session.",
+        "grep_artifacts": "Search artifact content in a joined session by keyword.",
+        "leave_session": "Leave a collaboration session gracefully.",
+        "terminate_session": "Terminate and complete a collaboration session (orchestrator only).",
+        "export_to_library": "Export session artifacts as findings in the main OpenLMLib library.",
+        "list_templates": "List available session templates for quick session creation.",
+        "get_template": "Get details of a specific session template.",
+        "create_from_template": "Create a session from a predefined template.",
+        "get_agent_sessions": "Get all sessions the requesting agent has participated in.",
+        "sessions_summary": "Get a summary of active sessions joined by the requesting agent.",
+        "search_sessions": "Search joined sessions by message content using FTS5.",
+        "session_relationships": "Find sessions related to a joined session.",
+        "session_statistics": "Get detailed statistics for a joined session.",
+        "list_models": "List available models from OpenRouter API.",
+        "get_model_details": "Get detailed information about a specific OpenRouter model.",
+        "recommended_models": "Get recommended OpenRouter models for a specific task type.",
+        "help_collab": "Get help about collab MCP tools.",
     }
 
     memory_tools = {
-        "memory_session_start": "Start a new session and auto-inject relevant context from past sessions.",
-        "memory_session_end": "End a session and trigger automatic summarization.",
-        "memory_log_observation": "Log an observation from tool execution to build session memory.",
-        "memory_search": "Layer 1: Lightweight search of memory index (~75 tokens/result).",
+        "session_start": "Start a new session and auto-inject relevant context from past sessions.",
+        "session_end": "End a session and trigger automatic summarization.",
+        "log_observation": "Log an observation from tool execution to build session memory.",
+        "search_memory": "Layer 1: Lightweight search of memory index (~75 tokens/result).",
         "memory_timeline": "Layer 2: Get chronological context for memory IDs (~200 tokens/result).",
-        "memory_get_observations": "Layer 3: Get full details for specific memory IDs (~750 tokens/result).",
-        "memory_inject_context": "Auto-inject relevant context at any point during work.",
-        "memory_quick_recap": "Get synthesized recap of recent sessions. Call FIRST for structured knowledge.",
-        "memory_detailed_context": "Get detailed context about a specific topic. Call AFTER quick recap.",
-        "memory_retroactive_ingest": "Auto-ingest session activity from git history. No manual logging needed!",
+        "get_observations": "Layer 3: Get full details for specific memory IDs (~750 tokens/result).",
+        "inject_context": "Auto-inject relevant context at any point during work.",
+        "session_recap": "Get synthesized recap of recent sessions. Call FIRST for structured knowledge.",
+        "topic_context": "Get detailed context about a specific topic. Call AFTER quick recap.",
+        "ingest_git_history": "Auto-ingest session activity from git history. No manual logging needed!",
     }
 
     if tool_name:
@@ -1368,7 +1368,7 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
             return {
                 "tool": tool_name,
                 "description": collab_tools_summary[tool_name],
-                "note": f"Use collab_help(tool_name='{tool_name}') for detailed usage information",
+                "note": f"Use help_collab(tool_name='{tool_name}') for detailed usage information",
             }
         elif tool_name in memory_tools:
             return {
@@ -1394,19 +1394,19 @@ def openlmlib_help(tool_name: Optional[str] = None) -> dict:
             "Memory Injection Tools": {
                 "description": "Lifecycle-based memory management with progressive disclosure and retroactive git ingestion (10 tools)",
                 "tools": memory_tools,
-                "note": "Use openlmlib_help(tool_name='memory_<tool>') for detailed usage",
+                "note": "Use help_library(tool_name='memory_<tool>') for detailed usage",
             },
             "CollabSession Tools": {
                 "description": "Multi-agent collaboration session management (30 tools)",
                 "summary": collab_tools_summary,
-                "note": "Use collab_help() for detailed collab tool documentation",
+                "note": "Use help_collab() for detailed collab tool documentation",
             },
         },
         "usage": [
-            "Call openlmlib_help(tool_name='<tool>') for detailed usage of a core tool",
-            "Call openlmlib_help(tool_name='memory_<tool>') for memory tool usage",
-            "Call collab_help(tool_name='<tool>') for detailed usage of a collab tool",
-            "WORKFLOW TIP: Use start_research_workflow and complete_session for common research patterns",
+            "Call help_library(tool_name='<tool>') for detailed usage of a core tool",
+            "Call help_library(tool_name='memory_<tool>') for memory tool usage",
+            "Call help_collab(tool_name='<tool>') for detailed usage of a collab tool",
+            "WORKFLOW TIP: Use start_research and end_session for common research patterns",
         ],
     }
 

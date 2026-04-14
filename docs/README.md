@@ -87,19 +87,19 @@ openlmlib doctor
 
 ```bash
 # Create session
-openlmlib-mcp --call collab_create_session '{...}'
+openlmlib-mcp --call create_session '{...}'
 
 # Join session
-openlmlib-mcp --call collab_join_session '{...}'
+openlmlib-mcp --call join_session '{...}'
 
 # Send message
-openlmlib-mcp --call collab_send_message '{...}'
+openlmlib-mcp --call send_message '{...}'
 
 # Poll messages
-openlmlib-mcp --call collab_poll_messages '{...}'
+openlmlib-mcp --call poll_messages '{...}'
 
 # Add artifact
-openlmlib-mcp --call collab_add_artifact '{...}'
+openlmlib-mcp --call save_artifact '{...}'
 ```
 
 ---
@@ -224,7 +224,7 @@ OpenLMlib
 
 ### 2. Multi-Agent Research
 ```
-1. collab_create_session_from_template("deep_research")
+1. create_from_template("deep_research")
 2. Agents join and execute tasks
 3. Share artifacts (reports, analysis)
 4. Terminate with summary
@@ -233,7 +233,7 @@ OpenLMlib
 
 ### 3. Code Review
 ```
-1. collab_create_session_from_template("code_review")
+1. create_from_template("code_review")
 2. Agents review architecture, security, performance
 3. Consolidated report created
 4. Findings added to knowledge base
@@ -256,7 +256,7 @@ OpenLMlib
 ### Session issues?
 - Check agent is joined to session
 - Verify session is active
-- Use `collab_help` for tool documentation
+- Use `help_collab` for tool documentation
 
 ---
 
@@ -274,4 +274,4 @@ OpenLMlib
 - **Documentation**: You're reading it!
 - **Issues**: [GitHub Issues](https://github.com/Vedant9500/LMlib/issues)
 - **CLI Help**: `openlmlib --help` or `openlmlib help`
-- **MCP Help**: `openlmlib-mcp --call openlmlib_help` or `collab_help`
+- **MCP Help**: `openlmlib-mcp --call help_library` or `help_collab`

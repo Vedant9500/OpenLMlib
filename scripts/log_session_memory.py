@@ -29,14 +29,14 @@ observations = [
      "SessionKnowledge dataclass captures: files_touched, decisions_made, "
      "phases_completed/remaining, conventions_found, architecture_notes, "
      "open_questions, next_steps. Auto-extracted at session end. "
-     "New MCP tools: memory_quick_recap (~200 tokens) and "
-     "memory_detailed_context(topic) (~500-800 tokens)."),
+     "New MCP tools: session_recap (~200 tokens) and "
+     "topic_context(topic) (~500-800 tokens)."),
     
     ("architecture_decision", "Retroactive git ingestion",
      "claude-mem uses Claude Code lifecycle hooks for real-time capture. "
      "FastMCP has no middleware, so we use retroactive git ingestion: "
      "scans git status + log + diff to reconstruct session activity. "
-     "Works with ANY tool/agent. New MCP tool: memory_retroactive_ingest. "
+     "Works with ANY tool/agent. New MCP tool: ingest_git_history. "
      ".qwen/debug/ logs only have app-level events, not structured tool calls."),
     
     ("implementation", "knowledge_extractor.py (395 lines)",
@@ -57,9 +57,9 @@ observations = [
      "save_knowledge() and get_knowledge() methods added."),
     
     ("mcp_tools", "10 memory tools total (was 7)",
-     "New tools: memory_quick_recap, memory_detailed_context, "
-     "memory_retroactive_ingest. Progressive flow: recap -> detailed -> raw. "
-     "All registered in MCP server, documented in openlmlib_help()."),
+     "New tools: session_recap, topic_context, "
+     "ingest_git_history. Progressive flow: recap -> detailed -> raw. "
+     "All registered in MCP server, documented in help_library()."),
     
     ("fixes_applied", "Deep analysis fixes (fc5194d)",
      "Fixed: TypingList scope (FastMCP crash), unused imports, get_file_diff "

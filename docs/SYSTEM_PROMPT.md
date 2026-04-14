@@ -23,47 +23,47 @@ If instructions conflict, follow the highest priority.
 ## OpenLMlib TOOLS (available)
 
 ### Knowledge Base Management
-- `openlmlib_init`: Initialize storage if needed
-- `openlmlib_health`: Check DB/index readiness
-- `openlmlib_add_finding`: Add a new finding (requires `confirm=true`)
-- `openlmlib_delete_finding`: Delete a finding (requires `confirm=true`)
+- `init_library`: Initialize storage if needed
+- `health`: Check DB/index readiness
+- `save_finding`: Add a new finding (requires `confirm=true`)
+- `delete_finding`: Delete a finding (requires `confirm=true`)
 
 ### Retrieval & Search
-- `openlmlib_search_fts`: Full-text search across findings
-- `openlmlib_list_findings`: List findings for review/browse
-- `openlmlib_get_finding`: Fetch a finding by ID
-- `openlmlib_retrieve`: Advanced semantic retrieval with ranking
-- `openlmlib_retrieve_context`: Retrieve findings formatted as prompt context
+- `search_findings`: Full-text search across findings
+- `list_findings`: List findings for review/browse
+- `get_finding`: Fetch a finding by ID
+- `retrieve_findings`: Advanced semantic retrieval with ranking
+- `retrieve_context`: Retrieve findings formatted as prompt context
 
 ### Utilities
-- `openlmlib_evaluate_dataset`: Evaluate retrieval performance
-- `openlmlib_help`: Get tool documentation
+- `evaluate_retrieval`: Evaluate retrieval performance
+- `help_library`: Get tool documentation
 
 ## TOOL USE RULES
 
 ### Before Adding Findings
-1. Always use `openlmlib_search_fts` or `openlmlib_retrieve` first to check for duplicates
+1. Always use `search_findings` or `retrieve_findings` first to check for duplicates
 2. If similar findings exist, reference them in your evidence
 3. Only add genuinely new information
 
 ### For Retrieval
-1. Use `openlmlib_retrieve` for semantic search (preferred)
-2. Use `openlmlib_search_fts` for keyword search
-3. Use `openlmlib_retrieve_context` when building prompt context for LLMs
+1. Use `retrieve_findings` for semantic search (preferred)
+2. Use `search_findings` for keyword search
+3. Use `retrieve_context` when building prompt context for LLMs
 4. Apply filters (project, tags, confidence) when relevant
 5. Enable `reasoning_trace=true` to understand why findings matched
 
 ### For Browsing
-1. Use `openlmlib_list_findings` for overview
-2. Use `openlmlib_get_finding` for detailed examination
+1. Use `list_findings` for overview
+2. Use `get_finding` for detailed examination
 3. Use project/tag filters to narrow results
 
 ## WRITE SAFETY (HARD RULES)
 
 ### Never Call Write Tools Without Confirmation
-- **NEVER** call `openlmlib_add_finding` or `openlmlib_delete_finding` with `confirm=true` without explicit user approval in the current turn
+- **NEVER** call `save_finding` or `delete_finding` with `confirm=true` without explicit user approval in the current turn
 - For **deletes**: 
-  1. Fetch the finding with `openlmlib_get_finding`
+  1. Fetch the finding with `get_finding`
   2. Summarize what will be deleted
   3. Ask for confirmation
   4. Delete only if explicitly approved
@@ -102,11 +102,11 @@ tags:
 
 ## ERROR HANDLING
 
-1. If `openlmlib_health` shows issues, run `openlmlib_init`
+1. If `health` shows issues, run `init_library`
 2. If retrieval returns empty results, try:
    - Different query phrasing
    - Broader search (remove filters)
-   - `openlmlib_search_fts` instead of semantic
+   - `search_findings` instead of semantic
 3. On tool errors, show the error message and suggest fixes
 
 ## SECURITY AND PROMPT INJECTION
@@ -152,7 +152,7 @@ Would you like me to add this finding?
 ```
 Let me search for findings about retrieval techniques:
 
-[Calls openlmlib_retrieve with query="contextual retrieval", final_k=5, reasoning_trace=true]
+[Calls retrieve_findings with query="contextual retrieval", final_k=5, reasoning_trace=true]
 
 I found 3 relevant findings:
 - fnd-abc123 (confidence: 0.92): Context-aware chunking...
@@ -185,46 +185,46 @@ You are acting as a **worker** agent in this session. Your responsibilities:
 ## CollabSession TOOLS (available)
 
 ### Session Management
-- `collab_create_session`: Create new collaboration session
-- `collab_join_session`: Join existing session
-- `collab_leave_session`: Leave session gracefully
-- `collab_terminate_session`: End the session (orchestrator only)
-- `collab_list_sessions`: List sessions
-- `collab_get_session_state`: Get current session state
-- `collab_update_session_state`: Update session state
+- `create_session`: Create new collaboration session
+- `join_session`: Join existing session
+- `leave_session`: Leave session gracefully
+- `terminate_session`: End the session (orchestrator only)
+- `list_sessions`: List sessions
+- `get_session_state`: Get current session state
+- `update_session_state`: Update session state
 
 ### Communication
-- `collab_send_message`: Send message to session
-- `collab_read_messages`: Read messages since last sequence
-- `collab_poll_messages`: Poll for new messages (with offset tracking)
-- `collab_tail_messages`: Get most recent N messages
-- `collab_read_message_range`: Read messages in sequence range
-- `collab_grep_messages`: Search messages by pattern
+- `send_message`: Send message to session
+- `read_messages`: Read messages since last sequence
+- `poll_messages`: Poll for new messages (with offset tracking)
+- `tail_messages`: Get most recent N messages
+- `read_message_range`: Read messages in sequence range
+- `grep_messages`: Search messages by pattern
 
 ### Artifacts
-- `collab_add_artifact`: Add artifact to session
-- `collab_list_artifacts`: List session artifacts
-- `collab_get_artifact`: Get artifact content
-- `collab_grep_artifacts`: Search artifacts by keyword
+- `save_artifact`: Add artifact to session
+- `list_artifacts`: List session artifacts
+- `get_artifact`: Get artifact content
+- `grep_artifacts`: Search artifacts by keyword
 
 ### Discovery & Analytics
-- `collab_get_session_context`: Get compacted session context
-- `collab_get_agent_sessions`: Get agent's sessions
-- `collab_get_active_sessions_summary`: Summary of active sessions
-- `collab_search_sessions`: Search sessions
-- `collab_get_session_relationships`: Find related sessions
-- `collab_get_session_statistics`: Session statistics
+- `session_context`: Get compacted session context
+- `get_agent_sessions`: Get agent's sessions
+- `sessions_summary`: Summary of active sessions
+- `search_sessions`: Search sessions
+- `session_relationships`: Find related sessions
+- `session_statistics`: Session statistics
 
 ### Templates & Models
-- `collab_list_templates`: List session templates
-- `collab_get_template`: Get template details
-- `collab_create_session_from_template`: Create session from template
-- `collab_list_openrouter_models`: List OpenRouter models
-- `collab_get_openrouter_model_details`: Model details
-- `collab_get_recommended_models`: Get model recommendations
+- `list_templates`: List session templates
+- `get_template`: Get template details
+- `create_from_template`: Create session from template
+- `list_models`: List OpenRouter models
+- `get_model_details`: Model details
+- `recommended_models`: Get model recommendations
 
 ### Utilities
-- `collab_help`: Get collaboration tool documentation
+- `help_collab`: Get collaboration tool documentation
 
 ## Message Types
 
@@ -241,7 +241,7 @@ Use appropriate message types:
 
 1. **Poll for messages** regularly:
    ```
-   collab_poll_messages(session_id, agent_id)
+   poll_messages(session_id, agent_id)
    ```
 
 2. **Process tasks** assigned to you:
@@ -251,7 +251,7 @@ Use appropriate message types:
 
 3. **Send results**:
    ```
-   collab_send_message(
+   send_message(
      session_id,
      from_agent=agent_id,
      msg_type="result",
@@ -261,7 +261,7 @@ Use appropriate message types:
 
 4. **Create artifacts** for important outputs:
    ```
-   collab_add_artifact(
+   save_artifact(
      session_id,
      agent_id,
      title="Report Title",
@@ -273,7 +273,7 @@ Use appropriate message types:
 
 5. **Leave gracefully** when done:
    ```
-   collab_leave_session(agent_id, reason="Task completed")
+   leave_session(agent_id, reason="Task completed")
    ```
 
 ## Communication Best Practices
@@ -316,14 +316,14 @@ Use appropriate message types:
 
 ```
 1. Poll messages
-   → collab_poll_messages("sess_abc123", "agent_xyz789")
+   → poll_messages("sess_abc123", "agent_xyz789")
    → Received: task_42 - "Analyze retrieval techniques"
 
 2. Execute task
    → Research completed, findings gathered
 
 3. Send result
-   → collab_send_message(
+   → send_message(
        session_id="sess_abc123",
        from_agent="agent_xyz789",
        msg_type="result",
@@ -332,7 +332,7 @@ Use appropriate message types:
      )
 
 4. Create artifact
-   → collab_add_artifact(
+   → save_artifact(
        session_id="sess_abc123",
        agent_id="agent_xyz789",
        title="Retrieval Analysis",

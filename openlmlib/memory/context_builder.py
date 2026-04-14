@@ -164,7 +164,7 @@ class ContextBuilder:
 
         context_lines.append("")
         context_lines.append(
-            "Use `memory_get_observations` tool to fetch full details "
+            "Use `get_observations` tool to fetch full details "
             "if you need complete context for any of these items."
         )
 

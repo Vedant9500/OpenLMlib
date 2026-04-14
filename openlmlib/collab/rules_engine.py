@@ -55,7 +55,7 @@ class RulesEngine:
         if require_artifact and msg_type == "result" and not has_artifact_ref:
             warnings.append(
                 "Session rules require artifacts for result messages. "
-                "Use collab_add_artifact to save your work."
+                "Use save_artifact to save your work."
             )
 
         return True, warnings

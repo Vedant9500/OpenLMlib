@@ -17,11 +17,11 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
   - Codex CLI (`~/.codex/config.toml` with TOML support)
   - Aider (`~/.aider.conf.yml`)
 - **Memory System MCP Tools**: 10 new memory tools exposed via MCP
-  - `memory_session_start`, `memory_session_end` - Session lifecycle
-  - `memory_log_observation` - Tool execution logging
-  - `memory_search`, `memory_timeline`, `memory_get_observations` - Progressive retrieval (3-layer)
-  - `memory_inject_context`, `memory_quick_recap`, `memory_detailed_context` - Context injection
-  - `memory_retroactive_ingest` - Git history ingestion (no manual logging!)
+  - `session_start`, `session_end` - Session lifecycle
+  - `log_observation` - Tool execution logging
+  - `search_memory`, `memory_timeline`, `get_observations` - Progressive retrieval (3-layer)
+  - `inject_context`, `session_recap`, `topic_context` - Context injection
+  - `ingest_git_history` - Git history ingestion (no manual logging!)
 - **TOML Support**: Native TOML parsing and serialization for Codex CLI configuration
 - **Documentation**: Complete memory system guide, updated MCP tools reference (52 tools)
 

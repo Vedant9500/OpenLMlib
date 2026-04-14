@@ -239,40 +239,40 @@ collab_mcp = FastMCP("OpenLMlib CollabSessions")
 
 __all__ = [
     "collab_mcp",
-    "collab_create_session",
-    "collab_join_session",
-    "collab_list_sessions",
-    "collab_get_session_state",
-    "collab_update_session_state",
-    "collab_send_message",
-    "collab_read_messages",
-    "collab_tail_messages",
-    "collab_read_message_range",
-    "collab_grep_messages",
-    "collab_get_session_context",
-    "collab_add_artifact",
-    "collab_list_artifacts",
-    "collab_get_artifact",
-    "collab_grep_artifacts",
-    "collab_leave_session",
-    "collab_terminate_session",
-    "collab_export_to_library",
-    "collab_list_templates",
-    "collab_get_template",
-    "collab_create_session_from_template",
-    "collab_get_agent_sessions",
-    "collab_get_active_sessions_summary",
-    "collab_search_sessions",
-    "collab_get_session_relationships",
-    "collab_get_session_statistics",
-    "collab_list_openrouter_models",
-    "collab_get_openrouter_model_details",
-    "collab_get_recommended_models",
-    "collab_help",
+    "create_session",
+    "join_session",
+    "list_sessions",
+    "get_session_state",
+    "update_session_state",
+    "send_message",
+    "read_messages",
+    "tail_messages",
+    "read_message_range",
+    "grep_messages",
+    "session_context",
+    "save_artifact",
+    "list_artifacts",
+    "get_artifact",
+    "grep_artifacts",
+    "leave_session",
+    "terminate_session",
+    "export_to_library",
+    "list_templates",
+    "get_template",
+    "create_from_template",
+    "get_agent_sessions",
+    "sessions_summary",
+    "search_sessions",
+    "session_relationships",
+    "session_statistics",
+    "list_models",
+    "get_model_details",
+    "recommended_models",
+    "help_collab",
 ]
 
 @collab_mcp.tool()
-def collab_create_session(
+def create_session(
     title: str,
     task_description: str,
     plan: Optional[List[Dict]] = None,
@@ -295,8 +295,8 @@ def collab_create_session(
     - rules: Optional session rules (max_agents, require_assignment)
     - created_by: Your agent identifier (default: "orchestrator")
 
-    After creation, use collab_join_session for agents to join,
-    then collab_send_message to assign tasks.
+    After creation, use join_session for agents to join,
+    then send_message to assign tasks.
     """
     try:
         if not title or not isinstance(title, str):
@@ -326,17 +326,17 @@ def collab_create_session(
                 "status": result["status"],
                 "sessions_dir": result["sessions_dir"],
                 "next_steps": [
-                    "Use collab_update_session_state to set the initial plan",
-                    "Use collab_send_message to assign tasks to agents",
-                    "Use collab_read_messages to monitor progress",
+                    "Use update_session_state to set the initial plan",
+                    "Use send_message to assign tasks to agents",
+                    "Use read_messages to monitor progress",
                 ],
             }
     except Exception as e:
-        return _handle_tool_error("collab_create_session", e)
+        return _handle_tool_error("create_session", e)
 
 
 @collab_mcp.tool()
-def collab_join_session(
+def join_session(
     session_id: str,
     model: str,
     capabilities: Optional[List[str]] = None,
@@ -356,7 +356,7 @@ def collab_join_session(
     - capabilities: Optional list of your capabilities (e.g., ['research', 'code_analysis'])
 
     After joining, read the session_context above to understand current state,
-    then use collab_read_messages to check for new messages.
+    then use read_messages to check for new messages.
     """
     try:
         validate_session_id(session_id)
@@ -391,17 +391,17 @@ def collab_join_session(
                 "session_context": context_str,
                 "next_steps": [
                     "Read the session_context above to understand current state",
-                    "Use collab_read_messages to check for new messages",
-                    "Use collab_send_message to communicate with other agents",
-                    "Use collab_add_artifact to save your research outputs",
+                    "Use read_messages to check for new messages",
+                    "Use send_message to communicate with other agents",
+                    "Use save_artifact to save your research outputs",
                 ],
             }
     except Exception as e:
-        return _handle_tool_error("collab_join_session", e)
+        return _handle_tool_error("join_session", e)
 
 
 @collab_mcp.tool()
-def collab_list_sessions(
+def list_sessions(
     status: Optional[str] = None,
     limit: int = 20,
 ) -> Dict:
@@ -412,7 +412,7 @@ def collab_list_sessions(
     - You want to find a specific session to rejoin
     - Checking what sessions are active
 
-    FOR SESSION DETAILS, use collab_get_session_context after finding the session_id.
+    FOR SESSION DETAILS, use session_context after finding the session_id.
 
     PARAMETERS:
     - status: Filter by status - "active", "completed", "terminated" (optional)
@@ -427,11 +427,11 @@ def collab_list_sessions(
                 "count": len(sessions),
             }
     except Exception as e:
-        return _handle_tool_error("collab_list_sessions", e)
+        return _handle_tool_error("list_sessions", e)
 
 
 @collab_mcp.tool()
-def collab_get_session_state(session_id: str, agent_id: str) -> Dict:
+def get_session_state(session_id: str, agent_id: str) -> Dict:
     """Get the current state of a collaboration session - tasks, agents, and session state.
 
     AUTOMATIC TRIGGERS - Call this when:
@@ -439,7 +439,7 @@ def collab_get_session_state(session_id: str, agent_id: str) -> Dict:
     - Checking which agents are in the session
     - Reviewing session metadata (status, created_at, etc.)
 
-    DIFFERENCE from collab_get_session_context: This returns raw structured data
+    DIFFERENCE from session_context: This returns raw structured data
     (tasks, agents, state dict). Use get_session_context for a formatted narrative view.
 
     PARAMETERS:
@@ -462,11 +462,11 @@ def collab_get_session_state(session_id: str, agent_id: str) -> Dict:
                 "agents": agents,
             }
     except Exception as e:
-        return _handle_tool_error("collab_get_session_state", e)
+        return _handle_tool_error("get_session_state", e)
 
 
 @collab_mcp.tool()
-def collab_update_session_state(
+def update_session_state(
     session_id: str,
     state: Dict,
     orchestrator_id: str,
@@ -515,11 +515,11 @@ def collab_update_session_state(
                 "state": merged,
             }
     except Exception as e:
-        return _handle_tool_error("collab_update_session_state", e)
+        return _handle_tool_error("update_session_state", e)
 
 
 @collab_mcp.tool()
-def collab_send_message(
+def send_message(
     session_id: str,
     msg_type: str,
     content: str,
@@ -614,11 +614,11 @@ def collab_send_message(
                 "created_at": now,
             }
     except Exception as e:
-        return _handle_tool_error("collab_send_message", e)
+        return _handle_tool_error("send_message", e)
 
 
 @collab_mcp.tool()
-def collab_read_messages(
+def read_messages(
     session_id: str,
     agent_id: str,
     limit: int = 50,
@@ -632,7 +632,7 @@ def collab_read_messages(
     - Looking for task assignments or answers to your questions
     - Periodic status check during active collaboration
 
-    DIFFERENCE from collab_poll_messages: This returns immediately without waiting.
+    DIFFERENCE from poll_messages: This returns immediately without waiting.
     Use poll_messages for blocking waits in autonomous agent loops.
 
     WORKFLOW POSITION: Call after sending messages, between work steps.
@@ -677,11 +677,11 @@ def collab_read_messages(
                 "has_more": len(messages) >= limit,
             }
     except Exception as e:
-        return _handle_tool_error("collab_read_messages", e)
+        return _handle_tool_error("read_messages", e)
 
 
 @collab_mcp.tool()
-def collab_poll_messages(
+def poll_messages(
     session_id: str,
     agent_id: str,
     timeout: float = 30.0,
@@ -700,9 +700,9 @@ def collab_poll_messages(
     It is the primary mechanism for agents to run continuous collaboration.
 
     USAGE PATTERN FOR AUTONOMOUS AGENTS:
-        1. Call collab_poll_messages(session_id, agent_id, timeout=30)
+        1. Call poll_messages(session_id, agent_id, timeout=30)
         2. Process any returned messages
-        3. Send responses via collab_send_message
+        3. Send responses via send_message
         4. Repeat from step 1 until the session is complete
 
     WORKFLOW POSITION: Main loop tool for autonomous agents.
@@ -843,11 +843,11 @@ def collab_poll_messages(
                 "notification_type": notify.get("msg_type") if notify else None,
             }
     except Exception as e:
-        return _handle_tool_error("collab_poll_messages", e)
+        return _handle_tool_error("poll_messages", e)
 
 
 @collab_mcp.tool()
-def collab_tail_messages(
+def tail_messages(
     session_id: str,
     agent_id: str,
     n: int = 20,
@@ -859,7 +859,7 @@ def collab_tail_messages(
     - Quick glance at what's happening without tracking offsets
     - Checking session state before full context load
 
-    DIFFERENCE from collab_read_messages: This does NOT track your read offset
+    DIFFERENCE from read_messages: This does NOT track your read offset
     and always returns the most recent N messages regardless of what you've seen.
     Use read_messages for tracking unseen messages.
 
@@ -882,11 +882,11 @@ def collab_tail_messages(
                 "count": len(messages),
             }
     except Exception as e:
-        return _handle_tool_error("collab_tail_messages", e)
+        return _handle_tool_error("tail_messages", e)
 
 
 @collab_mcp.tool()
-def collab_read_message_range(
+def read_message_range(
     session_id: str,
     start_seq: int,
     end_seq: int,
@@ -899,7 +899,7 @@ def collab_read_message_range(
     - A message references an earlier seq number
     - You want to review a specific exchange between agents
 
-    DIFFERENCE from collab_read_messages: This reads a specific range by sequence
+    DIFFERENCE from read_messages: This reads a specific range by sequence
     numbers, not just "new" messages. Use for targeted context retrieval.
 
     PARAMETERS:
@@ -928,11 +928,11 @@ def collab_read_message_range(
                 "end_seq": end_seq,
             }
     except Exception as e:
-        return _handle_tool_error("collab_read_message_range", e)
+        return _handle_tool_error("read_message_range", e)
 
 
 @collab_mcp.tool()
-def collab_grep_messages(
+def grep_messages(
     session_id: str,
     pattern: str,
     agent_id: str,
@@ -980,11 +980,11 @@ def collab_grep_messages(
                 "pattern": pattern,
             }
     except Exception as e:
-        return _handle_tool_error("collab_grep_messages", e)
+        return _handle_tool_error("grep_messages", e)
 
 
 @collab_mcp.tool()
-def collab_get_session_context(
+def session_context(
     session_id: str,
     agent_id: str,
     max_messages: int = 20,
@@ -1030,11 +1030,11 @@ def collab_get_session_context(
                 "formatted_context": formatted,
             }
     except Exception as e:
-        return _handle_tool_error("collab_get_session_context", e)
+        return _handle_tool_error("session_context", e)
 
 
 @collab_mcp.tool()
-def collab_add_artifact(
+def save_artifact(
     session_id: str,
     title: str,
     content: str,
@@ -1118,11 +1118,11 @@ def collab_add_artifact(
                 "shared": result["shared"],
             }
     except Exception as e:
-        return _handle_tool_error("collab_add_artifact", e)
+        return _handle_tool_error("save_artifact", e)
 
 
 @collab_mcp.tool()
-def collab_list_artifacts(
+def list_artifacts(
     session_id: str,
     agent_id: str,
     created_by: Optional[str] = None,
@@ -1135,7 +1135,7 @@ def collab_list_artifacts(
     - Looking for a specific analysis or report
     - Before creating a new artifact to avoid duplicates
 
-    FOR ARTIFACT CONTENT, use collab_get_artifact after finding the artifact_id.
+    FOR ARTIFACT CONTENT, use get_artifact after finding the artifact_id.
 
     PARAMETERS:
     - session_id: Target session
@@ -1155,11 +1155,11 @@ def collab_list_artifacts(
                 "count": len(artifacts),
             }
     except Exception as e:
-        return _handle_tool_error("collab_list_artifacts", e)
+        return _handle_tool_error("list_artifacts", e)
 
 
 @collab_mcp.tool()
-def collab_get_artifact(
+def get_artifact(
     session_id: str,
     artifact_id: str,
     agent_id: str,
@@ -1197,11 +1197,11 @@ def collab_get_artifact(
                 "metadata": metadata,
             }
     except Exception as e:
-        return _handle_tool_error("collab_get_artifact", e)
+        return _handle_tool_error("get_artifact", e)
 
 
 @collab_mcp.tool()
-def collab_grep_artifacts(
+def grep_artifacts(
     session_id: str,
     pattern: str,
     agent_id: str,
@@ -1235,11 +1235,11 @@ def collab_grep_artifacts(
                 "pattern": pattern,
             }
     except Exception as e:
-        return _handle_tool_error("collab_grep_artifacts", e)
+        return _handle_tool_error("grep_artifacts", e)
 
 
 @collab_mcp.tool()
-def collab_leave_session(
+def leave_session(
     session_id: str,
     agent_id: str,
     reason: Optional[str] = None,
@@ -1251,7 +1251,7 @@ def collab_leave_session(
     - You're done with this session and moving to other work
     - User asks you to leave the session
 
-    DIFFERENCE from collab_terminate_session: This is for individual agents leaving.
+    DIFFERENCE from terminate_session: This is for individual agents leaving.
     Only the orchestrator should call terminate_session to end the entire session.
 
     PARAMETERS:
@@ -1275,11 +1275,11 @@ def collab_leave_session(
                 "status": "left",
             }
     except Exception as e:
-        return _handle_tool_error("collab_leave_session", e)
+        return _handle_tool_error("leave_session", e)
 
 
 @collab_mcp.tool()
-def collab_terminate_session(
+def terminate_session(
     session_id: str,
     orchestrator_id: str,
     summary: Optional[str] = None,
@@ -1301,7 +1301,7 @@ def collab_terminate_session(
     - orchestrator_id: The orchestrator's agent ID
     - summary: Optional final summary of the session's work
 
-    After termination, use collab_export_to_library to persist findings.
+    After termination, use export_to_library to persist findings.
     """
     try:
         validate_session_id(session_id)
@@ -1318,16 +1318,16 @@ def collab_terminate_session(
                 "terminated_at": result["terminated_at"],
                 "summary_saved": result["summary_saved"],
                 "next_steps": [
-                    "Use collab_export_to_library to export artifacts to the main library",
+                    "Use export_to_library to export artifacts to the main library",
                     f"Session files are preserved at: data/sessions/{session_id}/",
                 ],
             }
     except Exception as e:
-        return _handle_tool_error("collab_terminate_session", e)
+        return _handle_tool_error("terminate_session", e)
 
 
 @collab_mcp.tool()
-def collab_export_to_library(
+def export_to_library(
     session_id: str,
     project: Optional[str] = None,
     confidence: float = 0.8,
@@ -1388,11 +1388,11 @@ def collab_export_to_library(
             logger.info("Exported %d artifacts from session %s to library", result.get("exported", 0), session_id)
             return result
     except Exception as e:
-        return _handle_tool_error("collab_export_to_library", e)
+        return _handle_tool_error("export_to_library", e)
 
 
 @collab_mcp.tool()
-def collab_list_templates() -> Dict:
+def list_templates() -> Dict:
     """List available session templates. Pre-built plans for common research patterns.
 
     AUTOMATIC TRIGGERS - Call this when:
@@ -1400,7 +1400,7 @@ def collab_list_templates() -> Dict:
     - User asks to use a template
     - Looking for recommended workflows (deep_research, code_review, etc.)
 
-    After finding a template, use collab_create_session_from_template to start.
+    After finding a template, use create_from_template to start.
     """
     try:
         from .templates import list_templates
@@ -1410,11 +1410,11 @@ def collab_list_templates() -> Dict:
             "count": len(templates),
         }
     except Exception as e:
-        return _handle_tool_error("collab_list_templates", e)
+        return _handle_tool_error("list_templates", e)
 
 
 @collab_mcp.tool()
-def collab_get_template(template_id: str) -> Dict:
+def get_template(template_id: str) -> Dict:
     """Get details of a specific session template. See the plan and rules before using.
 
     AUTOMATIC TRIGGERS - Call this when:
@@ -1432,11 +1432,11 @@ def collab_get_template(template_id: str) -> Dict:
             return {"error": f"Template '{template_id}' not found", "error_type": "template_not_found", "success": False}
         return template
     except Exception as e:
-        return _handle_tool_error("collab_get_template", e)
+        return _handle_tool_error("get_template", e)
 
 
 @collab_mcp.tool()
-def collab_create_session_from_template(
+def create_from_template(
     template_id: str,
     title: str,
     task_description: str,
@@ -1449,7 +1449,7 @@ def collab_create_session_from_template(
     - You want a pre-built plan instead of creating tasks manually
     - Starting common workflows (deep research, code review, etc.)
 
-    WORKFLOW POSITION: Alternative to collab_create_session when you want a structured plan.
+    WORKFLOW POSITION: Alternative to create_session when you want a structured plan.
 
     PARAMETERS:
     - template_id: Template to use (e.g., 'deep_research', 'code_review')
@@ -1488,17 +1488,17 @@ def collab_create_session_from_template(
                 "title": result["title"],
                 "plan_steps": len(template["plan"]),
                 "next_steps": [
-                    "Use collab_get_session_context to understand the plan",
-                    "Use collab_send_message to assign tasks to agents",
-                    "Agents can join using collab_join_session",
+                    "Use session_context to understand the plan",
+                    "Use send_message to assign tasks to agents",
+                    "Agents can join using join_session",
                 ],
             }
     except Exception as e:
-        return _handle_tool_error("collab_create_session_from_template", e)
+        return _handle_tool_error("create_from_template", e)
 
 
 @collab_mcp.tool()
-def collab_get_agent_sessions(
+def get_agent_sessions(
     agent_id: str,
     requesting_agent_id: str,
     status: Optional[str] = None,
@@ -1533,11 +1533,11 @@ def collab_get_agent_sessions(
                 "count": len(sessions),
             }
     except Exception as e:
-        return _handle_tool_error("collab_get_agent_sessions", e)
+        return _handle_tool_error("get_agent_sessions", e)
 
 
 @collab_mcp.tool()
-def collab_get_active_sessions_summary(agent_id: str) -> Dict:
+def sessions_summary(agent_id: str) -> Dict:
     """Get a summary of all active sessions. Quick overview of ongoing work.
 
     AUTOMATIC TRIGGERS - Call this when:
@@ -1554,11 +1554,11 @@ def collab_get_active_sessions_summary(agent_id: str) -> Dict:
             from .multi_session import get_active_sessions_summary
             return get_active_sessions_summary(conn, agent_id=agent_id)
     except Exception as e:
-        return _handle_tool_error("collab_get_active_sessions_summary", e)
+        return _handle_tool_error("sessions_summary", e)
 
 
 @collab_mcp.tool()
-def collab_search_sessions(
+def search_sessions(
     query: str,
     agent_id: str,
     status: Optional[str] = None,
@@ -1591,11 +1591,11 @@ def collab_search_sessions(
                 "count": len(results),
             }
     except Exception as e:
-        return _handle_tool_error("collab_search_sessions", e)
+        return _handle_tool_error("search_sessions", e)
 
 
 @collab_mcp.tool()
-def collab_get_session_relationships(session_id: str, agent_id: str) -> Dict:
+def session_relationships(session_id: str, agent_id: str) -> Dict:
     """Find sessions related to a given session. Discover cross-session context.
 
     AUTOMATIC TRIGGERS - Call this when:
@@ -1617,11 +1617,11 @@ def collab_get_session_relationships(session_id: str, agent_id: str) -> Dict:
             from .multi_session import get_session_relationships
             return get_session_relationships(conn, session_id, agent_id=agent_id)
     except Exception as e:
-        return _handle_tool_error("collab_get_session_relationships", e)
+        return _handle_tool_error("session_relationships", e)
 
 
 @collab_mcp.tool()
-def collab_get_session_statistics(session_id: str, agent_id: str) -> Dict:
+def session_statistics(session_id: str, agent_id: str) -> Dict:
     """Get detailed statistics for a session. Messages, agents, artifacts, and timing.
 
     AUTOMATIC TRIGGERS - Call this when:
@@ -1643,11 +1643,11 @@ def collab_get_session_statistics(session_id: str, agent_id: str) -> Dict:
             from .multi_session import get_session_statistics
             return get_session_statistics(conn, session_id)
     except Exception as e:
-        return _handle_tool_error("collab_get_session_statistics", e)
+        return _handle_tool_error("session_statistics", e)
 
 
 @collab_mcp.tool()
-def collab_list_openrouter_models(
+def list_models(
     search: Optional[str] = None,
     provider: Optional[str] = None,
     max_price_per_million: Optional[float] = None,
@@ -1706,11 +1706,11 @@ def collab_list_openrouter_models(
             "source": result.get("source", "unknown"),
         }
     except Exception as e:
-        return _handle_tool_error("collab_list_openrouter_models", e)
+        return _handle_tool_error("list_models", e)
 
 
 @collab_mcp.tool()
-def collab_get_openrouter_model_details(model_id: str) -> Dict:
+def get_model_details(model_id: str) -> Dict:
     """Get detailed information about a specific OpenRouter model. Pricing, context, description.
 
     AUTOMATIC TRIGGERS - Call this when:
@@ -1718,7 +1718,7 @@ def collab_get_openrouter_model_details(model_id: str) -> Dict:
     - Checking pricing or context limits for a specific model
     - Evaluating if a model is suitable for a task
 
-    Use collab_list_openrouter_models first to find model IDs.
+    Use list_models first to find model IDs.
 
     PARAMETERS:
     - model_id: Full model ID (e.g., 'anthropic/claude-sonnet-4')
@@ -1734,18 +1734,18 @@ def collab_get_openrouter_model_details(model_id: str) -> Dict:
         models = result["models"]
         model = next((m for m in models if m.get("id") == model_id), None)
         if model is None:
-            return {"error": f"Model '{model_id}' not found. Use collab_list_openrouter_models to see available models.", "error_type": "model_not_found", "success": False}
+            return {"error": f"Model '{model_id}' not found. Use list_models to see available models.", "error_type": "model_not_found", "success": False}
 
         return {
             "model": model,
             "summary": format_model_summary(model),
         }
     except Exception as e:
-        return _handle_tool_error("collab_get_openrouter_model_details", e)
+        return _handle_tool_error("get_model_details", e)
 
 
 @collab_mcp.tool()
-def collab_get_recommended_models(task_type: str) -> Dict:
+def recommended_models(task_type: str) -> Dict:
     """Get recommended OpenRouter models for a specific task type. Pre-filtered best choices.
 
     AUTOMATIC TRIGGERS - Call this when:
@@ -1794,11 +1794,11 @@ def collab_get_recommended_models(task_type: str) -> Dict:
             "count": len(recommendations),
         }
     except Exception as e:
-        return _handle_tool_error("collab_get_recommended_models", e)
+        return _handle_tool_error("recommended_models", e)
 
 
 @collab_mcp.tool()
-def collab_help(tool_name: Optional[str] = None) -> Dict:
+def help_collab(tool_name: Optional[str] = None) -> Dict:
     """Get help about all collab MCP tools or a specific tool.
 
     Call this with no arguments to see all available tools and their purposes.
@@ -1806,13 +1806,13 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
 
     Args:
         tool_name: Optional specific tool name to get help for
-                   (e.g., 'collab_create_session')
+                   (e.g., 'create_session')
 
     Returns:
         Dict with tool descriptions and usage information
     """
     tools_info = {
-        "collab_create_session": {
+        "create_session": {
             "description": "Create a new collaboration session for multi-agent research. First tool in collaboration workflow.",
             "args": {
                 "title": "Short descriptive title for the session",
@@ -1823,7 +1823,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with session_id, agent_id, and session info",
         },
-        "collab_join_session": {
+        "join_session": {
             "description": "Join an existing collaboration session as an agent.",
             "args": {
                 "session_id": "ID of the session to join",
@@ -1832,7 +1832,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with your agent_id and session context",
         },
-        "collab_list_sessions": {
+        "list_sessions": {
             "description": "List collaboration sessions.",
             "args": {
                 "status": "Filter by status (active, completed, terminated)",
@@ -1840,7 +1840,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with list of sessions",
         },
-        "collab_get_session_state": {
+        "get_session_state": {
             "description": "Get the current state of a collaboration session.",
             "args": {
                 "session_id": "ID of the session",
@@ -1848,7 +1848,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with session state, tasks, and agents",
         },
-        "collab_update_session_state": {
+        "update_session_state": {
             "description": "Update the session state (orchestrator only).",
             "args": {
                 "session_id": "Target session",
@@ -1857,7 +1857,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with updated state and version info",
         },
-        "collab_send_message": {
+        "send_message": {
             "description": "Send a message to a collaboration session. Core communication tool.",
             "args": {
                 "session_id": "Target session",
@@ -1869,7 +1869,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with message info",
         },
-        "collab_read_messages": {
+        "read_messages": {
             "description": "Read new messages from a session (offset-based, only returns unseen messages).",
             "args": {
                 "session_id": "Session to read from",
@@ -1880,7 +1880,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with messages and your current offset",
         },
-        "collab_poll_messages": {
+        "poll_messages": {
             "description": "Wait for and read new messages (AUTONOMOUS LOOP tool). Blocks until new messages arrive. Use for continuous agent communication.",
             "args": {
                 "session_id": "Session to monitor",
@@ -1893,7 +1893,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             "usage": "Call in loop: poll → process → respond → repeat. Runs until session completes.",
             "returns": "Dict with messages, waited_seconds, timed_out flag, and session_status",
         },
-        "collab_tail_messages": {
+        "tail_messages": {
             "description": "Read the last N messages from a session (quick status check).",
             "args": {
                 "session_id": "Session to read from",
@@ -1902,7 +1902,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with the last N messages",
         },
-        "collab_read_message_range": {
+        "read_message_range": {
             "description": "Read messages in a specific sequence range.",
             "args": {
                 "session_id": "Session to read from",
@@ -1912,7 +1912,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with messages in the specified range",
         },
-        "collab_grep_messages": {
+        "grep_messages": {
             "description": "Search session messages by keyword.",
             "args": {
                 "session_id": "Session to search",
@@ -1923,7 +1923,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with matching messages",
         },
-        "collab_get_session_context": {
+        "session_context": {
             "description": "Get compiled context view of session. PRIMARY tool for understanding session state.",
             "args": {
                 "session_id": "Session to get context for",
@@ -1932,7 +1932,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with structured context AND a prompt-ready formatted string",
         },
-        "collab_add_artifact": {
+        "save_artifact": {
             "description": "Save a research artifact (finding, analysis, summary) to the session.",
             "args": {
                 "session_id": "Target session",
@@ -1945,7 +1945,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with artifact info",
         },
-        "collab_list_artifacts": {
+        "list_artifacts": {
             "description": "List artifacts in a session.",
             "args": {
                 "session_id": "Target session",
@@ -1955,7 +1955,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with list of artifacts",
         },
-        "collab_get_artifact": {
+        "get_artifact": {
             "description": "Get the full content of a specific artifact.",
             "args": {
                 "session_id": "Session containing the artifact",
@@ -1964,7 +1964,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with artifact content and metadata",
         },
-        "collab_grep_artifacts": {
+        "grep_artifacts": {
             "description": "Search artifact content by keyword.",
             "args": {
                 "session_id": "Session to search",
@@ -1974,7 +1974,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with matching artifacts and their matching lines",
         },
-        "collab_leave_session": {
+        "leave_session": {
             "description": "Leave a collaboration session gracefully.",
             "args": {
                 "session_id": "Session to leave",
@@ -1983,7 +1983,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with confirmation",
         },
-        "collab_terminate_session": {
+        "terminate_session": {
             "description": "Terminate and complete a collaboration session (orchestrator only).",
             "args": {
                 "session_id": "Session to terminate",
@@ -1992,7 +1992,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with termination confirmation",
         },
-        "collab_export_to_library": {
+        "export_to_library": {
             "description": "Export session artifacts as findings in the main OpenLMLib library.",
             "args": {
                 "session_id": "Completed session to export",
@@ -2004,19 +2004,19 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with export results",
         },
-        "collab_list_templates": {
+        "list_templates": {
             "description": "List available session templates for quick session creation.",
             "args": {},
             "returns": "Dict with list of templates",
         },
-        "collab_get_template": {
+        "get_template": {
             "description": "Get details of a specific session template.",
             "args": {
                 "template_id": "Template identifier (e.g., 'deep_research', 'code_review')",
             },
             "returns": "Dict with template details including plan and rules",
         },
-        "collab_create_session_from_template": {
+        "create_from_template": {
             "description": "Create a session from a predefined template.",
             "args": {
                 "template_id": "Template to use (e.g., 'deep_research', 'code_review')",
@@ -2026,7 +2026,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with session info",
         },
-        "collab_get_agent_sessions": {
+        "get_agent_sessions": {
             "description": "Get all sessions an agent has participated in.",
             "args": {
                 "agent_id": "Agent identifier",
@@ -2035,14 +2035,14 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with list of sessions and participation info",
         },
-        "collab_get_active_sessions_summary": {
+        "sessions_summary": {
             "description": "Get a summary of all active sessions.",
             "args": {
                 "agent_id": "Your agent ID (summary is scoped to sessions you joined)",
             },
             "returns": "Dict with counts of active sessions, agents, and messages",
         },
-        "collab_search_sessions": {
+        "search_sessions": {
             "description": "Search across all sessions by message content using FTS5.",
             "args": {
                 "query": "Search query (supports FTS5 syntax)",
@@ -2052,7 +2052,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with matching sessions ranked by relevance",
         },
-        "collab_get_session_relationships": {
+        "session_relationships": {
             "description": "Find sessions related to a given session.",
             "args": {
                 "session_id": "Base session to find relationships for",
@@ -2060,7 +2060,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with related sessions grouped by relationship type",
         },
-        "collab_get_session_statistics": {
+        "session_statistics": {
             "description": "Get detailed statistics for a session.",
             "args": {
                 "session_id": "Session to get statistics for",
@@ -2068,7 +2068,7 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with session statistics",
         },
-        "collab_list_openrouter_models": {
+        "list_models": {
             "description": "List available models from OpenRouter API.",
             "args": {
                 "search": "Search term in model name or description",
@@ -2080,21 +2080,21 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with list of available models and their details",
         },
-        "collab_get_openrouter_model_details": {
+        "get_model_details": {
             "description": "Get detailed information about a specific OpenRouter model.",
             "args": {
                 "model_id": "Full model ID (e.g., 'anthropic/claude-sonnet-4')",
             },
             "returns": "Dict with model details including pricing, context, and description",
         },
-        "collab_get_recommended_models": {
+        "recommended_models": {
             "description": "Get recommended OpenRouter models for a specific task type.",
             "args": {
                 "task_type": "Task type (research, coding, analysis, writing, summarization, orchestrator, worker)",
             },
             "returns": "Dict with recommended model IDs and their details",
         },
-        "collab_help": {
+        "help_collab": {
             "description": "Get help about all collab MCP tools or a specific tool (this tool).",
             "args": {
                 "tool_name": "Optional specific tool name to get help for",
@@ -2117,52 +2117,52 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
 
     categories = {
         "Session Management": [
-            "collab_create_session",
-            "collab_join_session",
-            "collab_list_sessions",
-            "collab_leave_session",
-            "collab_terminate_session",
+            "create_session",
+            "join_session",
+            "list_sessions",
+            "leave_session",
+            "terminate_session",
         ],
         "Messaging": [
-            "collab_send_message",
-            "collab_read_messages",
-            "collab_tail_messages",
-            "collab_read_message_range",
-            "collab_grep_messages",
+            "send_message",
+            "read_messages",
+            "tail_messages",
+            "read_message_range",
+            "grep_messages",
         ],
         "Context & State": [
-            "collab_get_session_context",
-            "collab_get_session_state",
-            "collab_update_session_state",
+            "session_context",
+            "get_session_state",
+            "update_session_state",
         ],
         "Artifacts": [
-            "collab_add_artifact",
-            "collab_list_artifacts",
-            "collab_get_artifact",
-            "collab_grep_artifacts",
+            "save_artifact",
+            "list_artifacts",
+            "get_artifact",
+            "grep_artifacts",
         ],
         "Templates": [
-            "collab_list_templates",
-            "collab_get_template",
-            "collab_create_session_from_template",
+            "list_templates",
+            "get_template",
+            "create_from_template",
         ],
         "Export": [
-            "collab_export_to_library",
+            "export_to_library",
         ],
         "Multi-Session": [
-            "collab_get_agent_sessions",
-            "collab_get_active_sessions_summary",
-            "collab_search_sessions",
-            "collab_get_session_relationships",
-            "collab_get_session_statistics",
+            "get_agent_sessions",
+            "sessions_summary",
+            "search_sessions",
+            "session_relationships",
+            "session_statistics",
         ],
         "Model Discovery": [
-            "collab_list_openrouter_models",
-            "collab_get_openrouter_model_details",
-            "collab_get_recommended_models",
+            "list_models",
+            "get_model_details",
+            "recommended_models",
         ],
         "Help": [
-            "collab_help",
+            "help_collab",
         ],
     }
 
@@ -2176,5 +2176,5 @@ def collab_help(tool_name: Optional[str] = None) -> Dict:
             ]
             for cat, names in categories.items()
         },
-        "usage": "Call collab_help with tool_name='<tool>' for detailed usage of a specific tool",
+        "usage": "Call help_collab with tool_name='<tool>' for detailed usage of a specific tool",
     }

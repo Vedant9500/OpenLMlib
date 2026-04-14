@@ -24,7 +24,7 @@ Complete reference for all 52 MCP tools available in OpenLMlib.
 
 Knowledge base management and retrieval tools.
 
-### `openlmlib_init`
+### `init_library`
 Initialize the library storage and database.
 
 **Parameters:** None
@@ -33,7 +33,7 @@ Initialize the library storage and database.
 
 ---
 
-### `openlmlib_add_finding`
+### `save_finding`
 Add a new finding to the knowledge base.
 
 **Parameters:**
@@ -50,7 +50,7 @@ Add a new finding to the knowledge base.
 
 ---
 
-### `openlmlib_list_findings`
+### `list_findings`
 List findings with optional pagination.
 
 **Parameters:**
@@ -61,7 +61,7 @@ List findings with optional pagination.
 
 ---
 
-### `openlmlib_get_finding`
+### `get_finding`
 Get full details of a specific finding.
 
 **Parameters:**
@@ -71,7 +71,7 @@ Get full details of a specific finding.
 
 ---
 
-### `openlmlib_search_fts`
+### `search_findings`
 Full-text search across findings.
 
 **Parameters:**
@@ -82,7 +82,7 @@ Full-text search across findings.
 
 ---
 
-### `openlmlib_retrieve`
+### `retrieve_findings`
 Advanced semantic retrieval with multi-phase ranking.
 
 **Parameters:**
@@ -100,7 +100,7 @@ Advanced semantic retrieval with multi-phase ranking.
 
 ---
 
-### `openlmlib_retrieve_context`
+### `retrieve_context`
 Retrieve findings formatted as prompt context.
 
 **Parameters:**
@@ -113,7 +113,7 @@ Retrieve findings formatted as prompt context.
 
 ---
 
-### `openlmlib_delete_finding`
+### `delete_finding`
 Delete a finding from the knowledge base.
 
 **Parameters:**
@@ -124,7 +124,7 @@ Delete a finding from the knowledge base.
 
 ---
 
-### `openlmlib_health`
+### `health`
 Check library health and status.
 
 **Parameters:** None
@@ -133,7 +133,7 @@ Check library health and status.
 
 ---
 
-### `openlmlib_evaluate_dataset`
+### `evaluate_retrieval`
 Evaluate retrieval performance on a dataset.
 
 **Parameters:**
@@ -144,7 +144,7 @@ Evaluate retrieval performance on a dataset.
 
 ---
 
-### `openlmlib_help`
+### `help_library`
 Get help documentation for tools.
 
 **Parameters:**
@@ -160,7 +160,7 @@ Session persistence, progressive retrieval, and retroactive ingestion tools. The
 
 ### Session Lifecycle
 
-#### `memory_session_start`
+#### `session_start`
 Start a new session and inject relevant context from previous sessions.
 
 **Parameters:**
@@ -173,7 +173,7 @@ Start a new session and inject relevant context from previous sessions.
 
 **Example:**
 ```python
-memory_session_start(
+session_start(
     session_id="sess_20260414_001",
     query="memory retrieval optimization",
     limit=30
@@ -182,7 +182,7 @@ memory_session_start(
 
 ---
 
-#### `memory_session_end`
+#### `session_end`
 End a session and trigger automatic summarization.
 
 **Parameters:**
@@ -192,12 +192,12 @@ End a session and trigger automatic summarization.
 
 **Example:**
 ```python
-memory_session_end(session_id="sess_20260414_001")
+session_end(session_id="sess_20260414_001")
 ```
 
 ---
 
-#### `memory_log_observation`
+#### `log_observation`
 Log an observation from tool execution for memory building.
 
 **Parameters:**
@@ -210,7 +210,7 @@ Log an observation from tool execution for memory building.
 
 **Example:**
 ```python
-memory_log_observation(
+log_observation(
     session_id="sess_20260414_001",
     tool_name="Edit",
     tool_input="Modified memory_retriever.py",
@@ -224,7 +224,7 @@ memory_log_observation(
 
 Three-layer disclosure system for token-efficient memory retrieval.
 
-#### `memory_search` (Layer 1)
+#### `search_memory` (Layer 1)
 Search memory index with compact metadata (~75 tokens/result).
 
 **Parameters:**
@@ -238,7 +238,7 @@ Search memory index with compact metadata (~75 tokens/result).
 
 **Example:**
 ```python
-memory_search(query="retrieval optimization", limit=20)
+search_memory(query="retrieval optimization", limit=20)
 ```
 
 ---
@@ -247,7 +247,7 @@ memory_search(query="retrieval optimization", limit=20)
 Get chronological context for memory IDs (~200 tokens/result).
 
 **Parameters:**
-- `ids` (array of strings): Observation IDs from memory_search
+- `ids` (array of strings): Observation IDs from search_memory
 - `window` (string, default "5m"): Time window for context
 
 **Returns:** Timeline entries with narrative flow and related concepts
@@ -256,17 +256,17 @@ Get chronological context for memory IDs (~200 tokens/result).
 
 **Example:**
 ```python
-# After memory_search, get timeline for top 5 results
+# After search_memory, get timeline for top 5 results
 memory_timeline(ids=[...], window="10m")
 ```
 
 ---
 
-#### `memory_get_observations` (Layer 3)
+#### `get_observations` (Layer 3)
 Get full details for specific memory IDs (~750 tokens/result).
 
 **Parameters:**
-- `ids` (array of strings): Observation IDs from memory_search or memory_timeline
+- `ids` (array of strings): Observation IDs from search_memory or memory_timeline
 
 **Returns:** Full observation data with tool inputs, outputs, facts, concepts
 
@@ -275,14 +275,14 @@ Get full details for specific memory IDs (~750 tokens/result).
 **Example:**
 ```python
 # After filtering with layers 1-2, get full details for top 2
-memory_get_observations(ids=[...])
+get_observations(ids=[...])
 ```
 
 ---
 
 ### Context Injection & Synthesis
 
-#### `memory_inject_context`
+#### `inject_context`
 Auto-inject relevant context at session start with progressive compression.
 
 **Parameters:**
@@ -294,7 +294,7 @@ Auto-inject relevant context at session start with progressive compression.
 
 **Example:**
 ```python
-memory_inject_context(
+inject_context(
     session_id="sess_20260414_001",
     query="caveman compression",
     limit=20
@@ -303,7 +303,7 @@ memory_inject_context(
 
 ---
 
-#### `memory_quick_recap`
+#### `session_recap`
 Get synthesized recap of recent sessions (~150-250 tokens). **Call FIRST** when starting work.
 
 Returns structured knowledge: files touched, decisions made, next steps, conventions discovered — not raw tool outputs.
@@ -317,13 +317,13 @@ Returns structured knowledge: files touched, decisions made, next steps, convent
 **Example:**
 ```python
 # Start of session - get overview of what happened recently
-memory_quick_recap(limit=3)
+session_recap(limit=3)
 ```
 
 ---
 
-#### `memory_detailed_context`
-Get detailed context about a specific topic from past sessions (~500-800 tokens). **Call AFTER** memory_quick_recap.
+#### `topic_context`
+Get detailed context about a specific topic from past sessions (~500-800 tokens). **Call AFTER** session_recap.
 
 Returns detailed files, decisions, architecture notes, and conventions related to the topic.
 
@@ -336,12 +336,12 @@ Returns detailed files, decisions, architecture notes, and conventions related t
 **Example:**
 ```python
 # Deep dive on a topic from the recap
-memory_detailed_context(topic="memory retrieval", session_id="sess_20260414_001")
+topic_context(topic="memory retrieval", session_id="sess_20260414_001")
 ```
 
 ---
 
-#### `memory_retroactive_ingest`
+#### `ingest_git_history`
 Auto-ingest session activity from git history. **No manual logging needed!**
 
 Scans git working tree to reconstruct what happened: modified/created/deleted files, commits, lines added/removed. Works with ANY tool/agent because it reads actual codebase state.
@@ -356,14 +356,14 @@ Scans git working tree to reconstruct what happened: modified/created/deleted fi
 **Example:**
 ```python
 # Forgot to log observations? Ingest from git history!
-memory_retroactive_ingest(
+ingest_git_history(
     session_id="sess_retroactive_001",
     time_window_hours=12,
     include_uncommitted=True
 )
 
 # Then check what was found
-memory_quick_recap(session_id="sess_retroactive_001")
+session_recap(session_id="sess_retroactive_001")
 ```
 
 ---
@@ -374,7 +374,7 @@ Multi-agent collaboration session management and communication tools.
 
 ### Session Management
 
-#### `collab_create_session`
+#### `create_session`
 Create a new collaboration session.
 
 **Parameters:**
@@ -388,7 +388,7 @@ Create a new collaboration session.
 
 ---
 
-#### `collab_join_session`
+#### `join_session`
 Join an existing collaboration session.
 
 **Parameters:**
@@ -401,7 +401,7 @@ Join an existing collaboration session.
 
 ---
 
-#### `collab_list_sessions`
+#### `list_sessions`
 List collaboration sessions.
 
 **Parameters:**
@@ -412,7 +412,7 @@ List collaboration sessions.
 
 ---
 
-#### `collab_get_session_state`
+#### `get_session_state`
 Get current state of a session.
 
 **Parameters:**
@@ -422,7 +422,7 @@ Get current state of a session.
 
 ---
 
-#### `collab_update_session_state`
+#### `update_session_state`
 Update session state.
 
 **Parameters:**
@@ -433,7 +433,7 @@ Update session state.
 
 ---
 
-#### `collab_leave_session`
+#### `leave_session`
 Leave a collaboration session gracefully.
 
 **Parameters:**
@@ -444,7 +444,7 @@ Leave a collaboration session gracefully.
 
 ---
 
-#### `collab_terminate_session`
+#### `terminate_session`
 Terminate a collaboration session.
 
 **Parameters:**
@@ -457,7 +457,7 @@ Terminate a collaboration session.
 
 ### Message Operations
 
-#### `collab_send_message`
+#### `send_message`
 Send a message to a session.
 
 **Parameters:**
@@ -472,7 +472,7 @@ Send a message to a session.
 
 ---
 
-#### `collab_read_messages`
+#### `read_messages`
 Read messages from a session.
 
 **Parameters:**
@@ -486,7 +486,7 @@ Read messages from a session.
 
 ---
 
-#### `collab_poll_messages`
+#### `poll_messages`
 Poll for new messages with offset tracking.
 
 **Parameters:**
@@ -498,7 +498,7 @@ Poll for new messages with offset tracking.
 
 ---
 
-#### `collab_tail_messages`
+#### `tail_messages`
 Get the most recent messages from a session.
 
 **Parameters:**
@@ -509,7 +509,7 @@ Get the most recent messages from a session.
 
 ---
 
-#### `collab_read_message_range`
+#### `read_message_range`
 Read messages in a sequence range.
 
 **Parameters:**
@@ -521,7 +521,7 @@ Read messages in a sequence range.
 
 ---
 
-#### `collab_grep_messages`
+#### `grep_messages`
 Search session messages by pattern.
 
 **Parameters:**
@@ -536,7 +536,7 @@ Search session messages by pattern.
 
 ### Artifact Management
 
-#### `collab_add_artifact`
+#### `save_artifact`
 Add an artifact to a session.
 
 **Parameters:**
@@ -551,7 +551,7 @@ Add an artifact to a session.
 
 ---
 
-#### `collab_list_artifacts`
+#### `list_artifacts`
 List artifacts for a session.
 
 **Parameters:**
@@ -563,7 +563,7 @@ List artifacts for a session.
 
 ---
 
-#### `collab_get_artifact`
+#### `get_artifact`
 Get artifact content and metadata.
 
 **Parameters:**
@@ -574,7 +574,7 @@ Get artifact content and metadata.
 
 ---
 
-#### `collab_grep_artifacts`
+#### `grep_artifacts`
 Search artifacts by keyword pattern.
 
 **Parameters:**
@@ -588,7 +588,7 @@ Search artifacts by keyword pattern.
 
 ### Session Discovery & Analytics
 
-#### `collab_get_session_context`
+#### `session_context`
 Get compacted session context for agents.
 
 **Parameters:**
@@ -599,7 +599,7 @@ Get compacted session context for agents.
 
 ---
 
-#### `collab_get_agent_sessions`
+#### `get_agent_sessions`
 Get sessions for a specific agent.
 
 **Parameters:**
@@ -610,7 +610,7 @@ Get sessions for a specific agent.
 
 ---
 
-#### `collab_get_active_sessions_summary`
+#### `sessions_summary`
 Get summary of all active sessions.
 
 **Parameters:**
@@ -620,7 +620,7 @@ Get summary of all active sessions.
 
 ---
 
-#### `collab_search_sessions`
+#### `search_sessions`
 Search sessions by content or metadata.
 
 **Parameters:**
@@ -632,7 +632,7 @@ Search sessions by content or metadata.
 
 ---
 
-#### `collab_get_session_relationships`
+#### `session_relationships`
 Find sessions related to a given session.
 
 **Parameters:**
@@ -643,7 +643,7 @@ Find sessions related to a given session.
 
 ---
 
-#### `collab_get_session_statistics`
+#### `session_statistics`
 Get detailed statistics for a session.
 
 **Parameters:**
@@ -655,7 +655,7 @@ Get detailed statistics for a session.
 
 ### Templates
 
-#### `collab_list_templates`
+#### `list_templates`
 List available session templates.
 
 **Parameters:** None
@@ -664,7 +664,7 @@ List available session templates.
 
 ---
 
-#### `collab_get_template`
+#### `get_template`
 Get a specific template by ID.
 
 **Parameters:**
@@ -674,7 +674,7 @@ Get a specific template by ID.
 
 ---
 
-#### `collab_create_session_from_template`
+#### `create_from_template`
 Create a session using a template.
 
 **Parameters:**
@@ -689,7 +689,7 @@ Create a session using a template.
 
 ### Model Discovery
 
-#### `collab_list_openrouter_models`
+#### `list_models`
 List available models from OpenRouter.
 
 **Parameters:** None
@@ -698,7 +698,7 @@ List available models from OpenRouter.
 
 ---
 
-#### `collab_get_openrouter_model_details`
+#### `get_model_details`
 Get details for a specific model.
 
 **Parameters:**
@@ -708,7 +708,7 @@ Get details for a specific model.
 
 ---
 
-#### `collab_get_recommended_models`
+#### `recommended_models`
 Get model recommendations for specific tasks.
 
 **Parameters:**
@@ -720,7 +720,7 @@ Get model recommendations for specific tasks.
 
 ### Utilities
 
-#### `collab_help`
+#### `help_collab`
 Get help for collaboration tools.
 
 **Parameters:**
@@ -735,28 +735,28 @@ Get help for collaboration tools.
 ### Basic Session Flow
 
 ```
-1. collab_create_session(title="Research Project", created_by="gpt-4")
-2. collab_join_session(session_id="...", model="claude-3")
-3. collab_send_message(session_id="...", from_agent="...", msg_type="task", content="...")
-4. collab_poll_messages(session_id="...", agent_id="...")
-5. collab_add_artifact(session_id="...", agent_id="...", title="Report", content="...")
-6. collab_terminate_session(session_id="...", summary="Complete")
+1. create_session(title="Research Project", created_by="gpt-4")
+2. join_session(session_id="...", model="claude-3")
+3. send_message(session_id="...", from_agent="...", msg_type="task", content="...")
+4. poll_messages(session_id="...", agent_id="...")
+5. save_artifact(session_id="...", agent_id="...", title="Report", content="...")
+6. terminate_session(session_id="...", summary="Complete")
 ```
 
 ### Template-Based Session
 
 ```
-1. collab_list_templates()
-2. collab_create_session_from_template(template_id="deep_research", title="...", created_by="...")
+1. list_templates()
+2. create_from_template(template_id="deep_research", title="...", created_by="...")
 3. Follow the template's predefined plan steps
 ```
 
 ### Knowledge Retrieval
 
 ```
-1. openlmlib_health()
-2. openlmlib_retrieve(query="contextual retrieval", final_k=5, reasoning_trace=true)
-3. openlmlib_add_finding(project="...", claim="...", confidence=0.85, confirm=true)
+1. health()
+2. retrieve_findings(query="contextual retrieval", final_k=5, reasoning_trace=true)
+3. save_finding(project="...", claim="...", confidence=0.85, confirm=true)
 ```
 
 ---

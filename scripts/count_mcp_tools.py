@@ -50,34 +50,34 @@ try:
         
         # Core tools
         all_expected.update([
-            'openlmlib_init', 'openlmlib_add_finding', 'openlmlib_list_findings',
-            'openlmlib_get_finding', 'openlmlib_search_fts', 'openlmlib_retrieve',
-            'openlmlib_retrieve_context', 'openlmlib_delete_finding', 'openlmlib_health',
-            'openlmlib_evaluate_dataset', 'openlmlib_help',
+            'init_library', 'save_finding', 'list_findings',
+            'get_finding', 'search_findings', 'retrieve_findings',
+            'retrieve_context', 'delete_finding', 'health',
+            'evaluate_retrieval', 'help_library',
         ])
         
         # Memory tools
         all_expected.update([
-            'memory_session_start', 'memory_session_end', 'memory_log_observation',
-            'memory_search', 'memory_timeline', 'memory_get_observations',
-            'memory_inject_context', 'memory_quick_recap', 'memory_detailed_context',
-            'memory_retroactive_ingest',
+            'session_start', 'session_end', 'log_observation',
+            'search_memory', 'memory_timeline', 'get_observations',
+            'inject_context', 'session_recap', 'topic_context',
+            'ingest_git_history',
         ])
         
         # Collab tools
         all_expected.update([
-            'collab_create_session', 'collab_join_session', 'collab_list_sessions',
-            'collab_get_session_state', 'collab_update_session_state', 'collab_send_message',
-            'collab_read_messages', 'collab_poll_messages', 'collab_tail_messages',
-            'collab_read_message_range', 'collab_grep_messages', 'collab_get_session_context',
-            'collab_add_artifact', 'collab_list_artifacts', 'collab_get_artifact',
-            'collab_grep_artifacts', 'collab_leave_session', 'collab_terminate_session',
-            'collab_export_to_library', 'collab_list_templates', 'collab_get_template',
-            'collab_create_session_from_template', 'collab_get_agent_sessions',
-            'collab_get_active_sessions_summary', 'collab_search_sessions',
-            'collab_get_session_relationships', 'collab_get_session_statistics',
-            'collab_list_openrouter_models', 'collab_get_openrouter_model_details',
-            'collab_get_recommended_models', 'collab_help'
+            'create_session', 'join_session', 'list_sessions',
+            'get_session_state', 'update_session_state', 'send_message',
+            'read_messages', 'poll_messages', 'tail_messages',
+            'read_message_range', 'grep_messages', 'session_context',
+            'save_artifact', 'list_artifacts', 'get_artifact',
+            'grep_artifacts', 'leave_session', 'terminate_session',
+            'export_to_library', 'list_templates', 'get_template',
+            'create_from_template', 'get_agent_sessions',
+            'sessions_summary', 'search_sessions',
+            'session_relationships', 'session_statistics',
+            'list_models', 'get_model_details',
+            'recommended_models', 'help_collab'
         ])
         
         found = set(tools.keys())

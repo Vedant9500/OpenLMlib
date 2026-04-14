@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 """
 Test the new progressive knowledge recap flow:
-1. memory_quick_recap → synthesized overview (~150-250 tokens)
-2. memory_detailed_context(topic) → targeted deep dive (~500-800 tokens)
-3. memory_get_observations(ids) → raw observation details (existing)
+1. session_recap → synthesized overview (~150-250 tokens)
+2. topic_context(topic) → targeted deep dive (~500-800 tokens)
+3. get_observations(ids) → raw observation details (existing)
 
 Demonstrates the knowledge-level progressive disclosure.
 """
@@ -118,9 +118,9 @@ def main():
     print("  KNOWLEDGE RECAP TEST COMPLETE")
     print("="*60)
     print("\n  Progressive flow:")
-    print("  1. memory_quick_recap → structured overview (~200 tokens)")
-    print("  2. memory_detailed_context(topic='X') → deep dive (~500-800 tokens)")
-    print("  3. memory_get_observations(ids) → raw details (~750 tokens)")
+    print("  1. session_recap → structured overview (~200 tokens)")
+    print("  2. topic_context(topic='X') → deep dive (~500-800 tokens)")
+    print("  3. get_observations(ids) → raw details (~750 tokens)")
     print("="*60)
 
 

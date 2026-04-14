@@ -14,7 +14,7 @@ This guide shows you how to use OpenLMlib's memory system to maintain context ac
 # MCP tool calls from any AI assistant (Claude Code, Gemini CLI, Qwen Code, etc.)
 
 # 1. Start session — automatically loads relevant context from previous sessions
-memory_session_start(
+session_start(
     session_id="sess_20260414_001",
     user_id="agent_gpt4",
     query="How do I optimize retrieval?"
@@ -22,7 +22,7 @@ memory_session_start(
 # Returns: Context block with up to 50 relevant observations (compressed with caveman ultra)
 
 # 2. During work — observations are logged automatically (or via retroactive ingestion)
-memory_log_observation(
+log_observation(
     session_id="sess_20260414_001",
     tool_name="Read",
     tool_input="file: retrieval.py",
@@ -30,7 +30,7 @@ memory_log_observation(
 )
 
 # 3. End session — auto-generates summary and synthesizes knowledge
-memory_session_end(session_id="sess_20260414_001")
+session_end(session_id="sess_20260414_001")
 # Creates: Files touched, decisions made, next steps, conventions discovered
 ```
 
@@ -38,7 +38,7 @@ memory_session_end(session_id="sess_20260414_001")
 
 ```python
 # Forgot to log observations? No problem!
-memory_retroactive_ingest(
+ingest_git_history(
     session_id="sess_20260414_001",
     time_window_hours=24,
     include_uncommitted=True
@@ -47,7 +47,7 @@ memory_retroactive_ingest(
 # Works with ANY tool/agent — reads actual codebase state, not tool call logs
 
 # Then check what was synthesized
-memory_quick_recap(session_id="sess_20260414_001")
+session_recap(session_id="sess_20260414_001")
 ```
 
 ---
@@ -58,17 +58,17 @@ memory_quick_recap(session_id="sess_20260414_001")
 
 | Tool | Description | Token Cost |
 |------|-------------|------------|
-| `memory_session_start` | Start session with context injection | ~3,750 tokens (50 obs × 75) |
-| `memory_session_end` | End session and trigger summarization | 0 (background processing) |
-| `memory_log_observation` | Log tool execution for memory building | 0 (queued for compression) |
+| `session_start` | Start session with context injection | ~3,750 tokens (50 obs × 75) |
+| `session_end` | End session and trigger summarization | 0 (background processing) |
+| `log_observation` | Log tool execution for memory building | 0 (queued for compression) |
 
 ### Progressive Retrieval (3-Layer Disclosure)
 
 | Layer | Tool | Description | Tokens/Result |
 |-------|------|-------------|---------------|
-| **1** | `memory_search` | Lightweight search index (compact metadata) | ~75 tokens |
+| **1** | `search_memory` | Lightweight search index (compact metadata) | ~75 tokens |
 | **2** | `memory_timeline` | Chronological context (narrative flow) | ~200 tokens |
-| **3** | `memory_get_observations` | Full details (complete observation data) | ~750 tokens |
+| **3** | `get_observations` | Full details (complete observation data) | ~750 tokens |
 
 **Token Efficiency**:
 ```
@@ -83,9 +83,9 @@ Savings: 6.25x reduction!
 
 | Tool | Description | Token Cost |
 |------|-------------|------------|
-| `memory_inject_context` | Auto-inject relevant context at session start | ~3,750 tokens |
-| `memory_quick_recap` | Synthesized recap of recent sessions | ~150-250 tokens |
-| `memory_detailed_context` | Deep dive on specific topics | ~500-800 tokens |
+| `inject_context` | Auto-inject relevant context at session start | ~3,750 tokens |
+| `session_recap` | Synthesized recap of recent sessions | ~150-250 tokens |
+| `topic_context` | Deep dive on specific topics | ~500-800 tokens |
 
 ---
 
@@ -95,7 +95,7 @@ Savings: 6.25x reduction!
 
 ```python
 # Lightweight search — returns compact metadata for filtering
-results = memory_search(
+results = search_memory(
     query="retrieval optimization",
     limit=20,
     filters={"tool_name": "Edit"}  # Optional filters
@@ -131,7 +131,7 @@ if results['count'] > 0:
 if timeline['count'] > 0:
     top_ids = [entry['id'] for entry in timeline['timeline'][:2]]
     
-    details = memory_get_observations(ids=top_ids)
+    details = get_observations(ids=top_ids)
     
     for obs in details['observations']:
         print(f"\n{obs['tool_name']}:")
@@ -148,7 +148,7 @@ if timeline['count'] > 0:
 
 ```python
 # Most common — call this at the start of every session
-result = memory_session_start(
+result = session_start(
     session_id="sess_20260414_001",
     query="memory retrieval",  # Optional: filter by topic
     limit=50  # Max observations to inject
@@ -164,7 +164,7 @@ print(f"Context preview: {result['context_block'][:200]}...")
 
 ```python
 # Call FIRST when starting work — returns structured knowledge
-recap = memory_quick_recap(limit=3)
+recap = session_recap(limit=3)
 
 print(f"Sessions recapped: {recap['sessions_recapped']}")
 print(f"Next steps: {recap['next_steps']}")
@@ -175,8 +175,8 @@ print(f"Files touched: {recap['files_touched']}")
 ### Pattern 3: Deep Dive (After Recap)
 
 ```python
-# Call AFTER memory_quick_recap — get detailed context on a topic
-context = memory_detailed_context(
+# Call AFTER session_recap — get detailed context on a topic
+context = topic_context(
     topic="storage",  # Topic from recap
     session_id="sess_20260414_001"  # Optional: specific session
 )
@@ -379,7 +379,7 @@ print("✅ All good!")
 
 1. **Use Layer 1 First**: Always start with index search
    ```python
-   index = memory_search(query="...", limit=50)  # ~3,750 tokens
+   index = search_memory(query="...", limit=50)  # ~3,750 tokens
    ```
 
 2. **Filter Before Fetching**: Identify relevant IDs
@@ -389,12 +389,12 @@ print("✅ All good!")
 
 3. **Fetch Details Selectively**: Only for truly relevant items
    ```python
-   details = memory_get_observations(ids=relevant[:5])  # ~3,750 tokens
+   details = get_observations(ids=relevant[:5])  # ~3,750 tokens
    ```
 
 4. **Set Reasonable Limits**: Don't inject everything
    ```python
-   context = memory_session_start(session_id="...", limit=50)
+   context = session_start(session_id="...", limit=50)
    ```
 
 ### Token Budget Example
@@ -459,12 +459,12 @@ openlmlib mcp-config --ide claude_code,gemini_cli,qwen_code
 # Example: Claude Code
 claude
 > "Start a new session with memory context"
-> memory_session_start(session_id="sess_001")
+> session_start(session_id="sess_001")
 
 # Example: Gemini CLI
 gemini
 > "What did I work on recently?"
-> memory_quick_recap(limit=3)
+> session_recap(limit=3)
 ```
 
 **Supported CLI Tools**: Claude Code, Gemini CLI, Qwen Code, OpenCode, Codex CLI, Aider
@@ -489,8 +489,8 @@ gemini
 1. **Start Small**: Begin with 20-30 observations per session
 2. **Monitor Tokens**: Use `estimated_tokens` fields to track usage
 3. **Layer Gradually**: Use Layer 1 → 2 → 3 progression
-4. **Use Retroactive Ingestion**: Forget logging? `memory_retroactive_ingest` scans git history
-5. **Quick Recap First**: Call `memory_quick_recap` before deep diving into topics
+4. **Use Retroactive Ingestion**: Forget logging? `ingest_git_history` scans git history
+5. **Quick Recap First**: Call `session_recap` before deep diving into topics
 6. **Compress Wisely**: Adjust compressor params for your use case
 
 ---

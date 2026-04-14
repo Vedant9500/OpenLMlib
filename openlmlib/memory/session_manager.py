@@ -342,6 +342,17 @@ class SessionManager:
                 session_id, limit=100
             )
             if observations:
+                # Compress observations that don't have summaries yet
+                compressed_count = self._compress_observations(observations)
+                if compressed_count > 0:
+                    # Re-fetch observations after compression
+                    observations = self.storage.get_session_observations(
+                        session_id, limit=100
+                    )
+                    logger.info(
+                        f"Compressed {compressed_count} observations for session {session_id}"
+                    )
+
                 summary = self._generate_session_summary(observations)
                 try:
                     self.storage.save_summary(session_id, summary)
@@ -463,6 +474,47 @@ class SessionManager:
             "duration": time.time() - data["start_time"],
             "is_active": True,
         }
+
+    def _compress_observations(
+        self,
+        observations: List[Dict[str, Any]]
+    ) -> int:
+        """
+        Compress observations that don't have summaries yet.
+
+        Args:
+            observations: List of observation dicts
+
+        Returns:
+            Number of observations compressed
+        """
+        from .compressor import MemoryCompressor
+
+        compressor = MemoryCompressor()
+        compressed_count = 0
+
+        for obs in observations:
+            # Skip if already compressed
+            if obs.get("compressed_summary"):
+                continue
+
+            try:
+                compressed = compressor.compress(obs)
+                # Save compressed data back to database
+                self.storage.update_observation_compression(obs["id"], compressed)
+                # Update the local copy too
+                obs["compressed_summary"] = compressed.get("narrative")
+                obs["facts"] = compressed.get("facts", [])
+                obs["concepts"] = compressed.get("concepts", [])
+                obs["obs_type"] = compressed.get("type")
+                compressed_count += 1
+            except Exception as e:
+                logger.error(
+                    f"Failed to compress observation {obs.get('id')}: {e}",
+                    exc_info=True
+                )
+
+        return compressed_count
 
     def _generate_session_summary(
         self,
