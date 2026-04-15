@@ -41,6 +41,30 @@ If instructions conflict, follow the highest priority.
 
 ## TOOL USE RULES
 
+### TOOL USAGE GUIDELINES (Natural & Fluent Tool Use)
+
+Follow these principles for automatic, context-aware tool use:
+
+1. **KNOWLEDGE-FIRST**: When asked about any topic, FIRST search existing findings
+   (`search_findings` or `search_knowledge`) before doing fresh research.
+   You may already have relevant knowledge saved.
+
+2. **AUTO-PERSIST**: When you discover important insights during research,
+   IMMEDIATELY save them (`save_finding` or `save_finding_auto`).
+   Don't wait until the end - save as you go.
+
+3. **SESSION AWARENESS**: When starting work, always check for previous session
+   context (`session_start` or `start_research`). When finishing, always save session
+   knowledge (`session_end` or `end_session`).
+
+4. **SEARCH BEFORE ACT**: Before creating anything new, search to see if it
+   already exists. This applies to findings, artifacts, and sessions.
+
+5. **ERROR RECOVERY**: If a tool fails, try the alternative:
+   - `search_findings` fails → try `retrieve_findings` or `search_knowledge`
+   - `save_finding` fails → save as artifact instead
+   - Session tools fail → check if session exists first
+
 ### Before Adding Findings
 1. Always use `search_findings` or `retrieve_findings` first to check for duplicates
 2. If similar findings exist, reference them in your evidence

@@ -695,6 +695,28 @@ def _ensure_runtime_background() -> None:
     return t
 
 
+def _check_active_sessions() -> Optional[str]:
+    """Check if there are any active memory sessions.
+
+    Returns a warning message if no sessions are active, None otherwise.
+    """
+    try:
+        from .memory import SessionManager, MemoryStorage
+        runtime = get_runtime(_settings_path())
+        storage = MemoryStorage(runtime.conn)
+        session_mgr = SessionManager(storage)
+        active = session_mgr.get_active_sessions()
+        if not active:
+            return (
+                "No active memory session detected. "
+                "Consider calling session_start or start_research first "
+                "to enable automatic context injection and knowledge tracking."
+            )
+        return None
+    except Exception:
+        return None  # If check fails, don't block the save
+
+
 @mcp.tool()
 def init_library() -> dict:
     """Initialize the OpenLMlib knowledge base. Call this ONCE before using any other tools.
@@ -752,6 +774,7 @@ def save_finding(
 
     SESSION AWARENESS: For best results, use start_research or session_start before saving
     findings. This enables automatic context injection and session-based knowledge tracking.
+    If no active session is detected, a warning will be returned.
 
     CONFIRMATION TIER: WRITE OPERATION - Requires confirm=True.
     This creates persistent data. Set confirm=true for final saves, confirm=false for drafts.
@@ -779,6 +802,9 @@ def save_finding(
     _duplicate_check = search_fts(_settings_path(), claim, limit=3)
     _similar_findings = _duplicate_check.get("items", []) if _duplicate_check.get("status") == "ok" else []
 
+    # Session enforcement: warn if no active memory session
+    _session_warning = _check_active_sessions()
+
     try:
         result = add_finding(
             settings_path=_settings_path(),
@@ -794,6 +820,7 @@ def save_finding(
             finding_id=finding_id,
             confirm=confirm,
             similar_findings=_similar_findings,
+            session_warning=_session_warning,
         )
         _elapsed_ms = (time.monotonic() - _t0) * 1000
         # Log tool call for analytics
@@ -957,6 +984,9 @@ def retrieve_context(
     DIFFERENCE from retrieve_findings: This returns a sanitized context block
     optimized for safe inclusion in LLM prompts. Use retrieve for raw data.
 
+    ERROR RECOVERY: If this returns no results, try search_findings for keyword-based
+    search instead - the semantic query may not match any findings.
+
     PARAMETERS:
     - query: Search query (required)
     - project: Filter by project (optional)
@@ -972,6 +1002,72 @@ def retrieve_context(
         confidence_min=confidence_min,
         final_k=final_k,
     )
+
+
+@mcp.tool()
+def search_knowledge(query: str, limit: int = 10) -> dict:
+    """Search findings using both semantic similarity and keyword matching. Automatically combines both approaches for best results.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - You need to search for existing knowledge
+    - Starting research or looking for past findings
+    - Not sure whether to use keyword or semantic search
+
+    This tool handles routing internally - no need to choose between
+    search_findings and retrieve_findings.
+
+    For broad exploration, use general query terms. For specific facts,
+    use exact phrases or keywords.
+
+    CONFIRMATION TIER: READ OPERATION - No confirmation needed. Safe to call freely.
+
+    PARAMETERS:
+    - query: Search query (required) - keywords or natural language
+    - limit: Max results (default: 10)
+
+    Returns combined results from both FTS keyword search and semantic retrieval.
+    """
+    # Run both keyword and semantic search
+    keyword_results = search_fts(_settings_path(), query, limit=limit)
+    semantic_results = None
+    try:
+        semantic_results = retrieve_findings(
+            _settings_path(),
+            query=query,
+            final_k=limit,
+        )
+    except Exception:
+        pass  # If semantic search fails, fall back to keyword only
+
+    # Merge and deduplicate results
+    all_items = []
+    seen_ids = set()
+
+    # Add keyword results first (higher precision for exact matches)
+    for item in keyword_results.get("items", []):
+        item_id = item.get("id")
+        if item_id and item_id not in seen_ids:
+            item["source"] = "keyword"
+            all_items.append(item)
+            seen_ids.add(item_id)
+
+    # Add semantic results (better for concept matching)
+    for item in (semantic_results.get("items", []) if semantic_results else []):
+        item_id = item.get("id")
+        if item_id and item_id not in seen_ids:
+            item["source"] = "semantic"
+            all_items.append(item)
+            seen_ids.add(item_id)
+
+    return {
+        "status": "ok",
+        "query": query,
+        "items": all_items[:limit],
+        "total_found": len(all_items),
+        "keyword_count": keyword_results.get("count", 0),
+        "semantic_count": semantic_results.get("meta", {}).get("total", 0) if semantic_results else 0,
+        "message": f"Found {len(all_items)} unique findings from combined keyword and semantic search"
+    }
 
 
 @mcp.tool()
@@ -1138,13 +1234,22 @@ def end_session(
     if export_to_library:
         recent_findings = list_findings(_settings_path(), limit=20)
 
+    # Build response with warning if no observations
+    obs_count = end_result.get("observation_count", 0)
+    message = "Session ended and knowledge preserved"
+    if obs_count == 0:
+        message = (
+            "Session ended but no observations were logged. "
+            "Consider calling log_observation during work to build session memory."
+        )
+
     return {
         "session_id": session_id,
         "status": "completed",
         "summary_generated": end_result.get("summary_generated", False),
-        "observation_count": end_result.get("observation_count", 0),
+        "observation_count": obs_count,
         "recent_findings_count": recent_findings.get("count", 0) if recent_findings else 0,
-        "message": "Session ended and knowledge preserved"
+        "message": message,
     }
 
 
@@ -1201,9 +1306,9 @@ def save_finding_auto(
     AUTOMATIC TRIGGERS - Call this whenever you discover something important.
     Use when you think 'this is important' or 'this should be remembered'.
 
-    Automatically sets confidence based on claim strength:
-    - 0.9 for definitive findings (if confidence not specified)
-    - 0.7 for tentative findings
+    Automatically sets confidence based on claim language:
+    - 0.9 for definitive findings (factual, certain claims)
+    - 0.7 for tentative findings (contains words like 'might', 'possibly', 'appears', 'suggests')
     - Uses provided confidence if explicitly set
 
     READ-BEFORE-WRITE: This tool automatically checks for similar findings before saving.
@@ -1224,8 +1329,15 @@ def save_finding_auto(
     """
     # Auto-score confidence if not provided
     if confidence is None:
-        # Default to high confidence for explicit saves
-        confidence = 0.9
+        # Heuristic: tentative findings contain uncertainty markers
+        _tentative_markers = ["might", "could", "possibly", "likely", "appears",
+                             "seems", "tentative", "preliminary", "hypothesis",
+                             "suggests", "potential", "uncertain"]
+        _claim_lower = claim.lower()
+        if any(marker in _claim_lower for marker in _tentative_markers):
+            confidence = 0.7  # Tentative finding
+        else:
+            confidence = 0.9  # Definitive finding
 
     # Read-before-write: auto-check for similar findings (safety net)
     _duplicate_check = search_fts(_settings_path(), claim, limit=3)
