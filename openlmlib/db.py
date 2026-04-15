@@ -84,6 +84,65 @@ def init_db(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_retrieval_usage_query_id ON retrieval_usage(query_id);
         CREATE INDEX IF NOT EXISTS idx_retrieval_usage_finding_id ON retrieval_usage(finding_id);
         CREATE INDEX IF NOT EXISTS idx_retrieval_usage_created_at ON retrieval_usage(created_at);
+
+        -- Tool usage analytics tables (Phase 4)
+        CREATE TABLE IF NOT EXISTS tool_calls (
+            id TEXT PRIMARY KEY,
+            tool_name TEXT NOT NULL,
+            called_at TEXT NOT NULL,
+            call_mode TEXT NOT NULL DEFAULT 'explicit',
+            session_id TEXT,
+            user_id TEXT,
+            parameters TEXT,
+            success INTEGER NOT NULL DEFAULT 1,
+            error_message TEXT,
+            execution_time_ms REAL,
+            result_summary TEXT,
+            workflow_position TEXT,
+            triggered_by TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS parameter_validations (
+            id TEXT PRIMARY KEY,
+            tool_call_id TEXT NOT NULL,
+            field TEXT NOT NULL,
+            proposed_value TEXT,
+            validated_value TEXT,
+            validation_type TEXT NOT NULL,
+            is_hallucination INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (tool_call_id) REFERENCES tool_calls(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS tool_selections (
+            id TEXT PRIMARY KEY,
+            query TEXT NOT NULL,
+            selected_tool TEXT NOT NULL,
+            expected_tool TEXT,
+            is_correct INTEGER,
+            confidence_score REAL,
+            created_at TEXT NOT NULL,
+            session_id TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_events (
+            id TEXT PRIMARY KEY,
+            workflow_type TEXT NOT NULL,
+            step_number INTEGER NOT NULL,
+            tool_name TEXT NOT NULL,
+            session_id TEXT,
+            completed_at TEXT NOT NULL,
+            skipped INTEGER NOT NULL DEFAULT 0,
+            skipped_reason TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_tool_calls_tool ON tool_calls(tool_name);
+        CREATE INDEX IF NOT EXISTS idx_tool_calls_mode ON tool_calls(call_mode);
+        CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON tool_calls(session_id);
+        CREATE INDEX IF NOT EXISTS idx_tool_calls_time ON tool_calls(called_at);
+        CREATE INDEX IF NOT EXISTS idx_param_validations_call ON parameter_validations(tool_call_id);
+        CREATE INDEX IF NOT EXISTS idx_tool_selections_tool ON tool_selections(selected_tool);
+        CREATE INDEX IF NOT EXISTS idx_workflow_events_type ON workflow_events(workflow_type);
         """
     )
     _migrate_schema(conn)

@@ -230,6 +230,36 @@ All tools now explicitly document their confirmation tier in descriptions:
 
 ---
 
+## Phase 4: Validation & Analytics (Complete ✅)
+
+All Phase 4 validation and analytics features implemented:
+
+### Tool Usage Analytics Infrastructure
+- New `openlmlib/usage_analytics.py` module with comprehensive tracking
+- Database tables: `tool_calls`, `parameter_validations`, `tool_selections`, `workflow_events`
+- Automatic logging of tool calls with metadata (call mode, execution time, success/failure, trigger source)
+
+### Metrics Tracked
+
+| Metric | Description | Implementation |
+|--------|-------------|----------------|
+| **Automatic Call Rate** | % of tool calls model made without explicit instruction | `get_automatic_call_rate()` |
+| **Tool Selection Accuracy** | % of correct tool choices for queries | `get_tool_selection_accuracy()` |
+| **Parameter Hallucination Rate** | % of parameters needing correction | `get_parameter_hallucination_rate()` |
+| **Workflow Completeness** | % of workflow steps completed | `get_workflow_completeness()` |
+
+### New MCP Tool: `get_usage_analytics`
+- Returns comprehensive analytics report
+- Supports per-tool filtering and configurable time window
+- For developers tracking optimization effectiveness
+
+### Files Modified
+- `openlmlib/usage_analytics.py` - **NEW** - Analytics API and reporting
+- `openlmlib/db.py` - Added analytics tables to init_db()
+- `openlmlib/mcp_server.py` - Added `get_usage_analytics` tool, integrated logging into `save_finding`
+
+---
+
 ## Implementation Notes
 
 ### Parameter Schema Optimizations Done

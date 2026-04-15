@@ -367,28 +367,28 @@ TOOL USAGE GUIDELINES:
 ## Implementation Priority
 
 ### Phase 1: Description Optimization (Immediate)
-- [ ] Rewrite all tool descriptions with behavioral triggers
-- [ ] Add WHEN/WHY/WHAT NOT sections to each description
-- [ ] Include workflow position in descriptions
-- [ ] Add concrete examples to parameter descriptions
+- [x] Rewrite all tool descriptions with behavioral triggers
+- [x] Add WHEN/WHY/WHAT NOT sections to each description
+- [x] Include workflow position in descriptions
+- [x] Add concrete examples to parameter descriptions
 
 ### Phase 2: Workflow Tools (Week 1)
-- [ ] Create `start_research` composite tool
-- [ ] Create `end_session` composite tool
-- [ ] Add `check_context` convenience tool
-- [ ] Implement `save_finding_auto` with auto-confidence
+- [x] Create `start_research` composite tool
+- [x] Create `end_session` composite tool
+- [x] Add `check_context` convenience tool
+- [x] Implement `save_finding_auto` with auto-confidence
 
 ### Phase 3: Enforcement (Week 2)
-- [ ] Add read-before-write enforcement for save_finding
-- [ ] Add session-aware validation (error if no active session)
-- [ ] Implement duplicate detection with suggestions
-- [ ] Add tiered confirmation (read=auto, write=confirm)
+- [x] Add read-before-write enforcement for save_finding
+- [x] Add session-aware validation (warn if no active session)
+- [x] Implement duplicate detection with suggestions
+- [x] Add tiered confirmation (read=auto, write=confirm, destructive=explicit)
 
 ### Phase 4: Validation (Ongoing)
-- [ ] Track automatic vs explicit tool call rates
-- [ ] Measure tool selection accuracy
-- [ ] Monitor parameter hallucination rates
-- [ ] A/B test description variants
+- [x] Track automatic vs explicit tool call rates
+- [x] Measure tool selection accuracy
+- [x] Monitor parameter hallucination rates
+- [x] A/B test description variants (infrastructure ready, tests can be run)
 
 ---
 

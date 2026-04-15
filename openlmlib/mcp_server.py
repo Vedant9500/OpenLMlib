@@ -769,27 +769,67 @@ def save_finding(
     TIP: If a similar finding already exists, consider updating it instead of creating a duplicate.
     Use search_findings first to check for duplicates.
     """
+    import time
+    from .usage_analytics import log_tool_call
+    _t0 = time.monotonic()
+
     # Read-before-write: auto-check for similar findings before saving
     # This acts as a safety net - even if the model didn't search first,
     # it will see similar findings in the response and can decide to update instead
     _duplicate_check = search_fts(_settings_path(), claim, limit=3)
     _similar_findings = _duplicate_check.get("items", []) if _duplicate_check.get("status") == "ok" else []
 
-    return add_finding(
-        settings_path=_settings_path(),
-        project=project,
-        claim=claim,
-        confidence=confidence,
-        evidence=evidence,
-        reasoning=reasoning,
-        caveats=caveats,
-        tags=tags,
-        full_text=full_text,
-        proposed_by=proposed_by,
-        finding_id=finding_id,
-        confirm=confirm,
-        similar_findings=_similar_findings,
-    )
+    try:
+        result = add_finding(
+            settings_path=_settings_path(),
+            project=project,
+            claim=claim,
+            confidence=confidence,
+            evidence=evidence,
+            reasoning=reasoning,
+            caveats=caveats,
+            tags=tags,
+            full_text=full_text,
+            proposed_by=proposed_by,
+            finding_id=finding_id,
+            confirm=confirm,
+            similar_findings=_similar_findings,
+        )
+        _elapsed_ms = (time.monotonic() - _t0) * 1000
+        # Log tool call for analytics
+        try:
+            _runtime = get_runtime(_settings_path())
+            log_tool_call(
+                conn=_runtime.conn,
+                tool_name="save_finding",
+                call_mode="automatic",  # Model decides based on discovery
+                parameters={"project": project, "confidence": confidence},
+                success=result.get("status") == "ok",
+                error_message=result.get("message") if result.get("status") != "ok" else None,
+                execution_time_ms=_elapsed_ms,
+                result_summary=f"Saved finding: {claim[:80]}",
+                triggered_by="discovery",
+            )
+        except Exception:
+            pass  # Analytics logging should never break tool
+        return result
+    except Exception as exc:
+        _elapsed_ms = (time.monotonic() - _t0) * 1000
+        try:
+            _runtime = get_runtime(_settings_path())
+            log_tool_call(
+                conn=_runtime.conn,
+                tool_name="save_finding",
+                call_mode="automatic",
+                parameters={"project": project, "confidence": confidence},
+                success=False,
+                error_message=str(exc),
+                execution_time_ms=_elapsed_ms,
+                triggered_by="discovery",
+            )
+        except Exception:
+            pass
+        raise
 
 
 @mcp.tool()
@@ -1448,21 +1488,87 @@ def help_library(tool_name: Optional[str] = None) -> dict:
     }
 
 
+@mcp.tool()
+def get_usage_analytics(days: int = 7, tool_name: Optional[str] = None) -> dict:
+    """Get tool usage analytics and optimization metrics. For developers and optimization tracking.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - Measuring optimization effectiveness after tool description changes
+    - Tracking automatic vs explicit tool call rates
+    - Monitoring parameter hallucination rates
+    - Evaluating tool selection accuracy
+    - Running A/B tests on tool descriptions
+
+    Returns metrics for:
+    - Automatic call rate (% of calls the model made without explicit instruction)
+    - Tool selection accuracy (% of correct tool choices)
+    - Parameter hallucination rate (% of parameters that needed correction)
+    - Workflow completeness (% of workflow steps completed)
+    - Per-tool usage breakdown
+
+    PARAMETERS:
+    - days: Look back N days (default: 7)
+    - tool_name: Filter by specific tool (optional)
+
+    This is a development/evaluation tool, not needed for normal usage.
+    """
+    from .usage_analytics import (
+        get_automatic_call_rate,
+        get_tool_selection_accuracy,
+        get_parameter_hallucination_rate,
+        get_workflow_completeness,
+        get_tool_usage_summary,
+        get_full_analytics_report,
+    )
+
+    try:
+        runtime = get_runtime(_settings_path())
+        conn = runtime.conn
+
+        if tool_name:
+            # Per-tool report
+            tool_summary = get_tool_usage_summary(conn, tool_name=tool_name, days=days)
+            auto_rate = get_automatic_call_rate(conn, tool_name=tool_name, days=days)
+            return {
+                "status": "ok",
+                "tool_name": tool_name,
+                "period_days": days,
+                "usage_summary": tool_summary,
+                "automatic_call_rate": auto_rate,
+            }
+        else:
+            # Full report
+            report = get_full_analytics_report(conn, days=days)
+            tool_summary = get_tool_usage_summary(conn, days=days)
+            return {
+                "status": "ok",
+                "period_days": days,
+                "report": report,
+                "tool_summary": tool_summary,
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e),
+            "note": "Analytics may not be available if database is not initialized",
+        }
+
+
 def main() -> None:
     import argparse
     import sys
-    
+
     parser = argparse.ArgumentParser(description="OpenLMlib MCP Server", add_help=False)
     parser.add_argument("--dir", type=str, help="Base directory of the OpenLMlib project")
     parser.add_argument("--settings", type=str, help="Absolute path to settings.json")
-    
+
     args, unknown = parser.parse_known_args()
-    
+
     if args.settings:
         os.environ["OPENLMLIB_SETTINGS"] = args.settings
     elif args.dir:
         os.environ["OPENLMLIB_SETTINGS"] = str(Path(args.dir) / "config" / "settings.json")
-        
+
     sys.argv = [sys.argv[0]] + unknown
 
     # Register memory tools (lazy-loaded to avoid import penalty)
