@@ -39,6 +39,39 @@ _collab_registered = False
 # Lazy-load memory tools to avoid importing memory module at startup.
 _memory_registered = False
 
+# Shared memory state to prevent state fragmentation across tools
+_memory_state = None
+
+
+def _get_memory_state():
+    """Get or initialize the shared memory components singleton."""
+    global _memory_state
+    if _memory_state is not None:
+        return _memory_state
+
+    from .memory import (
+        SessionManager,
+        ProgressiveRetriever,
+        MemoryStorage,
+        ContextBuilder,
+    )
+    from .runtime import get_runtime
+
+    # Initialize memory system components
+    runtime = get_runtime(_settings_path())
+    storage = MemoryStorage(runtime.conn)
+    session_mgr = SessionManager(storage)
+    retriever = ProgressiveRetriever(storage)
+    context_builder = ContextBuilder(retriever)
+
+    _memory_state = {
+        "session_mgr": session_mgr,
+        "retriever": retriever,
+        "context_builder": context_builder,
+        "storage": storage,
+    }
+    return _memory_state
+
 
 def _register_collab_tools() -> None:
     """Register collaboration tools with the MCP server on first access."""
@@ -125,21 +158,6 @@ def _register_memory_tools() -> None:
     if _memory_registered:
         return
 
-    from .memory import (
-        SessionManager,
-        ProgressiveRetriever,
-        MemoryStorage,
-        ContextBuilder,
-    )
-    from .runtime import get_runtime
-
-    # Initialize memory system components
-    runtime = get_runtime(_settings_path())
-    storage = MemoryStorage(runtime.conn)
-    session_mgr = SessionManager(storage)
-    retriever = ProgressiveRetriever(storage)
-    context_builder = ContextBuilder(retriever)
-
     @mcp.tool()
     def session_start(
         session_id: str,
@@ -167,6 +185,10 @@ def _register_memory_tools() -> None:
 
         Returns context block with relevant past observations (compressed for efficiency).
         """
+        state = _get_memory_state()
+        session_mgr = state["session_mgr"]
+        context_builder = state["context_builder"]
+
         context = session_mgr.on_session_start(session_id, user_id, query)
         
         # Build injection context (with caveman compression enabled)
@@ -200,6 +222,8 @@ def _register_memory_tools() -> None:
         PARAMETERS:
         - session_id: The session to end (track this from session_start)
         """
+        state = _get_memory_state()
+        session_mgr = state["session_mgr"]
         result = session_mgr.on_session_end(session_id)
         
         return {
@@ -238,6 +262,8 @@ def _register_memory_tools() -> None:
 
         NOTE: Don't log every single tool call - only significant ones with novel insights.
         """
+        state = _get_memory_state()
+        session_mgr = state["session_mgr"]
         obs_id = session_mgr.on_tool_use(
             session_id, tool_name, tool_input, tool_output
         )
@@ -271,6 +297,8 @@ def _register_memory_tools() -> None:
         - limit: Max results (default: 50)
         - filters: Optional filters like {"tool_name": "web_search", "session_id": "..."}
         """
+        state = _get_memory_state()
+        retriever = state["retriever"]
         results = retriever.layer1_search_index(query, limit, filters)
         
         return {
@@ -299,6 +327,8 @@ def _register_memory_tools() -> None:
         - ids: List of observation IDs from search_memory
         - window: Time window for context around each observation (default: "5m")
         """
+        state = _get_memory_state()
+        retriever = state["retriever"]
         results = retriever.layer2_timeline(ids, window)
         
         return {
@@ -323,6 +353,8 @@ def _register_memory_tools() -> None:
         PARAMETERS:
         - ids: List of observation IDs from search_memory or memory_timeline
         """
+        state = _get_memory_state()
+        retriever = state["retriever"]
         results = retriever.layer3_full_details(ids)
         
         return {
@@ -355,6 +387,8 @@ def _register_memory_tools() -> None:
         - query: What you want context about (optional - uses session focus if not provided)
         - limit: Max observations to inject (default: 50)
         """
+        state = _get_memory_state()
+        context_builder = state["context_builder"]
         context = context_builder.build_session_start_context(session_id, query, limit)
 
         return {
@@ -386,6 +420,9 @@ def _register_memory_tools() -> None:
         - session_id: Optional specific session to recap (default: recent sessions)
         - limit: Max recent sessions to recap (default: 3)
         """
+        state = _get_memory_state()
+        storage = state["storage"]
+        
         if session_id:
             knowledge_entries = storage.get_knowledge(session_id)
         else:
@@ -484,6 +521,9 @@ def _register_memory_tools() -> None:
         - topic: Topic to get detailed context about (e.g., 'storage', 'privacy')
         - session_id: Optional specific session to search (default: all sessions)
         """
+        state = _get_memory_state()
+        storage = state["storage"]
+        
         # Get knowledge from relevant sessions
         if session_id:
             knowledge_entries = storage.get_knowledge(session_id)
@@ -617,28 +657,9 @@ def _register_memory_tools() -> None:
         time_window_hours: int = 24,
         include_uncommitted: bool = True
     ) -> dict:
-        """Auto-ingest session activity from git history. NO manual logging needed!
-
-        AUTOMATIC TRIGGERS - Call this when:
-        - You forgot to log observations during work
-        - You want to reconstruct what happened in a past work session
-        - Starting a session and want to capture recent code changes
-
-        Scans git history to reconstruct session activity:
-        - Modified/created/deleted files (from git status)
-        - Commits made during the session (from git log)
-        - Lines added/removed per file (from git diff)
-
-        Works with ANY tool/agent (Qwen Code, Claude Code, manual edits)
-        because it reads the actual codebase state, not tool call logs.
-
-        After ingestion, call session_recap to see the synthesized knowledge.
-
-        PARAMETERS:
-        - session_id: Session identifier to create for this ingested session
-        - time_window_hours: Hours to look back for commits (default: 24)
-        - include_uncommitted: Include uncommitted changes (default: True)
-        """
+        """Auto-ingest session activity from git history. NO manual logging needed!"""
+        state = _get_memory_state()
+        storage = state["storage"]
         from .memory.retrogit_ingest import retroactive_ingest as retro_ingest_fn
 
         result = retro_ingest_fn(
@@ -647,7 +668,7 @@ def _register_memory_tools() -> None:
             include_uncommitted=include_uncommitted
         )
 
-        # Save the synthesized knowledge
+        # Save the synthesized knowledge using the shared storage
         if "knowledge" in result:
             try:
                 storage.save_knowledge(session_id, result["knowledge"])
@@ -701,10 +722,8 @@ def _check_active_sessions() -> Optional[str]:
     Returns a warning message if no sessions are active, None otherwise.
     """
     try:
-        from .memory import SessionManager, MemoryStorage
-        runtime = get_runtime(_settings_path())
-        storage = MemoryStorage(runtime.conn)
-        session_mgr = SessionManager(storage)
+        state = _get_memory_state()
+        session_mgr = state["session_mgr"]
         active = session_mgr.get_active_sessions()
         if not active:
             return (
@@ -822,6 +841,24 @@ def save_finding(
             similar_findings=_similar_findings,
             session_warning=_session_warning,
         )
+
+        # Auto-log observation if a session is active
+        if result.get("status") == "ok":
+            try:
+                state = _get_memory_state()
+                session_mgr = state["session_mgr"]
+                active_sessions = session_mgr.get_active_sessions()
+                if active_sessions:
+                    # Log finding as a 'discovery' observation
+                    session_mgr.on_tool_use(
+                        session_id=active_sessions[0]["session_id"],
+                        tool_name="save_finding",
+                        tool_input=f"Save finding: {claim[:100]}",
+                        tool_output=f"Successfully saved finding to project {project}. ID: {result.get('id')}",
+                    )
+            except Exception:
+                pass  # Never let memory logging break the primary tool
+
         _elapsed_ms = (time.monotonic() - _t0) * 1000
         # Log tool call for analytics
         try:
