@@ -55,3 +55,8 @@ installer/node_modules/
 installer/package-lock.json
 *.tgz
 .VSCodeCounter/
+
+#CI/CD
+CI_CHECKS.md
+run_ci_checks.sh
+run_ci_checks.ps1

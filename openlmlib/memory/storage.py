@@ -630,7 +630,7 @@ class MemoryStorage:
         # Add text search (escape LIKE special characters)
         if query:
             where_clauses.append(
-                "(tool_output LIKE ? OR compressed_summary LIKE ? OR tool_input LIKE ?)"
+                "(tool_output LIKE ? ESCAPE '\\' OR compressed_summary LIKE ? ESCAPE '\\' OR tool_input LIKE ? ESCAPE '\\')"
             )
             search_pattern = f"%{self._escape_like(query)}%"
             params.extend([search_pattern, search_pattern, search_pattern])
