@@ -492,6 +492,7 @@ class SessionManager:
 
         compressor = MemoryCompressor()
         compressed_count = 0
+        updates = []
 
         for obs in observations:
             # Skip if already compressed
@@ -500,9 +501,10 @@ class SessionManager:
 
             try:
                 compressed = compressor.compress(obs)
-                # Save compressed data back to database
-                self.storage.update_observation_compression(obs["id"], compressed)
-                # Update the local copy too
+                # Prepare for bulk update
+                updates.append((obs["id"], compressed))
+                
+                # Update the local copy
                 obs["compressed_summary"] = compressed.get("narrative")
                 obs["facts"] = compressed.get("facts", [])
                 obs["concepts"] = compressed.get("concepts", [])
@@ -513,6 +515,13 @@ class SessionManager:
                     f"Failed to compress observation {obs.get('id')}: {e}",
                     exc_info=True
                 )
+
+        # Apply bulk updates to storage
+        if updates:
+            try:
+                self.storage.update_observations_compression_bulk(updates)
+            except Exception as e:
+                logger.error(f"Failed to save bulk compressed observations: {e}")
 
         return compressed_count
 

@@ -287,6 +287,48 @@ class MemoryStorage:
         self.conn.commit()
         return cursor.rowcount > 0
 
+    def update_observations_compression_bulk(
+        self,
+        updates: List[tuple[str, Dict[str, Any]]]
+    ) -> int:
+        """
+        Update multiple observations with compressed summary data in one transaction.
+
+        Args:
+            updates: List of (obs_id, compressed_dict) tuples
+
+        Returns:
+            Number of observations updated
+        """
+        if not updates:
+            return 0
+
+        cursor = self.conn.cursor()
+        count = 0
+        
+        with self.conn:
+            for obs_id, compressed in updates:
+                cursor.execute(
+                    """
+                    UPDATE memory_observations
+                    SET compressed_summary = ?,
+                        facts = ?,
+                        concepts = ?,
+                        obs_type = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        compressed.get("narrative"),
+                        json.dumps(compressed.get("facts", [])),
+                        json.dumps(compressed.get("concepts", [])),
+                        compressed.get("type"),
+                        obs_id
+                    )
+                )
+                count += cursor.rowcount
+        
+        return count
+
     def get_session_observations(
         self,
         session_id: str,

@@ -381,33 +381,29 @@ class KnowledgeExtractor:
         seen_files: Set[str]
     ):
         """Extract files touched from observation."""
-        file_path = None
-        path_match = re.search(
+        # Find all potential file paths in tool_input
+        input_paths = re.findall(
             r'([a-zA-Z0-9_./\\-]+(?:\.py|\.json|\.md|\.txt|\.yaml|\.yml|\.toml|\.cfg|\.ini|\.sh|\.ps1|\.js|\.ts|\.tsx|\.css|\.html))',
             tool_input
         )
-        if path_match:
-            file_path = path_match.group(1)
-
+        
         # Also check tool_output for file paths (e.g., from ls, glob)
-        if not file_path:
-            path_match = re.search(
-                r'([a-zA-Z0-9_./\\-]+(?:\.py|\.json|\.md|\.txt|\.yaml|\.yml|\.toml))',
-                tool_output[:500]  # Only scan first 500 chars
-            )
-            if path_match:
-                file_path = path_match.group(1)
+        output_paths = re.findall(
+            r'([a-zA-Z0-9_./\\-]+(?:\.py|\.json|\.md|\.txt|\.yaml|\.yml|\.toml))',
+            tool_output[:2000]  # Scan more chars than before for better coverage
+        )
 
-        if file_path and file_path not in seen_files:
-            seen_files.add(file_path)
-            action = FILE_ACTION_PATTERNS.get(tool_name, "interacted")
-            reason = self._infer_file_reason(tool_name, tool_output)
+        for file_path in set(input_paths + output_paths):
+            if file_path not in seen_files:
+                seen_files.add(file_path)
+                action = FILE_ACTION_PATTERNS.get(tool_name, "interacted")
+                reason = self._infer_file_reason(tool_name, tool_output)
 
-            knowledge.files_touched.append({
-                "path": file_path,
-                "action": action,
-                "reason": reason,
-            })
+                knowledge.files_touched.append({
+                    "path": file_path,
+                    "action": action,
+                    "reason": reason,
+                })
 
     def _infer_file_reason(self, tool_name: str, tool_output: str) -> str:
         """Infer why a file was touched based on tool output."""
