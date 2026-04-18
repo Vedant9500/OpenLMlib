@@ -594,7 +594,7 @@ class TestSystemPrompts(unittest.TestCase):
             agent_id="agent_obs_001",
         )
         self.assertIn("OBSERVER", prompt)
-        self.assertIn("Do NOT assign tasks", prompt)
+        self.assertIn("Never assign tasks", prompt)
 
     def test_unknown_role_raises_error(self):
         with self.assertRaises(ValueError):

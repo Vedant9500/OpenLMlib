@@ -987,7 +987,7 @@ def grep_messages(
 def session_context(
     session_id: str,
     agent_id: str,
-    max_messages: int = 20,
+    max_messages: int = 5,
 ) -> Dict:
     """Get a compiled context view of the session. PRIMARY tool for understanding session state.
 

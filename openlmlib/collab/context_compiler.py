@@ -35,7 +35,7 @@ class ContextCompiler:
         self,
         session_id: str,
         agent_id: str,
-        max_messages: int = 20,
+        max_messages: int = 5,
     ) -> Dict:
         """Compile a complete context view for an agent.
 
@@ -214,28 +214,24 @@ class ContextCompiler:
         if role == "orchestrator":
             return (
                 "=== YOUR ROLE: ORCHESTRATOR ===\n"
-                "You are the session ORCHESTRATOR. You are in charge. Your job is to:\n\n"
-                "1. **PLAN**: Analy the session goal and break it into specific, numbered tasks.\n"
-                "   - Each task should have a clear description, step number, and expected output.\n"
-                "   - Assign tasks to specific workers based on their model capabilities.\n"
-                "   - Use update_session_state to save your plan.\n\n"
-                "2. **DELEGATE**: Send tasks to workers via send_message.\n"
-                "   - Use msg_type='task' for work assignments.\n"
-                "   - Include the step number, detailed instructions, and acceptance criteria.\n"
-                "   - Address messages to the specific worker's agent_id.\n\n"
-                "3. **MONITOR**: After delegating, use poll_messages to watch for results.\n"
-                "   - Workers will send msg_type='result' when they complete tasks.\n"
-                "   - Workers may send msg_type='question' if they need clarification.\n"
-                "   - If a worker is silent, send a follow-up message.\n\n"
-                "4. **SYNTHESIZE**: When workers return results, integrate them.\n"
-                "   - Compare findings from different workers.\n"
-                "   - Identify gaps and assign follow-up tasks as needed.\n"
-                "   - Save consolidated conclusions as artifacts.\n\n"
-                "5. **TERMINATE**: When the session goal is achieved, call\n"
-                "   terminate_session(session_id, your_agent_id, summary='...').\n\n"
-                f"Active agents in this session: {other_agents_str}\n"
-                "If no workers have joined yet, you can still create your plan and save it via\n"
-                "update_session_state. Workers will see it when they join."
+                "You lead this session. Your goal: produce a high-quality synthesized result.\n\n"
+                "WORKFLOW:\n"
+                "1. PLAN — Assign ALL tasks upfront via the session plan or send_message.\n"
+                "   Each task needs: clear goal, acceptance criteria, assigned worker agent_id.\n"
+                "   Workers start immediately on join — send all tasks at once, not one by one.\n\n"
+                "2. MONITOR — Use poll_messages(session_id, your_agent_id, timeout=30,\n"
+                "   msg_types=['result', 'question']) to wait for outputs.\n\n"
+                "3. SYNTHESIZE — When workers return results:\n"
+                "   Read full details via get_artifact (workers save detailed work there).\n"
+                "   Different workers may use different styles — normalize before comparing.\n"
+                "   Save your consolidated findings as a shared artifact.\n\n"
+                "4. TERMINATE — Call terminate_session(session_id, your_agent_id, summary='...').\n\n"
+                "KEY RULES:\n"
+                "- Keep messages concise. Request artifacts for significant findings.\n"
+                "- Provide clear acceptance criteria with each task.\n"
+                "- Address messages to specific agent_ids.\n\n"
+                f"Active agents: {other_agents_str}\n"
+                "If no workers have joined yet, save your plan via update_session_state."
             )
 
         elif role == "worker":
@@ -264,91 +260,71 @@ class ContextCompiler:
                     for t in my_task_list
                 ]
                 tasks_text = (
-                    "\nYour current assigned tasks:\n"
+                    "YOUR ASSIGNED TASKS — start these now:\n"
                     + "\n".join(tasks_lines)
                     + "\n"
                 )
             else:
                 tasks_text = (
-                    "No tasks are assigned to you yet. Wait for the orchestrator to send work.\n"
+                    "No tasks pre-assigned. Use poll_messages to wait for assignments.\n"
                 )
 
             return (
                 "=== YOUR ROLE: WORKER ===\n"
-                "You are a WORKER agent. Your job is to complete tasks assigned by the orchestrator.\n\n"
-                "1. **CHECK FOR TASKS**: Look at 'Your Current Tasks' in the session context above.\n"
-                "   - If you have a pending or in-progress task, work on it now.\n"
-                "   - If you have no tasks, wait for the orchestrator to assign you work.\n\n"
-                "2. **EXECUTE**: Complete your assigned task thoroughly.\n"
-                "   - Do the research, analysis, or writing as required.\n"
-                "   - Save significant outputs as artifacts via save_artifact.\n\n"
-                "3. **REPORT**: Send your results back to the orchestrator.\n"
-                "   - Use send_message with msg_type='result'.\n"
-                "   - Address the message to the orchestrator: to_agent='{orch_id}' ({orch_model}).\n"
-                "   - Include a clear summary, not just raw data.\n"
-                "   - Reference artifact IDs if you saved outputs.\n\n"
-                "4. **PROGRESS UPDATES**: For long tasks, send interim updates.\n"
-                "   - Use msg_type='update' to show partial progress.\n"
-                "   - This keeps the orchestrator informed and prevents timeout.\n\n"
-                "5. **ASK QUESTIONS**: If a task is unclear, ask the orchestrator.\n"
-                "   - Use msg_type='question' with to_agent='{orch_id}'.\n\n"
-                "6. **WHEN DONE**: After completing all your tasks:\n"
-                "   - Send a msg_type='complete' message to the orchestrator.\n"
-                "   - Call leave_session(session_id, your_agent_id).\n\n"
+                "PRIORITY: If tasks are listed below, start working immediately.\n\n"
+                "WORKFLOW:\n"
+                "1. Execute your assigned task(s) thoroughly.\n"
+                "2. Save all detailed work via save_artifact (use markdown format).\n"
+                f"3. Send ONE result message when done: msg_type='result', to_agent='{orch_id}'.\n"
+                "   Reference artifact IDs for detailed output.\n"
+                f"4. If blocked, ask: msg_type='question', to_agent='{orch_id}'.\n\n"
+                "RESULT FORMAT — structure every result as:\n"
+                "  ## Summary\n"
+                "  [1-2 sentence finding]\n"
+                "  ## Key Facts\n"
+                "  - [concrete, verifiable fact]\n"
+                "  ## Confidence & Caveats\n"
+                "  [high/medium/low] — [what might be incomplete]\n"
+                "  ## Artifacts\n"
+                "  [artifact_id]: [description]\n\n"
+                "EFFICIENCY:\n"
+                "- Put detailed work in artifacts, keep messages short.\n"
+                "- Skip greetings, acknowledgments, and progress updates.\n"
+                "- Combine task completion into your result message.\n\n"
                 f"Orchestrator: {orch_id} ({orch_model})\n"
-                f"Other workers: {other_agents_str}\n\n"
+                f"Other agents: {other_agents_str}\n"
                 f"{tasks_text}"
-                "IMPORTANT: Always use poll_messages(session_id, your_agent_id, timeout=30)\n"
-                "in a loop to check for new tasks or messages from the orchestrator."
             )
 
         else:  # observer
             return (
                 "=== YOUR ROLE: OBSERVER ===\n"
-                "You are an OBSERVER agent. Your job is to monitor and analyze the session.\n\n"
-                "1. **MONITOR**: Use poll_messages to watch session activity.\n"
-                "   - Track how the orchestrator and workers are collaborating.\n"
-                "   - Note key decisions, progress, and any issues.\n\n"
-                "2. **ANALYZE**: Provide insights on session progress.\n"
-                "   - Identify bottlenecks or communication gaps.\n"
-                "   - Suggest improvements if asked.\n\n"
-                "3. **DO NOT INTERFERE**: You are read-only.\n"
-                "   - Do NOT assign tasks or modify session state.\n"
-                "   - Only send messages with msg_type='answer' when directly asked.\n\n"
-                "4. **SAVE ANALYSIS**: Use save_artifact for analysis outputs.\n\n"
+                "You monitor and analyze this session without interfering.\n\n"
+                "WORKFLOW:\n"
+                "1. Use poll_messages to track session activity.\n"
+                "2. Note key decisions, findings, and collaboration issues.\n"
+                "3. Save analysis outputs as artifacts via save_artifact.\n"
+                "4. Respond only when directly asked (use msg_type='answer').\n"
+                "5. Never assign tasks or modify session state.\n\n"
                 f"Active agents: {other_agents_str}"
             )
 
     @staticmethod
     def autonomous_instructions() -> str:
-        """Return instructions for agents running in autonomous mode.
+        """Return condensed autonomous mode instructions.
 
-        This tells the agent to run a continuous poll→process→respond loop
-        without requiring human intervention between turns.
+        Tells the agent to run a continuous poll→process→respond loop.
+        Intentionally compact (~85 tokens) to minimize context overhead.
         """
         return (
-            "You are in AUTONOMOUS MODE. You must run a continuous collaboration loop "
-            "without waiting for user input:\n\n"
-            "1. Call poll_messages(session_id, your_agent_id, timeout=30)\n"
-            "   - This blocks until another agent sends a message or 30s passes\n"
-            "   - If timed_out is True, call it again to keep waiting\n"
-            "   - If messages arrive, process ALL of them before the next poll\n\n"
-            "2. For each message:\n"
-            "   - If msg_type is 'task' or 'question': process it, then send your result\n"
-            "   - If msg_type is 'result' or 'answer': acknowledge and update your state\n"
-            "   - If msg_type is 'complete': acknowledge and consider the task done\n"
-            "   - If msg_type is 'ack', 'update', or 'artifact': note it and continue the loop\n\n"
-            "3. Send responses via send_message(session_id, msg_type, content, "
-            "from_agent=your_agent_id, to_agent=target_agent_if_known)\n\n"
-            "4. After sending, loop back to step 1 immediately\n\n"
-            "5. When all your work is done:\n"
-            "   - If you are the orchestrator: call terminate_session(session_id, "
-            "your_agent_id, summary='...') to mark the session completed\n"
-            "   - If you are a worker: send a 'complete' message to the orchestrator, "
-            "then call leave_session(session_id, your_agent_id)\n\n"
-            "IMPORTANT: Do NOT stop after a single turn. Keep the poll→process→respond loop "
-            "running until the session status changes to 'completed' or 'terminated'.\n"
-            "Only return control to the user when the session is fully finished."
+            "AUTONOMOUS MODE — run a continuous loop without user input.\n\n"
+            "Loop: poll_messages(timeout=30) → process messages → respond → repeat.\n"
+            "- On timeout with no messages, poll again.\n"
+            "- For 'task' or 'question': do the work, then send your response.\n"
+            "- For 'result', 'complete', 'update', 'artifact': note and continue.\n"
+            "- When done: orchestrators call terminate_session; "
+            "workers send final 'result' then call leave_session.\n"
+            "- Keep looping until session status is 'completed' or 'terminated'."
         )
 
     def _format_messages(self, messages: List[Dict], current_agent_id: str) -> List[str]:
