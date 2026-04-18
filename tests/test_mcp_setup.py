@@ -156,7 +156,7 @@ class TestMcpSetup(unittest.TestCase):
             self.assertEqual(result["status"], "ok")
             configured = {item["client"] for item in result["results"]}
             # Default includes VS Code + popular CLI tools with native MCP support
-            self.assertEqual(configured, {"vscode", "claude_code", "gemini_cli", "qwen_code", "opencode"})
+            self.assertEqual(configured, {"vscode", "claude_code", "gemini_cli", "qwen_code", "opencode", "codex_cli"})
 
 
 if __name__ == "__main__":

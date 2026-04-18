@@ -64,7 +64,7 @@ def _run_mcp_setup(settings_path: Path, requested_client_ids: list[str]) -> dict
         result = install_or_refresh_default_client_configs(settings_path=settings_path)
         result["message"] = (
             "Non-interactive shell; refreshed MCP configs for existing clients "
-            "(or installed VS Code default)."
+            "(or installed default IDE/CLI configs)."
         )
         return result
 

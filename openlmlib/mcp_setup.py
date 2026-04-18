@@ -424,7 +424,7 @@ def install_or_refresh_default_client_configs(
     client_ids = discover_existing_client_ids(platform=platform, env=env, home=home)
     if not client_ids:
         # Default to VS Code + top CLI tools with native MCP support
-        client_ids = ["vscode", "claude_code", "gemini_cli", "qwen_code", "opencode"]
+        client_ids = ["vscode", "claude_code", "gemini_cli", "qwen_code", "opencode", "codex_cli"]
 
     return install_client_configs(
         client_ids,
