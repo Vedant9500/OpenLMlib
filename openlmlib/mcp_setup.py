@@ -33,8 +33,8 @@ CLIENT_SPECS = (
     McpClientSpec(id="claude_code", label="Claude Code", root_key="mcpServers"),
     McpClientSpec(id="gemini_cli", label="Gemini CLI", root_key="mcpServers"),
     McpClientSpec(id="qwen_code", label="Qwen Code", root_key="mcpServers"),
-    McpClientSpec(id="opencode", label="OpenCode", root_key="mcpServers"),
-    McpClientSpec(id="codex_cli", label="Codex CLI", root_key="mcpServers"),
+    McpClientSpec(id="opencode", label="OpenCode", root_key="mcp"),
+    McpClientSpec(id="codex_cli", label="Codex CLI", root_key="mcp_servers"),
     McpClientSpec(id="aider", label="Aider", root_key="mcp_servers"),
 )
 
@@ -105,14 +105,18 @@ def global_settings_path() -> Path:
     return Path.home() / ".openlmlib" / "config" / "settings.json"
 
 
-def build_server_entry(settings_path: Path) -> Dict[str, object]:
+def build_server_entry(settings_path: Path, client_id: str = "") -> Dict[str, object]:
     import sys
 
     resolved_settings = str(Path(settings_path).expanduser().resolve(strict=False))
-    return {
+    entry: Dict[str, object] = {
         "command": sys.executable,
         "args": ["-m", "openlmlib.mcp_server", "--settings", resolved_settings],
     }
+    # OpenCode requires a "type" field to distinguish local vs remote servers
+    if client_id == "opencode":
+        entry["type"] = "local"
+    return entry
 
 
 def client_config_path(
@@ -148,7 +152,8 @@ def client_config_path(
             return base / "Claude" / "claude_desktop_config.json"
         if platform == "darwin":
             return home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
-        return None
+        # Linux support for Claude Desktop
+        return home / ".config" / "Claude" / "claude_desktop_config.json"
 
     if client_id == "claude_code":
         # Global config: ~/.claude.json (primary) or ~/.claude/settings.json (fallback)
@@ -290,7 +295,7 @@ def install_client_config(
         payload = _prepare_config_root(client, payload)
         root = payload[client.root_key]
         assert isinstance(root, dict)
-        new_entry = build_server_entry(settings_path)
+        new_entry = build_server_entry(settings_path, client_id=client_id)
         changed = root.get(SERVER_NAME) != new_entry
         root[SERVER_NAME] = new_entry
 
@@ -324,7 +329,7 @@ def install_client_config(
                                 lines.append(f"{prefix}{key} = {'true' if value else 'false'}")
                             elif isinstance(value, (int, float)):
                                 lines.append(f"{prefix}{key} = {value}")
-                        return "\n".lines()
+                        return "\n".join(lines)
                     
                     tomli_w = None
                 
@@ -335,7 +340,7 @@ def install_client_config(
                     lines = []
                     lines.append("# OpenLMlib MCP Server Configuration")
                     lines.append("")
-                    lines.append("[mcpServers.openlmlib]")
+                    lines.append("[mcp_servers.openlmlib]")
                     lines.append(f'command = "{new_entry["command"]}"')
                     args_list = ', '.join(f'"{arg}"' for arg in new_entry["args"])
                     lines.append(f"args = [{args_list}]")

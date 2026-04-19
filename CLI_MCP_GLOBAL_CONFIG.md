@@ -173,8 +173,9 @@ qwen
 
 ```json
 {
-  "mcpServers": {
+  "mcp": {
     "openlmlib": {
+      "type": "local",
       "command": "python",
       "args": [
         "-m",
@@ -205,7 +206,7 @@ opencode
 **File**: `~/.codex/config.toml` (global)
 
 ```toml
-[mcpServers.openlmlib]
+[mcp_servers.openlmlib]
 command = "python"
 args = ["-m", "openlmlib.mcp_server", "--settings", "/path/to/settings.json"]
 ```
@@ -388,16 +389,16 @@ qwen
 # OpenLMlib MCP Server Configuration for Codex CLI
 # File: ~/.codex/config.toml
 
-[mcpServers.openlmlib]
+[mcp_servers.openlmlib]
 command = "python"
 args = ["-m", "openlmlib.mcp_server", "--settings", "/home/user/.openlmlib/config/settings.json"]
 
 # Optional: Environment variables
-[mcpServers.openlmlib.env]
+[mcp_servers.openlmlib.env]
 OPENLMLIB_SETTINGS = "/home/user/.openlmlib/config/settings.json"
 
 # Optional: Working directory
-[mcpServers.openlmlib.options]
+[mcp_servers.openlmlib.options]
 cwd = "/home/user/projects/my-project"
 ```
 
@@ -573,9 +574,9 @@ normalized = normalize_client_ids(["claude-code", "gemini_cli"])
 
 ## References
 
-- [Claude Code MCP Issues](https://github.com/anthropics/claude-code/issues/15797)
+- [Claude Code MCP Docs](https://docs.anthropic.com/en/docs/claude-code/mcp)
 - [Gemini CLI Configuration](https://google-gemini.github.io/gemini-cli/docs/get-started/configuration.html)
 - [Qwen Code MCP Settings](https://qwenlm.github.io/qwen-code-docs/en/users/configuration/settings/)
-- [OpenCode MCP Config](https://open-code.ai/en/docs/config)
-- [Codex CLI Config](https://www.runoob.com/codex/codex-config.html)
+- [OpenCode MCP Config](https://opencode.ai/docs/mcp-servers/)
+- [Codex CLI Config](https://platform.openai.com/docs/guides/tools-mcp)
 - [Aider MCP Server](https://github.com/danielscholl/aider-mcp-server)
