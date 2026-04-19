@@ -431,6 +431,46 @@ def list_sessions(
 
 
 @collab_mcp.tool()
+def collab_claim_task(session_id: str, agent_id: str, task_id: Optional[str] = None) -> Dict:
+    """Claim a pending task in a collaboration session.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - You are a worker looking for your next task
+    - You see pending tasks and want to take initiative
+    - The orchestrator has not assigned you work
+    
+    If task_id is provided, claims that specific task.
+    If task_id is omitted, claims the first available task from the earliest pending step.
+
+    PARAMETERS:
+    - session_id: Target session
+    - agent_id: Your agent ID
+    - task_id: Optional specific task to claim
+    """
+    try:
+        validate_session_id(session_id)
+        with _collab_connection() as (conn, sessions_dir):
+            _require_reader_access(conn, session_id, agent_id)
+            
+            # Need datetime for started_at
+            from datetime import datetime, timezone
+            started_at = datetime.now(timezone.utc).isoformat()
+            
+            claimed = collab_db.claim_task(conn, session_id, agent_id, started_at, task_id)
+            if not claimed:
+                return {
+                    "success": False,
+                    "error": "No pending tasks available to claim",
+                    "error_type": "no_tasks"
+                }
+                
+            return {
+                "success": True,
+                "claimed_task": claimed
+            }
+    except Exception as e:
+        return _handle_tool_error("collab_claim_task", e)
+@collab_mcp.tool()
 def get_session_state(session_id: str, agent_id: str) -> Dict:
     """Get the current state of a collaboration session - tasks, agents, and session state.
 

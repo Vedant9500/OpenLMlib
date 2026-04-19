@@ -17,6 +17,33 @@ from . import db
 from .message_bus import MessageBus
 from .artifact_store import ArtifactStore
 
+MODEL_PROFILES = {
+    "claude": {
+        "optimal_context_messages": 5,
+        "handoff_instructions": "Be thorough. Include caveats and confidence levels.",
+    },
+    "gpt": {
+        "optimal_context_messages": 5,
+        "handoff_instructions": "Be concise. Use numbered steps for actionable items.",
+    },
+    "gemini": {
+        "optimal_context_messages": 8,
+        "handoff_instructions": "Synthesize broadly. Connect findings to related areas.",
+    },
+    "default": {
+        "optimal_context_messages": 5,
+        "handoff_instructions": "Provide clear, structured findings.",
+    }
+}
+
+def _get_model_family(model_name: str) -> str:
+    """Detect the model family to apply the correct MODEL_PROFILE."""
+    name = model_name.lower()
+    if "claude" in name: return "claude"
+    if "gpt" in name or "o1" in name or "o3" in name: return "gpt"
+    if "gemini" in name: return "gemini"
+    return "default"
+
 
 class ContextCompiler:
     """Compiles session state into agent-specific context views."""
@@ -56,8 +83,20 @@ class ContextCompiler:
 
         summary = self.artifact_store.get_latest_summary(session_id)
 
+        agents = db.get_session_agents(self.conn, session_id)
+        
+        # Apply model-aware constraints
+        my_agent = next((a for a in agents if a["agent_id"] == agent_id), None)
+        model_name = my_agent["model"] if my_agent else "default"
+        family = _get_model_family(model_name)
+        profile = MODEL_PROFILES.get(family, MODEL_PROFILES["default"])
+        
+        # Override max_messages with optimal context depth if the default isn't explicitly changed
+        if max_messages == 5:
+            max_messages = profile["optimal_context_messages"]
+
         recent_messages = self.message_bus.tail(session_id, max_messages)
-        formatted_messages = self._format_messages(recent_messages, agent_id)
+        formatted_messages = self._format_messages(recent_messages, agent_id, family)
 
         tasks = db.get_session_tasks(self.conn, session_id)
         my_tasks = [t for t in tasks if t.get("assigned_to") == agent_id]
@@ -82,6 +121,9 @@ class ContextCompiler:
             for a in agents
             if a["status"] == "active"
         ]
+
+        # Injects model-specific handoff hints
+        model_instructions = f"MODEL-SPECIFIC HINTS: {profile['handoff_instructions']}"
 
         return {
             "session_info": {
@@ -108,6 +150,7 @@ class ContextCompiler:
             "role_instructions": self._role_instructions(
                 session_id, agent_id, agents
             ),
+            "model_instructions": model_instructions,
             "autonomous_instructions": self.autonomous_instructions(),
         }
 
@@ -127,6 +170,10 @@ class ContextCompiler:
 
         if context.get("role_instructions"):
             lines.append(context["role_instructions"])
+            lines.append("")
+
+        if context.get("model_instructions"):
+            lines.append(context["model_instructions"])
             lines.append("")
 
         if context.get("autonomous_instructions"):
@@ -327,7 +374,18 @@ class ContextCompiler:
             "- Keep looping until session status is 'completed' or 'terminated'."
         )
 
-    def _format_messages(self, messages: List[Dict], current_agent_id: str) -> List[str]:
+    def _translate_for_receiver(self, content: str, receiver_family: str) -> str:
+        """Inject minor framing to map cross-model outputs to the receiver's style."""
+        content_lower = content.lower()
+        if receiver_family == "claude" and "step" in content_lower and "\n1." in content:
+            return "[GPT-Style Step List]:\n" + content
+        if receiver_family == "gpt" and "however" in content_lower and "confidence" in content_lower:
+            return "[Claude-Style Analysis]:\n" + content
+        if receiver_family == "gemini" and "## summary" in content_lower:
+            return "[Structured Findings]:\n" + content
+        return content
+
+    def _format_messages(self, messages: List[Dict], current_agent_id: str, receiver_family: str = "default") -> List[str]:
         """Format messages with clear attribution for the current agent."""
         formatted = []
         for msg in messages:
@@ -349,6 +407,8 @@ class ContextCompiler:
             content = msg["content"]
             if len(content) > 500:
                 content = content[:497] + "..."
+
+            content = self._translate_for_receiver(content, receiver_family)
 
             line = f"{prefix} [{msg_type}] {content}"
 

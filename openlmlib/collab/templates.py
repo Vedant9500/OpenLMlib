@@ -27,10 +27,10 @@ TEMPLATES: Dict[str, Dict] = {
         },
         "plan": [
             {"step": 1, "task": "Literature review: Find and summarize key papers/sources", "assigned_to": "any"},
-            {"step": 2, "task": "Technical analysis: Deep-dive into the most important findings", "assigned_to": "any"},
-            {"step": 3, "task": "Comparative analysis: Compare approaches, methods, results", "assigned_to": "any"},
-            {"step": 4, "task": "Synthesis: Combine findings into a comprehensive report", "assigned_to": "orchestrator"},
-            {"step": 5, "task": "Review and validation: Check accuracy, identify gaps", "assigned_to": "any"},
+            {"step": 1, "task": "Technical analysis: Deep-dive into the most important findings", "assigned_to": "any"},
+            {"step": 1, "task": "Comparative analysis: Compare approaches, methods, results", "assigned_to": "any"},
+            {"step": 2, "task": "Synthesis: Combine findings into a comprehensive report", "assigned_to": "orchestrator"},
+            {"step": 3, "task": "Review and validation: Check accuracy, identify gaps", "assigned_to": "any"},
         ],
     },
     "code_review": {
@@ -45,10 +45,10 @@ TEMPLATES: Dict[str, Dict] = {
         },
         "plan": [
             {"step": 1, "task": "Architecture review: Evaluate design patterns, modularity, coupling", "assigned_to": "any"},
-            {"step": 2, "task": "Security audit: Identify vulnerabilities, input validation, auth issues", "assigned_to": "any"},
-            {"step": 3, "task": "Performance analysis: Identify bottlenecks, complexity issues, memory leaks", "assigned_to": "any"},
-            {"step": 4, "task": "Code quality: Style, readability, test coverage, documentation", "assigned_to": "any"},
-            {"step": 5, "task": "Consolidated report: Combine all findings with prioritized recommendations", "assigned_to": "orchestrator"},
+            {"step": 1, "task": "Security audit: Identify vulnerabilities, input validation, auth issues", "assigned_to": "any"},
+            {"step": 1, "task": "Performance analysis: Identify bottlenecks, complexity issues, memory leaks", "assigned_to": "any"},
+            {"step": 1, "task": "Code quality: Style, readability, test coverage, documentation", "assigned_to": "any"},
+            {"step": 2, "task": "Consolidated report: Combine all findings with prioritized recommendations", "assigned_to": "orchestrator"},
         ],
     },
     "market_analysis": {
@@ -63,9 +63,9 @@ TEMPLATES: Dict[str, Dict] = {
         },
         "plan": [
             {"step": 1, "task": "Market overview: Size, growth, trends, key drivers", "assigned_to": "any"},
-            {"step": 2, "task": "Competitor analysis: Key players, products, positioning, strengths/weaknesses", "assigned_to": "any"},
-            {"step": 3, "task": "Technology landscape: Emerging tech, adoption rates, disruption potential", "assigned_to": "any"},
-            {"step": 4, "task": "Opportunity identification: Gaps, white spaces, strategic recommendations", "assigned_to": "orchestrator"},
+            {"step": 1, "task": "Competitor analysis: Key players, products, positioning, strengths/weaknesses", "assigned_to": "any"},
+            {"step": 1, "task": "Technology landscape: Emerging tech, adoption rates, disruption potential", "assigned_to": "any"},
+            {"step": 2, "task": "Opportunity identification: Gaps, white spaces, strategic recommendations", "assigned_to": "orchestrator"},
         ],
     },
     "incident_investigation": {
@@ -80,9 +80,9 @@ TEMPLATES: Dict[str, Dict] = {
         },
         "plan": [
             {"step": 1, "task": "Timeline reconstruction: What happened, when, in what order", "assigned_to": "any"},
-            {"step": 2, "task": "Root cause analysis: Identify the underlying cause(s)", "assigned_to": "any"},
-            {"step": 3, "task": "Impact assessment: What was affected, scope, severity", "assigned_to": "any"},
-            {"step": 4, "task": "Remediation plan: Immediate fixes and long-term prevention", "assigned_to": "orchestrator"},
+            {"step": 1, "task": "Root cause analysis: Identify the underlying cause(s)", "assigned_to": "any"},
+            {"step": 1, "task": "Impact assessment: What was affected, scope, severity", "assigned_to": "any"},
+            {"step": 2, "task": "Remediation plan: Immediate fixes and long-term prevention", "assigned_to": "orchestrator"},
         ],
     },
     "literature_review": {
@@ -98,10 +98,10 @@ TEMPLATES: Dict[str, Dict] = {
         "plan": [
             {"step": 1, "task": "Search strategy: Define search terms, databases, inclusion criteria", "assigned_to": "orchestrator"},
             {"step": 2, "task": "Paper collection: Gather relevant papers from multiple sources", "assigned_to": "any"},
-            {"step": 3, "task": "Quality assessment: Evaluate methodology, rigor, relevance", "assigned_to": "any"},
-            {"step": 4, "task": "Thematic analysis: Group findings by theme, identify patterns", "assigned_to": "any"},
-            {"step": 5, "task": "Gap analysis: Identify what's missing, open questions", "assigned_to": "any"},
-            {"step": 6, "task": "Write review: Comprehensive literature review document", "assigned_to": "orchestrator"},
+            {"step": 2, "task": "Quality assessment: Evaluate methodology, rigor, relevance", "assigned_to": "any"},
+            {"step": 2, "task": "Thematic analysis: Group findings by theme, identify patterns", "assigned_to": "any"},
+            {"step": 3, "task": "Gap analysis: Identify what's missing, open questions", "assigned_to": "any"},
+            {"step": 4, "task": "Write review: Comprehensive literature review document", "assigned_to": "orchestrator"},
         ],
     },
 }

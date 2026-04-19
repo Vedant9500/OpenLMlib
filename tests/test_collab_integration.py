@@ -182,7 +182,7 @@ class SimulatedAgent:
             self.send_message(
                 session_id=session_id,
                 msg_type="result",
-                content=f"Completed task: {task['description']}",
+                content=f"## Summary\nCompleted task: {task['description']}\n\n## Key Facts\n- Fact 1\n- Fact 2",
                 metadata={"task_id": task["task_id"], "artifact_id": artifact["artifact_id"]},
             )
 
@@ -334,7 +334,7 @@ class TestSimulatedAgentSession(unittest.TestCase):
         agent3 = SimulatedAgent(w2["agent_id"], "worker-2", "worker", self.conn, self.sessions_dir)
 
         agent1.send_message(session_id, "task", "Research topic A", to_agent=agent2.agent_id)
-        agent2.send_message(session_id, "result", "Here are findings on topic A")
+        agent2.send_message(session_id, "result", "## Summary\nHere are findings on topic A\n## Key Facts\n- A is cool")
         agent3.send_message(session_id, "question", "Can you elaborate on point 2?")
 
         ctx = agent3.read_context(session_id)

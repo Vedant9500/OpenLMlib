@@ -616,6 +616,48 @@ def update_task_status(
             )
 
 
+def claim_task(
+    conn: sqlite3.Connection,
+    session_id: str,
+    agent_id: str,
+    started_at: str,
+    task_id: Optional[str] = None,
+) -> Optional[Dict]:
+    """Atomically claim an unassigned pending task.
+    
+    If task_id is specified, claims that specific task if available.
+    Otherwise, claims the first available task grouped by step.
+    
+    Returns the claimed task dict or None if no tasks are available.
+    """
+    with conn:
+        if task_id:
+            # Claim specific task
+            cursor = conn.execute(
+                "UPDATE tasks SET assigned_to = ?, status = 'in_progress', started_at = ? "
+                "WHERE task_id = ? AND session_id = ? AND "
+                "(assigned_to IS NULL OR assigned_to = 'any') AND status = 'pending' "
+                "RETURNING *",
+                (agent_id, started_at, task_id, session_id)
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+        else:
+            # Claim first available (lowest step_num)
+            cursor = conn.execute(
+                "UPDATE tasks SET assigned_to = ?, status = 'in_progress', started_at = ? "
+                "WHERE task_id = ( "
+                "    SELECT task_id FROM tasks "
+                "    WHERE session_id = ? AND (assigned_to IS NULL OR assigned_to = 'any') "
+                "    AND status = 'pending' "
+                "    ORDER BY step_num ASC LIMIT 1 "
+                ") RETURNING *",
+                (agent_id, started_at, session_id)
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+
 def get_session_tasks(
     conn: sqlite3.Connection,
     session_id: str,

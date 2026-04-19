@@ -320,7 +320,7 @@ class TestMessageBus(unittest.TestCase):
             session_id="sess_001",
             from_agent="agent_002",
             msg_type="result",
-            content="Found 5 papers",
+            content="## Summary\nFound 5 papers\n\n## Key Facts\nNone",
             created_at="2026-04-05T10:02:00Z",
         )
 
@@ -388,20 +388,20 @@ class TestMessageBus(unittest.TestCase):
             session_id="sess_001",
             from_agent="agent_001",
             msg_type="result",
-            content="Quantum error correction advances",
+            content="## Summary\nQuantum error correction advances\n## Key Facts\n- fact 1",
             created_at="2026-04-05T10:01:00Z",
         )
         self.bus.send(
             session_id="sess_001",
             from_agent="agent_001",
             msg_type="result",
-            content="Market analysis report",
+            content="## Summary\nMarket analysis report\n## Key Facts\n- fact 2",
             created_at="2026-04-05T10:02:00Z",
         )
 
         tail = self.bus.tail("sess_001", 1)
         self.assertEqual(len(tail), 1)
-        self.assertEqual(tail[0]["content"], "Market analysis report")
+        self.assertIn("Market analysis report", tail[0]["content"])
 
         grep = self.bus.grep("sess_001", "quantum")
         self.assertEqual(len(grep), 1)
@@ -564,7 +564,7 @@ class TestContextCompiler(unittest.TestCase):
             session_id="sess_001",
             from_agent="agent_codex",
             msg_type="result",
-            content="Found 12 papers on the topic",
+            content="## Summary\nFound 12 papers on the topic\n\n## Key Facts\n- The topic is hot.",
             created_at="2026-04-05T10:02:00Z",
             to_agent="agent_opus_001",
             metadata={"artifact_refs": ["art_001"]},
@@ -820,7 +820,7 @@ class TestSessionCompactor(unittest.TestCase):
                 session_id="sess_001",
                 from_agent="agent_001",
                 msg_type="task" if i == 0 else "result",
-                content=f"Message {i}: {'Start research' if i == 0 else f'Found {i * 3} papers'}",
+                content=f"Message {i}: Start research" if i == 0 else f"## Summary\nFound {i * 3} papers\n## Key Facts\n- fact {i}",
                 created_at=f"2026-04-05T10:0{i}:00Z",
             )
 
@@ -1056,7 +1056,7 @@ class TestCollabMCP(unittest.TestCase):
         self.collab_mcp_module.send_message(
             session_id=create_resp["session_id"],
             msg_type="result",
-            content="Result message",
+            content="## Summary\nResult message\n## Key Facts\n- fact 1",
             from_agent=join_resp["agent_id"],
         )
 
@@ -1073,7 +1073,7 @@ class TestCollabMCP(unittest.TestCase):
         )
         contents = [msg["content"] for msg in unfiltered["messages"]]
         self.assertIn("Task message", contents)
-        self.assertIn("Result message", contents)
+        self.assertIn("## Summary\nResult message\n## Key Facts\n- fact 1", contents)
 
     def test_send_message_sanitizes_content(self):
         create_resp = self.collab_mcp_module.create_session(

@@ -89,6 +89,14 @@ class MessageBus:
                 f"Invalid message type: {msg_type}. Allowed: {sorted(VALID_MESSAGE_TYPES)}"
             )
 
+        if msg_type == "result" and from_agent != "system":
+            content_lower = content.lower() if content else ""
+            if "summary" not in content_lower or "key facts" not in content_lower:
+                raise ValueError(
+                    "Result messages must follow the structured handoff template containing at least 'Summary' and 'Key Facts' sections. "
+                    "This enforces artifact-first communication between agents."
+                )
+
         if content is None:
             content = ""
         elif not isinstance(content, str):
