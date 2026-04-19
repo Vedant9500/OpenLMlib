@@ -108,6 +108,17 @@ CREATE TABLE IF NOT EXISTS session_state (
     updated_by TEXT
 );
 
+CREATE TABLE IF NOT EXISTS performance_metrics (
+    metric_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL REFERENCES sessions(session_id),
+    task_id TEXT REFERENCES tasks(task_id),
+    agent_id TEXT NOT NULL,
+    model_family TEXT NOT NULL,
+    latency_ms INTEGER NOT NULL,
+    is_success BOOLEAN NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, seq);
 CREATE INDEX IF NOT EXISTS idx_messages_type ON messages(msg_type);
 CREATE INDEX IF NOT EXISTS idx_messages_from ON messages(from_agent);
@@ -118,7 +129,32 @@ CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_artifacts_session ON artifacts(session_id);
 CREATE INDEX IF NOT EXISTS idx_artifacts_created_by ON artifacts(created_by);
+CREATE INDEX IF NOT EXISTS idx_perf_session ON performance_metrics(session_id);
 """
+
+import threading
+_tl = threading.local()
+
+
+def get_thread_connection(db_path: Path) -> sqlite3.Connection:
+    """Get or create a thread-local SQLite connection for the given path."""
+    if not hasattr(_tl, "conns"):
+        _tl.conns = {}
+    path_str = str(db_path)
+    if path_str not in _tl.conns:
+        _tl.conns[path_str] = connect_collab_db(db_path)
+    return _tl.conns[path_str]
+
+
+def close_thread_connections() -> None:
+    """Close all thread-local connections to allow safe file deletion on Windows."""
+    if hasattr(_tl, "conns"):
+        for conn in _tl.conns.values():
+            try:
+                conn.close()
+            except Exception:
+                pass
+        _tl.conns.clear()
 
 
 def connect_collab_db(db_path: Path) -> sqlite3.Connection:
@@ -140,6 +176,28 @@ def init_collab_db(conn: sqlite3.Connection) -> None:
     """Initialize the collab sessions schema."""
     conn.executescript(COLLAB_SCHEMA)
     conn.commit()
+
+
+def log_task_performance(
+    conn: sqlite3.Connection,
+    session_id: str,
+    task_id: str,
+    agent_id: str,
+    model_family: str,
+    latency_ms: int,
+    is_success: bool,
+    created_at: str,
+) -> None:
+    """Log performance metrics for a completed task."""
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO performance_metrics 
+            (session_id, task_id, agent_id, model_family, latency_ms, is_success, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (session_id, task_id, agent_id, model_family, latency_ms, is_success, created_at),
+        )
 
 
 def _json_dump(value) -> str:

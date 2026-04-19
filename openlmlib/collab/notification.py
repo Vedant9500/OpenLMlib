@@ -162,6 +162,7 @@ def wait_for_notification(
     # Negative timeout = wait forever (unlikely but supported)
     deadline = None if timeout < 0 else time.monotonic() + timeout
 
+    current_interval = min(0.05, poll_interval)
     while True:
         notification = read_notification(sessions_dir, session_id)
         if notification is not None and notification.get("seq", -1) > last_seq:
@@ -170,7 +171,7 @@ def wait_for_notification(
         if deadline is not None and time.monotonic() >= deadline:
             return None
 
-        sleep_for = poll_interval
+        sleep_for = current_interval
         if deadline is not None:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -178,3 +179,4 @@ def wait_for_notification(
             sleep_for = min(sleep_for, max(0.01, remaining))
 
         time.sleep(sleep_for)
+        current_interval = min(current_interval * 1.5, poll_interval)

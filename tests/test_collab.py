@@ -1014,6 +1014,8 @@ class TestCollabMCP(unittest.TestCase):
         self.collab_mcp_module = collab_mcp_module
 
     def tearDown(self):
+        from openlmlib.collab.db import close_thread_connections
+        close_thread_connections()
         if self.prev_settings is None:
             os.environ.pop("OPENLMLIB_SETTINGS", None)
         else:

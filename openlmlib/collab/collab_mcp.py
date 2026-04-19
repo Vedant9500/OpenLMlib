@@ -138,23 +138,21 @@ def _collab_connection():
     sessions_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        conn = connect_collab_db(db_path)
+        from .db import get_thread_connection
+        conn = get_thread_connection(db_path)
     except Exception as e:
         raise DatabaseError(f"Failed to connect to collab database: {e}")
 
-    try:
-        existing = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'"
-        ).fetchone()
-        if existing is None:
-            try:
-                init_collab_db(conn)
-                logger.info("Initialized collab database schema at %s", db_path)
-            except Exception as e:
-                raise DatabaseError(f"Failed to initialize collab database: {e}")
-        yield conn, sessions_dir
-    finally:
-        conn.close()
+    existing = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'"
+    ).fetchone()
+    if existing is None:
+        try:
+            init_collab_db(conn)
+            logger.info("Initialized collab database schema at %s", db_path)
+        except Exception as e:
+            raise DatabaseError(f"Failed to initialize collab database: {e}")
+    yield conn, sessions_dir
 
 
 def _get_collab_connection():
@@ -495,11 +493,14 @@ def get_session_state(session_id: str, agent_id: str) -> Dict:
             tasks = collab_db.get_session_tasks(conn, session_id)
             agents = collab_db.get_session_agents(conn, session_id)
 
+            pending_count = sum(1 for t in tasks if t.get("status") == "pending" and t.get("assigned_to") in (None, "any"))
+
             return {
                 "session": session,
                 "state": state["state"] if state else {},
                 "tasks": tasks,
                 "agents": agents,
+                "queue_depth": pending_count,
             }
     except Exception as e:
         return _handle_tool_error("get_session_state", e)
@@ -628,6 +629,44 @@ def send_message(
                 metadata=metadata,
                 created_at=now,
             )
+
+            # Performance tracking hook
+            if msg_type == "complete" and metadata and "task_id" in metadata:
+                task_id = metadata["task_id"]
+                # Mark DB status
+                from .db import update_task_status, log_task_performance, get_session_tasks
+                update_task_status(conn, task_id, "completed", completed_at=now)
+                
+                # Fetch task started_at to compute latency
+                tasks = get_session_tasks(conn, session_id)
+                task = next((t for t in tasks if t["task_id"] == task_id), None)
+                latency_ms = 0
+                if task and task.get("started_at"):
+                    try:
+                        start_ts = datetime.fromisoformat(task["started_at"].replace("Z", "+00:00")).timestamp()
+                        end_ts = datetime.fromisoformat(now.replace("Z", "+00:00")).timestamp()
+                        latency_ms = int((end_ts - start_ts) * 1000)
+                    except ValueError:
+                        pass
+                
+                # Extract model from agents table
+                actor_model = "default"
+                if from_agent:
+                    from .context_compiler import _get_model_family
+                    row = conn.execute("SELECT model FROM agents WHERE session_id = ? AND agent_id = ?", (session_id, from_agent)).fetchone()
+                    if row:
+                        actor_model = _get_model_family(row["model"])
+
+                log_task_performance(
+                    conn=conn,
+                    session_id=session_id,
+                    task_id=task_id,
+                    agent_id=from_agent,
+                    model_family=actor_model,
+                    latency_ms=latency_ms,
+                    is_success=True,
+                    created_at=now,
+                )
 
             # Write cross-process notification so other MCP instances wake up
             if not write_notification(

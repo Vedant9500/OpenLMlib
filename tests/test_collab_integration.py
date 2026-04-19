@@ -212,6 +212,8 @@ class TestSimulatedAgentSession(unittest.TestCase):
 
     def tearDown(self):
         self.conn.close()
+        from openlmlib.collab.db import close_thread_connections
+        close_thread_connections()
         self.tmpdir.cleanup()
 
     def test_full_session_with_orchestrator_and_two_workers(self):
@@ -382,6 +384,8 @@ class TestConcurrentAgentWrites(unittest.TestCase):
 
     def tearDown(self):
         self.conn.close()
+        from openlmlib.collab.db import close_thread_connections
+        close_thread_connections()
         self.tmpdir.cleanup()
 
     def test_concurrent_message_writes(self):
@@ -484,6 +488,8 @@ class TestSecurityHardening(unittest.TestCase):
 
     def tearDown(self):
         self.conn.close()
+        from openlmlib.collab.db import close_thread_connections
+        close_thread_connections()
         self.tmpdir.cleanup()
 
     def test_session_not_found_raises_custom_exception(self):
@@ -621,6 +627,8 @@ class TestSessionCompactionIntegration(unittest.TestCase):
 
     def tearDown(self):
         self.conn.close()
+        from openlmlib.collab.db import close_thread_connections
+        close_thread_connections()
         self.tmpdir.cleanup()
 
     def test_auto_compaction_during_session(self):
@@ -680,6 +688,8 @@ class TestErrorRecovery(unittest.TestCase):
 
     def tearDown(self):
         self.conn.close()
+        from openlmlib.collab.db import close_thread_connections
+        close_thread_connections()
         self.tmpdir.cleanup()
 
     def test_corrupted_offset_file_recovers_gracefully(self):

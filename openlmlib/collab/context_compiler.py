@@ -99,8 +99,16 @@ class ContextCompiler:
         formatted_messages = self._format_messages(recent_messages, agent_id, family)
 
         tasks = db.get_session_tasks(self.conn, session_id)
-        my_tasks = [t for t in tasks if t.get("assigned_to") == agent_id]
-        pending_tasks = [t for t in tasks if t.get("status") == "pending" and t.get("assigned_to") in (None, "any")]
+        role = "worker"
+        if my_agent:
+            role = my_agent["role"]
+            
+        if role in ("orchestrator", "observer"):
+            my_tasks = tasks
+            pending_tasks = [t for t in tasks if t.get("status") == "pending" and t.get("assigned_to") in (None, "any")]
+        else:
+            my_tasks = [t for t in tasks if t.get("assigned_to") == agent_id]
+            pending_tasks = [t for t in tasks if t.get("status") == "pending" and t.get("assigned_to") in (None, "any")]
 
         artifacts = self.artifact_store.list_artifacts(session_id)
         artifact_refs = [
@@ -386,30 +394,35 @@ class ContextCompiler:
         return content
 
     def _format_messages(self, messages: List[Dict], current_agent_id: str, receiver_family: str = "default") -> List[str]:
-        """Format messages with clear attribution for the current agent."""
+        """Format messages with clear attribution for the current agent and staged loading."""
         formatted = []
-        for msg in messages:
+        total_msgs = len(messages)
+        full_text_cutoff = max(0, total_msgs - 5)  # Keep last 5 messages full
+
+        for i, msg in enumerate(messages):
             from_label = msg["from_agent"]
             to_label = msg.get("to_agent") or "all"
             msg_type = msg["msg_type"]
             timestamp = msg.get("created_at", "")
-            # Extract time portion for compact display
+            
             if "T" in timestamp:
                 time_part = timestamp.split("T")[1][:8]  # HH:MM:SS
             else:
                 time_part = timestamp
 
-            if from_label == "system":
-                prefix = f"[{time_part}] [system]"
-            else:
-                prefix = f"[{time_part}] [{from_label} → {to_label}]"
+            prefix = f"[{time_part}] [system]" if from_label == "system" else f"[{time_part}] [{from_label} → {to_label}]"
 
             content = msg["content"]
-            if len(content) > 500:
-                content = content[:497] + "..."
+            
+            # Staged Content Loading: Truncate older messages severely
+            if i < full_text_cutoff:
+                if len(content) > 100:
+                    content = content[:97] + "...(truncated)"
+            else:
+                if len(content) > 500:
+                    content = content[:497] + "..."
 
             content = self._translate_for_receiver(content, receiver_family)
-
             line = f"{prefix} [{msg_type}] {content}"
 
             metadata = msg.get("metadata", {})
