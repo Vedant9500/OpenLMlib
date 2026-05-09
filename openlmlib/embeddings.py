@@ -4,8 +4,15 @@ from pathlib import Path
 from typing import Iterable, List, Optional
 import hashlib
 import pickle
+import os
 
 import numpy as np
+import logging
+
+# Quiet sentence-transformers logger to avoid noisy HTTP checks and init logs
+logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+logging.getLogger("transformers").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 class EmbeddingCache:
@@ -37,8 +44,14 @@ class EmbeddingCache:
         if not self._loaded:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("wb") as handle:
-            pickle.dump(self._cache, handle)
+        from .file_lock import interprocess_lock
+
+        lock_path = self.path.with_suffix(self.path.suffix + ".lock")
+        with interprocess_lock(lock_path, timeout_sec=60.0):
+            tmp_path = self.path.with_suffix(self.path.suffix + f".{os.getpid()}.tmp")
+            with tmp_path.open("wb") as handle:
+                pickle.dump(self._cache, handle)
+            os.replace(tmp_path, self.path)
 
 
 def _cache_key(model_name: str, text: str) -> str:
@@ -60,7 +73,14 @@ class SentenceTransformerEmbedder:
                 "sentence-transformers is required for embeddings. Install it with 'pip install sentence-transformers'."
             ) from exc
 
-        self._model = SentenceTransformer(model_name)
+        # Try to load from local cache first to avoid slow Hugging Face Hub network checks.
+        # This can save 2-5 seconds per cold start.
+        try:
+            self._model = SentenceTransformer(model_name, local_files_only=True)
+        except Exception:
+            # Fallback to normal load if not cached or if local_files_only fails
+            self._model = SentenceTransformer(model_name)
+        
         self._cache = cache
         self._normalize = normalize
         self.model_name = model_name

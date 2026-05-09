@@ -6,6 +6,7 @@ from typing import Iterable, List, Tuple
 import json
 import math
 import pickle
+import os
 
 import numpy as np
 
@@ -198,7 +199,9 @@ def load_meta(meta_path: Path) -> VectorStoreMeta:
 
 def save_meta(meta_path: Path, meta: VectorStoreMeta) -> None:
     meta_path.parent.mkdir(parents=True, exist_ok=True)
-    meta_path.write_text(json.dumps(meta.to_dict(), indent=2), encoding="utf-8")
+    tmp_path = meta_path.with_suffix(meta_path.suffix + f".{os.getpid()}.tmp")
+    tmp_path.write_text(json.dumps(meta.to_dict(), indent=2), encoding="utf-8")
+    os.replace(tmp_path, meta_path)
 
 
 def create_vector_store(dim: int, metric: str, prefer_faiss: bool = True) -> VectorStore:
@@ -228,11 +231,30 @@ def load_vector_store(index_path: Path, meta_path: Path) -> VectorStore:
 
 
 def save_vector_store(store: VectorStore, index_path: Path, meta_path: Path) -> None:
-    store.save(index_path)
-    meta = VectorStoreMeta(
-        backend=store.backend,
-        dim=store.dim,
-        metric=store.metric,
-        index_path=str(index_path),
-    )
-    save_meta(meta_path, meta)
+    from .file_lock import interprocess_lock
+
+    lock_path = meta_path.with_suffix(meta_path.suffix + ".lock")
+    with interprocess_lock(lock_path, timeout_sec=60.0):
+        if meta_path.exists():
+            try:
+                existing_meta = load_meta(meta_path)
+                if existing_meta.backend == store.backend and existing_meta.metric == store.metric:
+                    if existing_meta.backend == "numpy" and index_path.exists():
+                        try:
+                            existing_store = NumpyVectorStore.load(index_path, existing_meta.metric)
+                            if getattr(store, "_vectors", None) is not None:
+                                existing_store._vectors.update(store._vectors)
+                                store = existing_store
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+        store.save(index_path)
+        meta = VectorStoreMeta(
+            backend=store.backend,
+            dim=store.dim,
+            metric=store.metric,
+            index_path=str(index_path),
+        )
+        save_meta(meta_path, meta)

@@ -67,6 +67,10 @@ from .notification import wait_for_notification, clear_notification
 
 logger = logging.getLogger(__name__)
 
+# FastMCP output schema creation trips on bare typing.Dict return annotations.
+# Use builtin dict for those tool return types at runtime.
+Dict = dict  # type: ignore[assignment]
+
 # Cached settings resolution to avoid re-parsing settings.json on every call
 _cached_paths: Optional[tuple] = None
 _cached_paths_mtime: float = 0.0

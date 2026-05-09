@@ -9,13 +9,13 @@ from mcp.server.fastmcp import FastMCP
 
 from .library import (
     add_finding,
-    delete_finding,
+    delete_finding as lib_delete_finding,
     evaluate_dataset,
-    get_finding,
-    health,
+    get_finding as lib_get_finding,
+    health as lib_health,
     init_library,
-    list_findings,
-    retrieve_findings,
+    list_findings as lib_list_findings,
+    retrieve_findings as lib_retrieve_findings,
     retrieve_prompt_context,
     search_fts,
 )
@@ -704,13 +704,17 @@ def _ensure_runtime() -> None:
         pass
 
 
-def _ensure_runtime_background() -> None:
+def _ensure_runtime_background() -> Optional[object]:
     """Pre-initialize the runtime in a background thread.
 
-    This allows the MCP server to respond to the `initialize` request
-    immediately while the embedding model loads concurrently.
+    Enabled by default to avoid the 5-10s cold-start penalty on the first 
+    tool call. Can be disabled by setting OPENLMLIB_MCP_PREWARM=0.
     """
+    if os.environ.get("OPENLMLIB_MCP_PREWARM", "1") == "0":
+        return None
+
     import threading
+
     t = threading.Thread(target=_ensure_runtime, daemon=True, name="openlmlib-runtime-prewarm")
     t.start()
     return t
@@ -911,7 +915,7 @@ def list_findings(limit: int = 50, offset: int = 0) -> dict:
     - limit: Max findings to return (default: 50, max: 200)
     - offset: Offset for pagination (default: 0)
     """
-    return list_findings(_settings_path(), limit=limit, offset=offset)
+    return lib_list_findings(_settings_path(), limit=limit, offset=offset)
 
 
 @mcp.tool()
@@ -925,7 +929,7 @@ def get_finding(finding_id: str) -> dict:
 
     Use search_findings first to find the ID if you don't have it.
     """
-    return get_finding(_settings_path(), finding_id)
+    return lib_get_finding(_settings_path(), finding_id)
 
 
 @mcp.tool()
@@ -989,7 +993,7 @@ def retrieve_findings(
     ADVANCED: semantic_k and lexical_k control how many candidates are fetched
     before reranking. Usually not needed - use final_k instead.
     """
-    return retrieve_findings(
+    return lib_retrieve_findings(
         settings_path=_settings_path(),
         query=query,
         project=project,
@@ -1129,7 +1133,7 @@ def delete_finding(finding_id: str, confirm: bool = False) -> dict:
     - finding_id: ID of the finding to delete (required)
     - confirm: Must be True to delete (safety gate)
     """
-    return delete_finding(_settings_path(), finding_id, confirm=confirm)
+    return lib_delete_finding(_settings_path(), finding_id, confirm=confirm)
 
 
 @mcp.tool()
@@ -1143,7 +1147,7 @@ def health() -> dict:
 
     Returns database size, finding count, vector index status.
     """
-    return health(_settings_path())
+    return lib_health(_settings_path())
 
 
 @mcp.tool()
@@ -1727,8 +1731,8 @@ def main() -> None:
     # This avoids the heavy collab module import penalty during Python startup.
     _register_collab_tools()
 
-    # Start runtime pre-warming in background so the server can respond to
-    # `initialize` immediately. The embedding model loads concurrently.
+    # Start runtime pre-warming in background if explicitly enabled.
+    # This avoids thread-init deadlocks during model load on some setups.
     _ensure_runtime_background()
 
     mcp.run()

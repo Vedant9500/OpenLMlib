@@ -360,6 +360,16 @@ def add_finding(
             "message": "Set confirm=true to add a finding.",
         }
 
+    duplicate_warning = _check_duplicate_warning(similar_findings, claim) if similar_findings else None
+    if duplicate_warning:
+        return {
+            "status": "duplicate_suggestion",
+            "message": duplicate_warning["message"],
+            "existing_finding_id": duplicate_warning["existing_finding_id"],
+            "similarity_rank": duplicate_warning["similarity_rank"],
+            "claim_preview": duplicate_warning["claim_preview"],
+        }
+
     t0 = monotonic()
     runtime = get_runtime(settings_path)
     t1 = monotonic()
@@ -399,6 +409,10 @@ def add_finding(
     )
 
     t2 = monotonic()
+    # Pre-encode embeddings outside the lock to avoid blocking other operations
+    if embedder is not None:
+        gate._encode_claim_evidence(claim, evidence)
+
     with runtime.write_lock:
         issues = gate.validate(claim, evidence, reasoning, confidence)
     t3 = monotonic()
