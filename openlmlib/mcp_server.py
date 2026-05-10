@@ -340,7 +340,7 @@ def _register_memory_tools() -> None:
 
     @mcp.tool()
     def get_observations(ids: TypingList[str]) -> dict:
-        """Layer 3: Get full details for specific memory IDs (~750 tokens/result). Most expensive.
+        """[DEPRECATED] Layer 3: Get full details for specific memory IDs. Use query_memory instead.
 
         AUTOMATIC TRIGGERS - Call this when:
         - You have specific observation IDs and need complete details
@@ -362,6 +362,68 @@ def _register_memory_tools() -> None:
             "observations": [r.__dict__ for r in results],
             "count": len(results),
             "estimated_tokens": len(results) * 750
+        }
+
+    @mcp.tool()
+    def query_memory(
+        query: str,
+        limit: int = 20,
+        filters: Optional[dict] = None
+    ) -> dict:
+        """Adaptive auto-expanding retriever for memory. REPLACES search_memory.
+
+        AUTOMATIC TRIGGERS - Call this when:
+        - You need to search for observations from past sessions
+        - You want to retrieve context about a specific topic from memory
+
+        This tool automatically performs a 3-layer progressive retrieval in a single step.
+        It runs a fast search, expands high-confidence hits into full observations,
+        and provides chronological context for the periphery.
+
+        PARAMETERS:
+        - query: Search query
+        - limit: Max results to fetch internally (default: 20)
+        - filters: Optional filters like {"tool_name": "web_search", "session_id": "..."}
+        """
+        state = _get_memory_state()
+        retriever = state["retriever"]
+
+        # Layer 1: Fast metadata search
+        layer1_results = retriever.layer1_search_index(query, limit, filters)
+        if not layer1_results:
+            return {
+                "query": query,
+                "message": "No relevant memories found.",
+                "estimated_tokens": 15
+            }
+
+        # Adaptive Expansion: Expand top hits with high confidence
+        core_ids = [r.id for r in layer1_results[:3] if getattr(r, 'confidence', 0.0) > 0.6]
+        periphery_ids = [r.id for r in layer1_results[3:8]]
+
+        # If no high confidence hits, just expand the top 1
+        if not core_ids and layer1_results:
+            core_ids = [layer1_results[0].id]
+
+        core_observations = []
+        if core_ids:
+            # Layer 3: Full details for the core
+            core_observations = retriever.layer3_full_details(core_ids)
+
+        periphery_timeline = []
+        if periphery_ids:
+            # Layer 2: Chronological context for the periphery
+            periphery_timeline = retriever.layer2_timeline(periphery_ids, window="5m")
+
+        estimated_tokens = (len(core_observations) * 750) + (len(periphery_timeline) * 200)
+
+        return {
+            "query": query,
+            "core_observations": [r.__dict__ for r in core_observations],
+            "periphery_timeline": [r.__dict__ for r in periphery_timeline],
+            "total_hits_found": len(layer1_results),
+            "estimated_tokens": estimated_tokens,
+            "message": f"Expanded {len(core_observations)} core memories and {len(periphery_timeline)} peripheral memories."
         }
 
     @mcp.tool()
@@ -1068,47 +1130,35 @@ def search_knowledge(query: str, limit: int = 10) -> dict:
 
     Returns combined results from both FTS keyword search and semantic retrieval.
     """
-    # Run both keyword and semantic search
-    keyword_results = search_fts(_settings_path(), query, limit=limit)
-    semantic_results = None
+    # retrieve_findings already performs hybrid search (semantic + FTS) internally
+    # with proper scoring and deduplication (see openlmlib/retrieval.py)
     try:
-        semantic_results = retrieve_findings(
+        result = retrieve_findings(
             _settings_path(),
             query=query,
             final_k=limit,
         )
+        items = result.get("items", [])
+        return {
+            "status": "ok",
+            "query": query,
+            "items": items,
+            "total_found": len(items),
+            "source": "hybrid",
+            "message": f"Found {len(items)} findings using optimized hybrid search"
+        }
     except Exception:
-        pass  # If semantic search fails, fall back to keyword only
-
-    # Merge and deduplicate results
-    all_items = []
-    seen_ids = set()
-
-    # Add keyword results first (higher precision for exact matches)
-    for item in keyword_results.get("items", []):
-        item_id = item.get("id")
-        if item_id and item_id not in seen_ids:
-            item["source"] = "keyword"
-            all_items.append(item)
-            seen_ids.add(item_id)
-
-    # Add semantic results (better for concept matching)
-    for item in (semantic_results.get("items", []) if semantic_results else []):
-        item_id = item.get("id")
-        if item_id and item_id not in seen_ids:
-            item["source"] = "semantic"
-            all_items.append(item)
-            seen_ids.add(item_id)
-
-    return {
-        "status": "ok",
-        "query": query,
-        "items": all_items[:limit],
-        "total_found": len(all_items),
-        "keyword_count": keyword_results.get("count", 0),
-        "semantic_count": semantic_results.get("meta", {}).get("total", 0) if semantic_results else 0,
-        "message": f"Found {len(all_items)} unique findings from combined keyword and semantic search"
-    }
+        # Fall back to keyword only if semantic engine fails
+        keyword_results = search_fts(_settings_path(), query, limit=limit)
+        items = keyword_results.get("items", [])
+        return {
+            "status": "ok",
+            "query": query,
+            "items": items,
+            "total_found": len(items),
+            "source": "keyword_fallback",
+            "message": f"Found {len(items)} findings using keyword fallback"
+        }
 
 
 @mcp.tool()
@@ -1203,12 +1253,9 @@ def start_research(
     # Step 1: Start session and inject past context
     session_result = None
     try:
-        session_mgr_for_workflow = __import__('openlmlib.memory', fromlist=['SessionManager']).SessionManager(
-            __import__('openlmlib.memory', fromlist=['MemoryStorage']).MemoryStorage(
-                get_runtime(_settings_path()).conn
-            )
-        )
-        session_result = session_mgr_for_workflow.on_session_start(session_id, user_id, topic)
+        state = _get_memory_state()
+        session_mgr = state["session_mgr"]
+        session_result = session_mgr.on_session_start(session_id, user_id, topic)
     except Exception:
         pass  # Session may already exist - continue anyway
 
@@ -1257,11 +1304,9 @@ def end_session(
     # Step 1: End session and generate summary
     end_result = None
     try:
-        from .memory import SessionManager, MemoryStorage
-        runtime = get_runtime(_settings_path())
-        storage = MemoryStorage(runtime.conn)
-        session_mgr_end = SessionManager(storage)
-        end_result = session_mgr_end.on_session_end(session_id)
+        state = _get_memory_state()
+        session_mgr = state["session_mgr"]
+        end_result = session_mgr.on_session_end(session_id)
     except Exception as e:
         return {
             "session_id": session_id,

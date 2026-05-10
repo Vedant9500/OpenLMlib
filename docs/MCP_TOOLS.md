@@ -285,8 +285,27 @@ log_observation(
 
 Three-layer disclosure system for token-efficient memory retrieval.
 
-#### `search_memory` (Layer 1)
-Search memory index with compact metadata (~75 tokens/result).
+#### `query_memory` (Adaptive Auto-Expanding Retriever)
+Replaces the 3-layer progressive retrieval with a single, auto-expanding step.
+
+**Parameters:**
+- `query` (string): Search query
+- `limit` (int, default 20): Max results to evaluate internally
+- `filters` (dict, optional): Filters (tool_name, obs_type, session_id)
+
+**Returns:** Automatically expanded high-confidence full observations and chronological context for the periphery.
+
+**Token Efficiency:** Scrapes exactly the tokens needed based on confidence density without agent overhead.
+
+**Example:**
+```python
+query_memory(query="retrieval optimization", limit=20)
+```
+
+---
+
+#### `search_memory` (Layer 1) [DEPRECATED]
+Search memory index with compact metadata (~75 tokens/result). Use `query_memory` instead.
 
 **Parameters:**
 - `query` (string): Search query
@@ -304,8 +323,8 @@ search_memory(query="retrieval optimization", limit=20)
 
 ---
 
-#### `memory_timeline` (Layer 2)
-Get chronological context for memory IDs (~200 tokens/result).
+#### `memory_timeline` (Layer 2) [DEPRECATED]
+Get chronological context for memory IDs (~200 tokens/result). Use `query_memory` instead.
 
 **Parameters:**
 - `ids` (array of strings): Observation IDs from search_memory
@@ -323,8 +342,8 @@ memory_timeline(ids=[...], window="10m")
 
 ---
 
-#### `get_observations` (Layer 3)
-Get full details for specific memory IDs (~750 tokens/result).
+#### `get_observations` (Layer 3) [DEPRECATED]
+Get full details for specific memory IDs (~750 tokens/result). Use `query_memory` instead.
 
 **Parameters:**
 - `ids` (array of strings): Observation IDs from search_memory or memory_timeline
