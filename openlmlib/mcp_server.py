@@ -1318,7 +1318,7 @@ def end_session(
     # Step 2: List recent findings for potential export
     recent_findings = None
     if export_to_library:
-        recent_findings = list_findings(_settings_path(), limit=20)
+        recent_findings = list_findings(limit=20)
 
     # Build response with warning if no observations
     obs_count = end_result.get("observation_count", 0)
