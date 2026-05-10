@@ -12,7 +12,7 @@ Store, retrieve, and collaborate on findings with semantic search, full-text sea
 
 - **Knowledge Base**: SQLite metadata + JSON findings + FAISS/Numpy vector index
 - **Semantic Retrieval**: Multi-phase retrieval with semantic + lexical search, deduplication, and reranking
-- **MCP Server**: 56 tools for AI assistants (15 core + 10 memory + 31 collaboration)
+- **MCP Server**: 58 tools for AI assistants (17 core + 10 memory + 31 collaboration)
 - **CollabSessions**: Multi-agent collaboration with message passing, artifacts, and templates
 - **CLI**: Full command-line interface for management and diagnostics
 - **Portable**: Findings exportable as JSON, easy backup and restore
@@ -77,7 +77,7 @@ openlmlib setup
 openlmlib mcp-config --ide vscode --ide cursor
 ```
 
-**Supported clients**: VS Code, Cursor, Claude Desktop, Kiro, Windsurf, Zed, Cline, and more.
+**Supported clients**: VS Code, Cursor, Claude Desktop, Claude Code, Gemini CLI, Aider, Windsurf, Zed, Cline, and more.
 
 ---
 
@@ -117,19 +117,19 @@ openlmlib query "retrieval" \
 
 ### 🤖 Use with AI Assistants
 
-56 MCP tools let AI assistants securely access and modify your knowledge base:
+58 MCP tools let AI assistants securely access and modify your knowledge base:
 
-**Core Tools (15)**:
+**Core Tools (17)**:
 - `init_library`, `health` - Setup and diagnostics
 - `save_finding`, `delete_finding` - Write operations (require confirmation)
-- `retrieve_findings`, `search_findings` - Retrieval and search
+- `retrieve_findings`, `search_findings`, `search_knowledge` - Retrieval and search
 - `list_findings`, `get_finding` - Browse findings
 - `retrieve_context` - Format findings for LLM prompts
 - `start_research`, `end_session` - Composite workflow tools
 - `check_context`, `save_finding_auto` - Convenience tools
-- `evaluate_retrieval`, `help_library` - Utilities
+- `evaluate_retrieval`, `get_usage_analytics`, `help_library` - Utilities
 
-📖 **[See all 56 tools →](docs/MCP_TOOLS.md)**
+📖 **[See all 58 tools →](docs/MCP_TOOLS.md)**
 
 ### 👥 Multi-Agent Collaboration
 
@@ -236,8 +236,8 @@ OpenLMlib
 │   ├── FAISS/Numpy (vector index)
 │   └── JSON findings (portable, human-readable)
 │
-├── MCP Server (56 tools)
-│   ├── 15 core library tools
+├── MCP Server (58 tools)
+│   ├── 17 core library tools
 │   ├── 10 memory tools (session lifecycle, progressive retrieval, retroactive ingestion)
 │   └── 31 collaboration tools
 │
@@ -260,7 +260,7 @@ OpenLMlib
 📚 **Complete documentation is in the [docs/](docs/README.md) folder:**
 
 - **[docs/README.md](docs/README.md)** - Documentation index and quick reference
-- **[docs/MCP_TOOLS.md](docs/MCP_TOOLS.md)** - Complete reference for all 56 MCP tools
+- **[docs/MCP_TOOLS.md](docs/MCP_TOOLS.md)** - Complete reference for all 58 MCP tools
 - **[docs/COLLAB_SESSIONS.md](docs/COLLAB_SESSIONS.md)** - Multi-agent collaboration guide
 - **[docs/SYSTEM_PROMPT.md](docs/SYSTEM_PROMPT.md)** - Agent instruction templates
 

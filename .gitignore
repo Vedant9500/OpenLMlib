@@ -60,3 +60,4 @@ installer/package-lock.json
 CI_CHECKS.md
 run_ci_checks.sh
 run_ci_checks.ps1
+.agents/

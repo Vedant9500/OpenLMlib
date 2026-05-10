@@ -9,7 +9,7 @@ Complete documentation for OpenLMlib - Local knowledge and research library for 
 - **[Installation Guide](#installation)** - Detailed installation options
 
 ### Core Features
-- **[MCP Tools Reference](MCP_TOOLS.md)** - Complete reference for all 52 MCP tools
+- **[MCP Tools Reference](MCP_TOOLS.md)** - Complete reference for all 58 MCP tools
 - **[Knowledge Base Guide](#knowledge-base)** - Managing findings and retrieval
 - **[Memory System Quickstart](MEMORY_QUICKSTART.md)** - Session persistence and progressive retrieval
 
@@ -106,13 +106,20 @@ openlmlib-mcp --call save_artifact '{...}'
 
 ## MCP Tools Overview
 
-OpenLMlib provides **42 MCP tools** across two categories:
+OpenLMlib provides **58 MCP tools** across three categories:
 
-### Core Library Tools (11)
+### Core Library Tools (17)
 - Knowledge base management (`init`, `add`, `delete`, `health`)
-- Retrieval and search (`retrieve`, `search_fts`, `retrieve_context`)
+- Retrieval and search (`retrieve`, `search_fts`, `search_knowledge`, `retrieve_context`)
 - Finding browsing (`list_findings`, `get_finding`)
-- Utilities (`evaluate_dataset`, `help`)
+- Composite workflows (`start_research`, `end_session`, `check_context`, `save_finding_auto`)
+- Utilities (`evaluate_dataset`, `get_usage_analytics`, `help`)
+
+### Memory System Tools (10)
+- Session lifecycle (`session_start`, `session_end`, `log_observation`)
+- Progressive retrieval (`search_memory`, `memory_timeline`, `get_observations`)
+- Context injection and recap (`inject_context`, `session_recap`, `topic_context`)
+- Retroactive ingestion (`ingest_git_history`)
 
 ### Collaboration Tools (31)
 - **Session Management** (7): Create, join, terminate sessions
@@ -172,13 +179,9 @@ openlmlib mcp-config --list-ides
 ```
 
 **Supported clients:**
-- VS Code
-- Cursor
-- Claude Desktop
-- Kiro
-- Windsurf
-- Zed
-- Cline
+- VS Code, Cursor, Claude Desktop
+- Claude Code, Gemini CLI, Qwen Code
+- Aider, Windsurf, Zed, Cline
 - And more...
 
 📖 **See [SYSTEM_PROMPT.md](SYSTEM_PROMPT.md) for agent instruction templates.**
@@ -195,7 +198,8 @@ OpenLMlib
 │   └── JSON findings (portable)
 │
 ├── MCP Server
-│   ├── 11 core library tools
+│   ├── 17 core library tools
+│   ├── 10 memory tools
 │   └── 31 collaboration tools
 │
 ├── CLI

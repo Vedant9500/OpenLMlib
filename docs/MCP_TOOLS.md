@@ -1,10 +1,10 @@
 # MCP Tools Reference
 
-Complete reference for all 52 MCP tools available in OpenLMlib.
+Complete reference for all 58 MCP tools available in OpenLMlib.
 
 ## Table of Contents
 
-- [Core Library Tools (11)](#core-library-tools)
+- [Core Library Tools (17)](#core-library-tools)
 - [Memory System Tools (10)](#memory-system-tools)
   - [Session Lifecycle (3)](#session-lifecycle)
   - [Progressive Retrieval (4)](#progressive-retrieval)
@@ -72,7 +72,7 @@ Get full details of a specific finding.
 ---
 
 ### `search_findings`
-Full-text search across findings.
+Full-text search across findings using FTS5 keywords.
 
 **Parameters:**
 - `query` (string): Search query
@@ -97,6 +97,17 @@ Advanced semantic retrieval with multi-phase ranking.
 - `reasoning_trace` (boolean, default true): Include why each finding matched
 
 **Returns:** Ranked findings with scores and optional reasoning traces
+
+---
+
+### `search_knowledge`
+Hybrid search combining keyword (FTS5) and semantic retrieval.
+
+**Parameters:**
+- `query` (string): Search query
+- `limit` (int, default 10): Max results
+
+**Returns:** Deduplicated findings from both search methods
 
 ---
 
@@ -141,6 +152,56 @@ Evaluate retrieval performance on a dataset.
 - `final_k` (int, default 10): Results count for evaluation
 
 **Returns:** Evaluation metrics (hit rate, MRR, etc.)
+
+---
+
+### `start_research`
+Composite tool to start a session and search findings in one step.
+
+**Parameters:**
+- `session_id` (string): Unique session identifier
+- `topic` (string): Research topic
+- `limit` (int, default 50): Max past context to inject
+
+**Returns:** Session status and initial search results
+
+---
+
+### `end_session`
+Composite tool to end session and export findings.
+
+**Parameters:**
+- `session_id` (string): Session identifier
+- `export_to_library` (boolean, default true): Persist session knowledge
+
+---
+
+### `check_context`
+Quick check if relevant context exists for a query.
+
+**Parameters:**
+- `query` (string): Topic to check
+
+**Returns:** Boolean status and top finding summaries
+
+---
+
+### `save_finding_auto`
+Convenience tool to save finding with automatic confidence scoring.
+
+**Parameters:**
+- `project` (string): Project name
+- `claim` (string): Finding text
+- `confirm` (boolean): Must be `true` to save
+
+---
+
+### `get_usage_analytics`
+Get tool usage statistics and optimization metrics.
+
+**Parameters:**
+- `days` (int, default 7): Lookback period
+- `tool_name` (string, optional): Filter by specific tool
 
 ---
 
@@ -765,7 +826,8 @@ Get help for collaboration tools.
 
 | Category | Tools | Purpose |
 |----------|-------|---------|
-| Core Library | 11 | Knowledge base management & retrieval |
+| Core Library | 17 | Knowledge base management & retrieval |
+| Memory System | 10 | Session persistence & context injection |
 | Session Management | 7 | Create, join, terminate sessions |
 | Message Operations | 7 | Send, read, poll, search messages |
 | Artifact Management | 4 | Add, list, get, search artifacts |
@@ -773,4 +835,4 @@ Get help for collaboration tools.
 | Templates | 3 | Predefined session plans |
 | Model Discovery | 3 | OpenRouter model information |
 | Utilities | 1 | Help and documentation |
-| **Total** | **42** | |
+| **Total** | **58** | |

@@ -27,7 +27,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Changed
 - **Version bump**: 0.2.0 → 0.2.5
-- **MCP tool count**: Fixed from 41 to 52 (11 core + 10 memory + 31 collab)
+- **MCP tool count**: Fixed from 52 to 58 (17 core + 10 memory + 31 collab)
 - **Documentation structure**: Moved memory docs to `docs/`, cleaned up internal implementation docs
 - **requirements.txt**: Aligned version constraints with `pyproject.toml`
 - **README.md**: Updated installation instructions for npm package workflow
