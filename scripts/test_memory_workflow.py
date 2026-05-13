@@ -121,7 +121,7 @@ def test_complete_workflow():
     print_section("TEST 5: Progressive Retrieval (3 Layers)")
     
     print("\n   Layer 1: Search Index")
-    index = retriever.layer1_search_index("authentication", limit=10)
+    index = retriever.layer1_search_index("compression", limit=10)
     print(f"   Found {len(index)} results")
     if index:
         print(f"   First result: {index[0].title[:60]}")
