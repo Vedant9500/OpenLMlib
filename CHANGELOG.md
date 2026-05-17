@@ -4,7 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
-## [Unreleased]
+## [0.2.6] - 2026-05-17
+
+### Added
+- **Local Dev Support**: CLI now automatically detects and uses a local `.venv` when running from source, making development much easier.
+
+### Changed
+- **Installation Speed**: Deferred embedding model download from initial `npm install` to the interactive `openlmlib setup` phase.
+- **Performance**: Memoized Python binary resolution to eliminate redundant subprocess calls during CLI startup and installation.
+
+### Fixed
+- **CI Validator**: Improved `run_ci_checks.ps1` to handle pip warnings gracefully and bypass uninstallation issues.
+- **MCP Setup**: Fixed `Claude Desktop` configuration test failure on simulated Linux platforms.
+- **Test Suite**: Dynamic versioning in `test-install.js` to prevent failures after version bumps.
 
 ## [0.2.5] - 2026-04-14
 
