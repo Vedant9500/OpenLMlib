@@ -15,6 +15,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Fixed
 - **CI Validator**: Improved `run_ci_checks.ps1` to handle pip warnings gracefully and bypass uninstallation issues.
+- **Test Compatibility**: Refactored `test_memory_injection.py` and `test_caveman_compress.py` to use `unittest`, removing the `pytest` dependency and fixing cross-platform CI failures.
 - **MCP Setup**: Fixed `Claude Desktop` configuration test failure on simulated Linux platforms.
 - **Test Suite**: Dynamic versioning in `test-install.js` to prevent failures after version bumps.
 
