@@ -7,123 +7,66 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 ## [0.2.6] - 2026-05-17
 
 ### Added
-- **Local Dev Support**: CLI now automatically detects and uses a local `.venv` when running from source, making development much easier.
+- **Unified Benchmark Suite**: Added a comprehensive benchmark suite for performance evaluation of core tools, collaboration, and memory systems.
+- **Local Dev Support**: CLI now automatically detects and uses a local `.venv` when running from source, streamlining the developer workflow.
+- **Analytics & Metrics**: Implemented tool usage analytics and metrics tracking to monitor performance and reliability in real-time.
 
 ### Changed
-- **Installation Speed**: Deferred embedding model download from initial `npm install` to the interactive `openlmlib setup` phase.
-- **Performance**: Memoized Python binary resolution to eliminate redundant subprocess calls during CLI startup and installation.
+- **Collaborative Subsystem Upgrade**: 
+  - Implemented **thread-local connection pooling** for high-concurrency database access.
+  - Added **model-aware contexts** and **atomic task claims** for more reliable multi-agent coordination.
+  - Rewrote agent instructions for **parallel execution** and zero-ack behavior.
+- **MCP Tool Optimization**:
+  - **Verb-Object Refactor**: Renamed all 50+ tools to a clean `verb_object` pattern (e.g., `search_findings` instead of `openlmlib_search_fts`).
+  - **Behavioral Triggers**: Optimized tool descriptions with explicit workflow context and automatic triggers to improve LLM reasoning.
+- **Memory System Performance**:
+  - Implemented **bulk storage updates** for observation compression, resolving N+1 disk sync bottlenecks.
+  - Optimized knowledge extraction to capture all file paths from tool history using advanced regex scanning.
+  - Improved search performance with escaped SQLite LIKE queries.
+- **Installation & Startup Speed**:
+  - **Deferred Model Download**: Moved embedding model download from initial `npm install` to the interactive `openlmlib setup` phase.
+  - **Memoized Python Checks**: Cached Python binary resolution to eliminate redundant subprocess calls during startup.
 
 ### Fixed
-- **CI Validator**: Improved `run_ci_checks.ps1` to handle pip warnings gracefully and bypass uninstallation issues.
-- **Test Compatibility**: Refactored `test_memory_injection.py` and `test_caveman_compress.py` to use `unittest`, removing the `pytest` dependency and fixing cross-platform CI failures.
-- **MCP Setup**: Fixed `Claude Desktop` configuration test failure on simulated Linux platforms.
-- **Test Suite**: Dynamic versioning in `test-install.js` to prevent failures after version bumps.
+- **Concurrency**: Resolved `ProgrammingError` by allowing SQLite connection sharing across worker threads with proper locking.
+- **CI Robustness**: Improved `run_ci_checks.ps1` to handle pip warnings and bypass uninstallation issues via `--ignore-installed`.
+- **Test Compatibility**: Refactored test suite to use `unittest` (removing `pytest` dependency) to fix cross-platform CI failures.
+- **MCP Setup**: Fixed `Claude Desktop` configuration errors on non-Windows platforms and aligned config keys with official specs.
 
 ## [0.2.5] - 2026-04-14
 
 ### Added
-- **MCP CLI Integration**: Global MCP configuration for 6 popular CLI coding tools
-  - Claude Code (`~/.claude.json`)
-  - Gemini CLI (`~/.gemini/settings.json`)
-  - Qwen Code (`~/.qwen/settings.json`)
-  - OpenCode (`~/.config/opencode/opencode.json`)
-  - Codex CLI (`~/.codex/config.toml` with TOML support)
-  - Aider (`~/.aider.conf.yml`)
-- **Memory System MCP Tools**: 10 new memory tools exposed via MCP
-  - `session_start`, `session_end` - Session lifecycle
-  - `log_observation` - Tool execution logging
-  - `search_memory`, `memory_timeline`, `get_observations` - Progressive retrieval (3-layer)
-  - `inject_context`, `session_recap`, `topic_context` - Context injection
-  - `ingest_git_history` - Git history ingestion (no manual logging!)
-- **TOML Support**: Native TOML parsing and serialization for Codex CLI configuration
-- **Documentation**: Complete memory system guide, updated MCP tools reference (52 tools)
+- **Memory Injection System**: Full implementation of long-lived session memory.
+  - **Progressive Disclosure**: 3-layer retrieval (Search -> Timeline -> Full Details) for context efficiency.
+  - **Caveman Compression**: Ultra-aggressive token reduction (up to 60%) for large context blocks.
+  - **Git History Ingestion**: Retroactive ingestion of session activity from git logs.
+  - **Privacy Filtering**: Automated sanitization of sensitive data (API keys, passwords) before storage.
+- **MCP CLI Integration**: Native MCP support for 6 popular CLI coding tools:
+  - Claude Code, Gemini CLI, Qwen Code, OpenCode, Codex CLI (TOML), and Aider.
+- **Documentation**: Added Memory Quickstart and comprehensive guide for the 58+ available tools.
 
 ### Changed
 - **Version bump**: 0.2.0 → 0.2.5
-- **MCP tool count**: Fixed from 52 to 58 (17 core + 10 memory + 31 collab)
-- **Documentation structure**: Moved memory docs to `docs/`, cleaned up internal implementation docs
-- **requirements.txt**: Aligned version constraints with `pyproject.toml`
-- **README.md**: Updated installation instructions for npm package workflow
-
-### Removed
-- Internal implementation summaries (`MEMORY_*`, `CAVEMAN_*`, `IMPLEMENTATION_PLAN.md`)
-- Temporary test/refactor scripts
-
-### Fixed
-- `count_mcp_tools.py` now expects 52 tools and tracks memory tools separately
-- CLI help text updated to include all 16 supported clients
-- `package.json` at root marked as private (actual npm package in `installer/`)
+- **Tool count**: Expanded to 58 tools (17 core, 10 memory, 31 collab).
+- **TOML Support**: Integrated native TOML parsing for Codex CLI configuration.
 
 ## [0.2.0] - 2026-04-08
 
 ### Added
-- **Collaborative Sessions System**: Full multi-user collaboration with real-time messaging
-  - Collaboration database (`collab/db.py`) with SQLite backend
-  - Message bus for asynchronous communication between agents
-  - Session management with lifecycle tracking
-  - Artifact store for sharing files and documents
-  - State manager for persistent session state
-  - Context compiler for efficient context assembly
-- **MCP Server Integration**: Complete MCP server for collaboration tools
-  - 20+ MCP tools for session management, messaging, and artifacts
-  - FastMCP-based server with proper error handling
-- **Collaboration TUI**: Interactive terminal UI for managing sessions
-  - Session browser and viewer
-  - Real-time message display
-  - Participant management
-- **Multi-Session Support**: Manage multiple concurrent collaboration sessions
-- **Security & Access Control**: 
-  - Permission system for session operations
-  - Role-based access (owner, admin, participant, viewer)
-  - Input validation and sanitization
-- **Rules Engine**: Configurable rules for session behavior and message handling
-- **Compaction System**: Automatic session history compaction for performance
-- **Prompt Templates**: Built-in prompt templates for collaboration scenarios
-- **Error Handling Framework**: Comprehensive error types and validation
-- **OpenRouter Integration**: Client for external LLM integration
-- **Export Bridge**: Export collaboration artifacts to main library
-- **Templates System**: Session templates for common collaboration patterns
-- **CLI Commands**: New collaboration commands in main CLI
-  - Session creation, joining, and management
-  - Message operations and artifact handling
-- **Comprehensive Test Suite**: Unit, integration, live, and benchmark tests
-- **Example Scripts**: Collaboration session usage examples
-- **Installer Improvements**: 
-  - Python bundling support
-  - Enhanced setup wizard
-  - Verification tools for Windows
-  - Better cross-platform support
-- **MCP Diagnostic Scripts**: Tools for troubleshooting MCP configuration
-
-### Changed
-- Enhanced CLI with 494+ new lines of collaboration commands
-- Updated MCP server setup with new collaboration tools
-- Improved installer with better UX and reliability
-- Expanded package entry points with new CLI tools
-
-### Technical
-- Added 33 new modules in `openlmlib/collab/` package
-- 12,000+ lines of production code added
-- Full test coverage with 4 test files and benchmarks
+- **Collaborative Sessions System**: Multi-agent collaboration with real-time messaging, artifact sharing, and state management.
+- **Collaboration TUI**: Interactive terminal UI for browsing and participating in active sessions.
+- **Multi-Session Support**: Capability to manage and coordinate multiple concurrent research sessions.
+- **Security Framework**: Permission system and input validation for multi-agent environments.
+- **Installer Improvements**: Python bundling support and enhanced setup wizard for Windows/Unix.
 
 ## [0.1.2] - 2026-04-01
 
 ### Added
-- MCP setup module (`mcp_setup.py`) to manage client specifications and configuration paths for various IDEs.
-- Interactive TUI setup (`tui_setup.py`) allowing users to select IDEs for MCP installation.
-- Health check tests for vector store validation.
-- MCP setup tests to ensure correct installation and configuration.
-- Release workflow for TestPyPI and PyPI publishing with trusted publishing.
-- CLI safety commands: `backup` and `restore`.
-- CLI `--version` output and package version constant.
-- Library backup and restore operations with pre-restore backup support.
-
-### Changed
-- Release and maintenance process documented in README.
+- **MCP Setup Module**: Specification-based configuration for major IDEs (VS Code, Cursor, Zed, etc.).
+- **Interactive Onboarding**: TUI-based setup for IDE integration.
+- **Safety Operations**: Added `backup` and `restore` commands for library data.
 
 ## [0.1.0] - 2026-03-31
 
 ### Added
-- Core OpenLMlib schema, write pipeline, storage, and MCP server.
-- Dual-index retrieval with filtering and safe context rendering.
-- Onboarding flow with setup, doctor, installer scripts, and CI workflow.
+- Core OpenLMlib schema, dual-index retrieval (semantic + keyword), and initial MCP server.
