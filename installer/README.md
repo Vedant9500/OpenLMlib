@@ -41,7 +41,7 @@
 ### Installing from the Package
 
 ```bash
-npm install -g ./openlmlib-0.2.5.tgz
+npm install -g ./openlmlib-0.2.6.tgz
 openlmlib setup
 ```
 
