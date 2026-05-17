@@ -283,6 +283,7 @@ function ReviewScreen({ config, onConfirm }) {
 function InstallScreen({ config, onDone }) {
   const [steps, setSteps] = useState([
     { label: 'Writing settings...', status: 'pending', error: null },
+    { label: 'Downloading embedding model...', status: 'pending', error: null },
     { label: 'Initializing library...', status: 'pending', error: null },
     { label: 'Configuring MCP clients...', status: 'pending', error: null },
   ]);
@@ -324,6 +325,19 @@ function InstallScreen({ config, onDone }) {
       }
 
       updateStep(1, 'running');
+      const downloadScript = `from sentence_transformers import SentenceTransformer; SentenceTransformer("${config.embeddingModel}"); print("model-downloaded")`;
+      try {
+        runPythonScript(downloadScript);
+        updateStep(1, 'done');
+      } catch (err) {
+        const errMsg = err.stderr?.toString() || err.message || 'Unknown error';
+        console.error('Model download error:', errMsg);
+        updateStep(1, 'error', errMsg);
+        setTimeout(() => onDone(false), 2000);
+        return;
+      }
+
+      updateStep(2, 'running');
       const initScript = [
         'from pathlib import Path',
         'from openlmlib.library import init_library',
@@ -333,17 +347,17 @@ function InstallScreen({ config, onDone }) {
       ].join('\n');
       try {
         runPythonScript(initScript);
-        updateStep(1, 'done');
+        updateStep(2, 'done');
       } catch (err) {
         const errMsg = err.stderr?.toString() || err.message || 'Unknown error';
         console.error('Init error:', errMsg);
-        updateStep(1, 'error', errMsg);
+        updateStep(2, 'error', errMsg);
         setTimeout(() => onDone(false), 2000);
         return;
       }
 
       if (config.mcpClients.length > 0) {
-        updateStep(2, 'running');
+        updateStep(3, 'running');
         const clientsJson = JSON.stringify(config.mcpClients);
         const mcpScript = [
           'from pathlib import Path',
@@ -360,18 +374,18 @@ function InstallScreen({ config, onDone }) {
         ].join('\n');
         try {
           runPythonScript(mcpScript);
-          updateStep(2, 'done');
+          updateStep(3, 'done');
         } catch (err) {
           const errMsg = err.stderr?.toString() || err.message || 'Unknown error';
           console.error('MCP error:', errMsg);
-          updateStep(2, 'error', errMsg);
+          updateStep(3, 'error', errMsg);
           setTimeout(() => onDone(false), 2000);
           return;
         }
       } else {
         setSteps((prev) => {
           const next = [...prev];
-          next[2] = { ...next[2], label: 'MCP config skipped', status: 'done' };
+          next[3] = { ...next[3], label: 'MCP config skipped', status: 'done' };
           return next;
         });
       }

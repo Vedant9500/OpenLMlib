@@ -3,12 +3,29 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs';
 
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
 const OPENLMLIB_HOME = process.env.OPENLMLIB_HOME || path.join(os.homedir(), '.openlmlib');
-const VENV_PYTHON_WIN = path.join(OPENLMLIB_HOME, 'venv', 'Scripts', 'python.exe');
-const VENV_PYTHON_UNIX = path.join(OPENLMLIB_HOME, 'venv', 'bin', 'python');
 
 function getVenvPython() {
-  return os.platform() === 'win32' ? VENV_PYTHON_WIN : VENV_PYTHON_UNIX;
+  if (process.env.OPENLMLIB_HOME) {
+    const pyPath = os.platform() === 'win32'
+      ? path.join(process.env.OPENLMLIB_HOME, 'venv', 'Scripts', 'python.exe')
+      : path.join(process.env.OPENLMLIB_HOME, 'venv', 'bin', 'python');
+    if (fs.existsSync(pyPath)) return pyPath;
+  }
+
+  const installerDir = path.dirname(path.dirname(__filename));
+  const repoRoot = path.dirname(installerDir);
+  const devVenv = os.platform() === 'win32'
+    ? path.join(repoRoot, '.venv', 'Scripts', 'python.exe')
+    : path.join(repoRoot, '.venv', 'bin', 'python');
+  if (fs.existsSync(devVenv)) return devVenv;
+
+  return os.platform() === 'win32'
+    ? path.join(OPENLMLIB_HOME, 'venv', 'Scripts', 'python.exe')
+    : path.join(OPENLMLIB_HOME, 'venv', 'bin', 'python');
 }
 
 function isInstalled() {

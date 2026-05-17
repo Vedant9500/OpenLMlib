@@ -10,7 +10,9 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const tarball = path.join(__dirname, 'openlmlib-0.1.6.tgz');
+const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+const version = pkg.version;
+const tarball = path.join(__dirname, `openlmlib-${version}.tgz`);
 
 if (!fs.existsSync(tarball)) {
   console.error('❌ Tarball not found:', tarball);
@@ -40,7 +42,7 @@ console.log(hasMcpServer ? '✓ mcp_server.py included' : '✗ mcp_server.py MIS
 if (hasCollabMcp && hasPyproject && hasMcpServer) {
   console.log('\n✅ Tarball contains all necessary files for 52 tools!');
   console.log('\nTo test actual installation:');
-  console.log('  npm install -g ./openlmlib-0.2.5.tgz');
+  console.log(`  npm install -g ./openlmlib-${version}.tgz`);
   console.log('  Then restart your IDE to refresh MCP tool cache\n');
 } else {
   console.log('\n❌ Tarball is missing required files!');

@@ -14,7 +14,6 @@ import {
   checkVenv,
   createVenv,
   installFromLocal,
-  downloadModel,
   runSetupWizard,
 } from '../install.js';
 
@@ -99,11 +98,6 @@ function App({ pythonCheck, hasPackageManager, installerDir }) {
           updateStep(s2, 'running');
           installFromLocal(path.resolve(installerDir, '..', '..'), (msg) => updateStep(s2, 'done'));
           updateStep(s2, 'done');
-
-          const s3 = addStep('Downloading embedding model...');
-          updateStep(s3, 'running');
-          downloadModel(wizardConfig.embeddingModel, (msg) => updateStep(s3, 'done'));
-          updateStep(s3, 'done');
 
           const s4 = addStep('Configuring MCP clients...');
           updateStep(s4, 'running');

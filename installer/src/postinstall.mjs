@@ -13,16 +13,22 @@ const __dirname = path.dirname(__filename);
 
 // ─── Helpers ───────────────────────────────────────────────
 
+let cachedPythonCmd = undefined;
+
 function getPythonCmd() {
+  if (cachedPythonCmd !== undefined) return cachedPythonCmd;
   // Try python3 first (Unix), then py (Windows)
   try {
     execSync('python3 --version', { stdio: 'ignore' });
-    return 'python3';
+    cachedPythonCmd = 'python3';
+    return cachedPythonCmd;
   } catch {
     try {
       execSync('py --version', { stdio: 'ignore' });
-      return 'py';
+      cachedPythonCmd = 'py';
+      return cachedPythonCmd;
     } catch {
+      cachedPythonCmd = null;
       return null;
     }
   }

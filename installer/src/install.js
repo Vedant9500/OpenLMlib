@@ -9,15 +9,21 @@ const VENV_PYTHON = os.platform() === 'win32'
   ? path.join(VENV_DIR, 'Scripts', 'python.exe')
   : path.join(VENV_DIR, 'bin', 'python');
 
+let cachedPythonCmd = undefined;
+
 function getPythonCmd() {
+  if (cachedPythonCmd !== undefined) return cachedPythonCmd;
   try {
     execSync('python3 --version', { stdio: 'ignore' });
-    return 'python3';
+    cachedPythonCmd = 'python3';
+    return cachedPythonCmd;
   } catch {
     try {
       execSync('py --version', { stdio: 'ignore' });
-      return 'py';
+      cachedPythonCmd = 'py';
+      return cachedPythonCmd;
     } catch {
+      cachedPythonCmd = null;
       return null;
     }
   }
