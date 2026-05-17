@@ -9,7 +9,7 @@ Tests cover:
 - Integration with context builder and compressor
 """
 
-import pytest
+import unittest
 import sqlite3
 from openlmlib.memory.caveman_compress import (
     caveman_compress,
@@ -20,17 +20,9 @@ from openlmlib.memory.caveman_compress import (
 )
 
 
-@pytest.fixture
-def db_conn():
-    """Create in-memory SQLite database for testing."""
-    conn = sqlite3.connect(":memory:")
-    yield conn
-    conn.close()
-
-
 # ==================== Basic Compression Tests ====================
 
-class TestCavemanCompress:
+class TestCavemanCompress(unittest.TestCase):
     """Test basic caveman compression functionality."""
 
     def test_ultra_compression_basic(self):
@@ -38,27 +30,27 @@ class TestCavemanCompress:
         text = "The file contains a function that handles user authentication."
         compressed, stats = caveman_compress(text, intensity='ultra')
         
-        assert len(compressed) < len(text)
-        assert stats['reduction_percent'] > 0
+        self.assertLess(len(compressed), len(text))
+        self.assertGreater(stats['reduction_percent'], 0)
         # Should remove articles
-        assert " the " not in compressed.lower() or "the" not in compressed.lower().split()
+        self.assertTrue(" the " not in compressed.lower() or "the" not in compressed.lower().split())
 
     def test_full_compression_basic(self):
         """Test full compression removes articles and filler."""
         text = "The system will basically just validate the user credentials."
         compressed, stats = caveman_compress(text, intensity='full')
         
-        assert len(compressed) < len(text)
-        assert "basically" not in compressed.lower()
-        assert "just" not in compressed.lower()
+        self.assertLess(len(compressed), len(text))
+        self.assertNotIn("basically", compressed.lower())
+        self.assertNotIn("just", compressed.lower())
 
     def test_lite_compression_basic(self):
         """Test lite compression removes only filler words."""
         text = "The system will basically validate credentials."
         compressed, stats = caveman_compress(text, intensity='lite')
         
-        assert len(compressed) < len(text)
-        assert "basically" not in compressed.lower()
+        self.assertLess(len(compressed), len(text))
+        self.assertNotIn("basically", compressed.lower())
 
     def test_ultra_converts_to_fragments(self):
         """Test ultra compression converts sentences to fragments."""
@@ -66,25 +58,25 @@ class TestCavemanCompress:
         compressed, stats = caveman_compress(text, intensity='ultra')
         
         # Should have fragment structure
-        assert '.' in compressed or len(compressed.split()) < len(text.split())
+        self.assertTrue('.' in compressed or len(compressed.split()) < len(text.split()))
 
     def test_empty_text(self):
         """Test compression handles empty text."""
         compressed, stats = caveman_compress("")
         
-        assert compressed == ""
-        assert stats['original_tokens'] == 0
+        self.assertEqual(compressed, "")
+        self.assertEqual(stats['original_tokens'], 0)
 
     def test_none_text(self):
         """Test compression handles None text."""
         compressed, stats = caveman_compress(None)
         
-        assert compressed is None
+        self.assertIsNone(compressed)
 
 
 # ==================== Technical Content Preservation ====================
 
-class TestTechnicalPreservation:
+class TestTechnicalPreservation(unittest.TestCase):
     """Test that technical content is preserved unchanged."""
 
     def test_preserves_code_blocks(self):
@@ -100,37 +92,37 @@ class TestTechnicalPreservation:
         """
         compressed, stats = caveman_compress(text, intensity='ultra')
         
-        assert "```python" in compressed
-        assert "def authenticate(user, password):" in compressed
-        assert "if user and password:" in compressed
+        self.assertIn("```python", compressed)
+        self.assertIn("def authenticate(user, password):", compressed)
+        self.assertIn("if user and password:", compressed)
 
     def test_preserves_urls(self):
         """Test URLs are not compressed."""
         text = "Visit https://example.com/docs for more information about the API."
         compressed, stats = caveman_compress(text, intensity='ultra')
         
-        assert "https://example.com/docs" in compressed
+        self.assertIn("https://example.com/docs", compressed)
 
     def test_preserves_file_paths(self):
         """Test file paths are not compressed."""
         text = "The configuration is in /etc/app/config/settings.json file."
         compressed, stats = caveman_compress(text, intensity='ultra')
         
-        assert "/etc/app/config/settings.json" in compressed
+        self.assertIn("/etc/app/config/settings.json", compressed)
 
     def test_preserves_commands(self):
         """Test shell commands are not compressed."""
         text = "Run the following command: $ npm install openlmlib"
         compressed, stats = caveman_compress(text, intensity='ultra')
         
-        assert "$ npm install openlmlib" in compressed
+        self.assertIn("$ npm install openlmlib", compressed)
 
     def test_preserves_headings(self):
         """Test markdown headings are not compressed."""
         text = "## Installation Guide\nThe package installs automatically."
         compressed, stats = caveman_compress(text, intensity='ultra')
         
-        assert "## Installation Guide" in compressed
+        self.assertIn("## Installation Guide", compressed)
 
     def test_preserves_multiple_technical_elements(self):
         """Test multiple technical elements preserved."""
@@ -146,16 +138,16 @@ class TestTechnicalPreservation:
         """
         compressed, stats = caveman_compress(text, intensity='ultra')
         
-        assert "## Setup" in compressed
-        assert "$ pip install openlmlib" in compressed
-        assert "https://docs.example.com" in compressed
-        assert "/etc/openlmlib/config.json" in compressed
-        assert "import openlmlib" in compressed
+        self.assertIn("## Setup", compressed)
+        self.assertIn("$ pip install openlmlib", compressed)
+        self.assertIn("https://docs.example.com", compressed)
+        self.assertIn("/etc/openlmlib/config.json", compressed)
+        self.assertIn("import openlmlib", compressed)
 
 
 # ==================== Token Count Tests ====================
 
-class TestTokenCounts:
+class TestTokenCounts(unittest.TestCase):
     """Test token counting and statistics."""
 
     def test_token_count_basic(self):
@@ -163,21 +155,21 @@ class TestTokenCounts:
         text = "The quick brown fox jumps over the lazy dog."
         tokens = _count_tokens(text)
         
-        assert tokens > 0
+        self.assertGreater(tokens, 0)
         # Should be approximately words * 1.3
         word_count = len(text.split())
-        assert tokens >= word_count
+        self.assertGreaterEqual(tokens, word_count)
 
     def test_compression_stats(self):
         """Test compression returns valid statistics."""
         text = "The function will basically just validate the credentials properly."
         compressed, stats = caveman_compress(text, intensity='ultra')
         
-        assert 'original_tokens' in stats
-        assert 'compressed_tokens' in stats
-        assert 'reduction_percent' in stats
-        assert stats['original_tokens'] > stats['compressed_tokens']
-        assert stats['reduction_percent'] > 0
+        self.assertIn('original_tokens', stats)
+        self.assertIn('compressed_tokens', stats)
+        self.assertIn('reduction_percent', stats)
+        self.assertGreater(stats['original_tokens'], stats['compressed_tokens'])
+        self.assertGreater(stats['reduction_percent'], 0)
 
     def test_high_reduction_ratio(self):
         """Test ultra achieves high reduction on verbose text."""
@@ -185,12 +177,12 @@ class TestTokenCounts:
         compressed, stats = caveman_compress(text, intensity='ultra')
         
         # Should achieve at least 30% reduction (realistic for ultra)
-        assert stats['reduction_percent'] >= 30
+        self.assertGreaterEqual(stats['reduction_percent'], 30)
 
 
 # ==================== Convenience Functions ====================
 
-class TestConvenienceFunctions:
+class TestConvenienceFunctions(unittest.TestCase):
     """Test convenience wrapper functions."""
 
     def test_compress_context_block(self):
@@ -207,9 +199,9 @@ class TestConvenienceFunctions:
         """
         compressed, stats = compress_context_block(context, intensity='ultra')
         
-        assert isinstance(compressed, str)
-        assert len(compressed) <= len(context)
-        assert stats['reduction_percent'] >= 0
+        self.assertIsInstance(compressed, str)
+        self.assertLessEqual(len(compressed), len(context))
+        self.assertGreaterEqual(stats['reduction_percent'], 0)
 
     def test_compress_observation_summary(self):
         """Test observation summary compression."""
@@ -224,22 +216,28 @@ class TestConvenienceFunctions:
             summary, intensity='ultra'
         )
         
-        assert 'title' in compressed_summary
-        assert 'narrative' in compressed_summary
-        assert stats['reduction_percent'] >= 0
+        self.assertIn('title', compressed_summary)
+        self.assertIn('narrative', compressed_summary)
+        self.assertGreaterEqual(stats['reduction_percent'], 0)
 
 
 # ==================== Integration Tests ====================
 
-class TestIntegration:
+class TestIntegration(unittest.TestCase):
     """Test integration with memory system components."""
 
-    def test_context_builder_with_caveman(self, db_conn):
+    def setUp(self):
+        self.conn = sqlite3.connect(":memory:")
+
+    def tearDown(self):
+        self.conn.close()
+
+    def test_context_builder_with_caveman(self):
         """Test context builder with caveman enabled."""
         from openlmlib.memory import MemoryStorage, ProgressiveRetriever
         from openlmlib.memory.context_builder import ContextBuilder
         
-        storage = MemoryStorage(db_conn)
+        storage = MemoryStorage(self.conn)
         retriever = ProgressiveRetriever(storage)
         builder = ContextBuilder(
             retriever,
@@ -260,7 +258,7 @@ class TestIntegration:
         context = builder.build_session_start_context("new_session", limit=10)
         
         # Context should exist (compression applied)
-        assert isinstance(context, str)
+        self.assertIsInstance(context, str)
 
     def test_compressor_with_caveman(self):
         """Test compressor with caveman enabled."""
@@ -278,16 +276,16 @@ class TestIntegration:
         
         summary = compressor.compress(observation)
         
-        assert summary.get('caveman_enabled') is True
-        assert summary.get('narrative') is not None
-        assert summary['token_count_compressed'] > 0
+        self.assertTrue(summary.get('caveman_enabled'))
+        self.assertIsNotNone(summary.get('narrative'))
+        self.assertGreater(summary['token_count_compressed'], 0)
 
-    def test_context_builder_without_caveman(self, db_conn):
+    def test_context_builder_without_caveman(self):
         """Test context builder with caveman disabled."""
         from openlmlib.memory import MemoryStorage, ProgressiveRetriever
         from openlmlib.memory.context_builder import ContextBuilder
         
-        storage = MemoryStorage(db_conn)
+        storage = MemoryStorage(self.conn)
         retriever = ProgressiveRetriever(storage)
         builder = ContextBuilder(
             retriever,
@@ -304,12 +302,12 @@ class TestIntegration:
         
         context = builder.build_session_start_context("new_session", limit=10)
         
-        assert isinstance(context, str)
+        self.assertIsInstance(context, str)
 
 
 # ==================== Edge Cases ====================
 
-class TestEdgeCases:
+class TestEdgeCases(unittest.TestCase):
     """Test edge cases and boundary conditions."""
 
     def test_very_long_text(self):
@@ -317,8 +315,8 @@ class TestEdgeCases:
         text = "The function does X. " * 100
         compressed, stats = caveman_compress(text, intensity='ultra')
         
-        assert len(compressed) < len(text)
-        assert stats['reduction_percent'] > 0
+        self.assertLess(len(compressed), len(text))
+        self.assertGreater(stats['reduction_percent'], 0)
 
     def test_only_technical_content(self):
         """Test text with only technical content passes through."""
@@ -331,7 +329,7 @@ class TestEdgeCases:
         compressed, stats = caveman_compress(text, intensity='ultra')
         
         # Should be largely unchanged
-        assert "def foo():" in compressed
+        self.assertIn("def foo():", compressed)
 
     def test_mixed_prose_and_technical(self):
         """Test mixed content compresses prose, preserves technical."""
@@ -349,27 +347,27 @@ class TestEdgeCases:
         
         # Prose should be compressed
         # Technical should be preserved
-        assert "def validate(input):" in compressed
+        self.assertIn("def validate(input):", compressed)
 
     def test_unicode_content(self):
         """Test compression handles unicode characters."""
         text = "The file contains naïve résumé with café names."
         compressed, stats = caveman_compress(text, intensity='ultra')
         
-        assert isinstance(compressed, str)
-        assert len(compressed) > 0
+        self.assertIsInstance(compressed, str)
+        self.assertGreater(len(compressed), 0)
 
     def test_newlines_preserved(self):
         """Test compression preserves line structure."""
         text = "Line one.\nLine two.\nLine three."
         compressed, stats = caveman_compress(text, intensity='ultra')
         
-        assert '\n' in compressed
+        self.assertIn('\n', compressed)
 
 
 # ==================== Intensity Level Comparisons ====================
 
-class TestIntensityLevels:
+class TestIntensityLevels(unittest.TestCase):
     """Test different intensity levels produce expected results."""
 
     def test_ultra_vs_full(self):
@@ -379,7 +377,7 @@ class TestIntensityLevels:
         compressed_full, stats_full = caveman_compress(text, 'full')
         compressed_ultra, stats_ultra = caveman_compress(text, 'ultra')
         
-        assert stats_ultra['compressed_tokens'] <= stats_full['compressed_tokens']
+        self.assertLessEqual(stats_ultra['compressed_tokens'], stats_full['compressed_tokens'])
 
     def test_full_vs_lite(self):
         """Test full is more aggressive than lite."""
@@ -388,7 +386,7 @@ class TestIntensityLevels:
         compressed_lite, stats_lite = caveman_compress(text, 'lite')
         compressed_full, stats_full = caveman_compress(text, 'full')
         
-        assert stats_full['compressed_tokens'] <= stats_lite['compressed_tokens']
+        self.assertLessEqual(stats_full['compressed_tokens'], stats_lite['compressed_tokens'])
 
     def test_intensity_ordering(self):
         """Test intensity ordering: ultra <= full <= lite."""
@@ -398,34 +396,38 @@ class TestIntensityLevels:
         _, stats_full = caveman_compress(text, 'full')
         _, stats_lite = caveman_compress(text, 'lite')
         
-        assert stats_ultra['compressed_tokens'] <= stats_full['compressed_tokens']
-        assert stats_full['compressed_tokens'] <= stats_lite['compressed_tokens']
+        self.assertLessEqual(stats_ultra['compressed_tokens'], stats_full['compressed_tokens'])
+        self.assertLessEqual(stats_full['compressed_tokens'], stats_lite['compressed_tokens'])
 
 
 # ==================== Technical Line Detection ====================
 
-class TestTechnicalLineDetection:
+class TestTechnicalLineDetection(unittest.TestCase):
     """Test technical line detection logic."""
 
     def test_code_block(self):
-        assert _is_technical_line("```python") is True
-        assert _is_technical_line("```") is True
+        self.assertTrue(_is_technical_line("```python"))
+        self.assertTrue(_is_technical_line("```"))
 
     def test_command(self):
-        assert _is_technical_line("$ npm install") is True
-        assert _is_technical_line("> echo hello") is True
+        self.assertTrue(_is_technical_line("$ npm install"))
+        self.assertTrue(_is_technical_line("> echo hello"))
 
     def test_url(self):
-        assert _is_technical_line("Visit https://example.com") is True
+        self.assertTrue(_is_technical_line("Visit https://example.com"))
 
     def test_file_path(self):
-        assert _is_technical_line("File: /etc/config.json") is True
-        assert _is_technical_line("Path: C:\\Users\\config.ini") is True
+        self.assertTrue(_is_technical_line("File: /etc/config.json"))
+        self.assertTrue(_is_technical_line("Path: C:\\Users\\config.ini"))
 
     def test_heading(self):
-        assert _is_technical_line("# Title") is True
-        assert _is_technical_line("## Subtitle") is True
+        self.assertTrue(_is_technical_line("# Title"))
+        self.assertTrue(_is_technical_line("## Subtitle"))
 
     def test_prose(self):
-        assert _is_technical_line("The function validates input") is False
-        assert _is_technical_line("This is normal text") is False
+        self.assertFalse(_is_technical_line("The function validates input"))
+        self.assertFalse(_is_technical_line("This is normal text"))
+
+
+if __name__ == "__main__":
+    unittest.main()
