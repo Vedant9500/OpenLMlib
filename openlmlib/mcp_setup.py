@@ -152,8 +152,7 @@ def client_config_path(
             return base / "Claude" / "claude_desktop_config.json"
         if platform == "darwin":
             return home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
-        # Linux support for Claude Desktop
-        return home / ".config" / "Claude" / "claude_desktop_config.json"
+        return None
 
     if client_id == "claude_code":
         # Global config: ~/.claude.json (primary) or ~/.claude/settings.json (fallback)
