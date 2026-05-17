@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
-## [0.2.6] - 2026-05-17
+## [0.2.7] - 2026-05-17
 
 ### Added
 - **Unified Benchmark Suite**: Added a comprehensive benchmark suite for performance evaluation of core tools, collaboration, and memory systems.
@@ -28,12 +28,11 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
   - **Memoized Python Checks**: Cached Python binary resolution to eliminate redundant subprocess calls during startup.
 
 ### Fixed
+- **NPM Installation**: Removed broken `file:` dependency and switched to direct source bundling via `bundle-python.js`, fixing `ENOENT` errors during global installation.
+- **Test Compatibility**: Refactored test suite to use `unittest` (removing `pytest` dependency) and implemented dynamic versioning in `test-install.js`.
 - **Concurrency**: Resolved `ProgrammingError` by allowing SQLite connection sharing across worker threads with proper locking.
 - **CI Robustness**: Improved `run_ci_checks.ps1` to handle pip warnings and bypass uninstallation issues via `--ignore-installed`.
-- **Test Compatibility**: Refactored test suite to use `unittest` (removing `pytest` dependency) to fix cross-platform CI failures.
 - **MCP Setup**: Fixed `Claude Desktop` configuration errors on non-Windows platforms and aligned config keys with official specs.
-- **Test Suite**: Implemented dynamic versioning in `test-install.js` to prevent failures after version bumps.
-- **NPM Installation**: Removed broken `file:` dependency and switched to direct source bundling via `bundle-python.js`, fixing `ENOENT` errors during global installation.
 
 ## [0.2.5] - 2026-04-14
 
