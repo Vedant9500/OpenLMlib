@@ -126,6 +126,7 @@ class MemoryStorage:
         """Close the database connection."""
         if self.conn:
             self.conn.close()
+            self.conn = None
             logger.debug("Memory storage connection closed")
 
     def __enter__(self):

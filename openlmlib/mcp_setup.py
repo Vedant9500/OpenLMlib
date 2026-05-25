@@ -77,6 +77,43 @@ CLIENT_ALIASES = {
 }
 
 
+def _format_toml_value(value: object) -> str:
+    if isinstance(value, str):
+        return json.dumps(value)
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, list):
+        return "[" + ", ".join(_format_toml_value(item) for item in value) + "]"
+    if value is None:
+        return '""'
+    return json.dumps(str(value))
+
+
+def _dump_simple_toml(data: Dict[str, object]) -> str:
+    """Serialize the simple TOML structures used by MCP client configs."""
+    lines: List[str] = []
+
+    def emit_table(table: Dict[str, object], path: List[str]) -> None:
+        scalars = [(key, value) for key, value in table.items() if not isinstance(value, dict)]
+        nested = [(key, value) for key, value in table.items() if isinstance(value, dict)]
+
+        if path:
+            if lines and lines[-1] != "":
+                lines.append("")
+            lines.append("[" + ".".join(path) + "]")
+
+        for key, value in scalars:
+            lines.append(f"{key} = {_format_toml_value(value)}")
+
+        for key, value in nested:
+            emit_table(value, path + [key])
+
+    emit_table(data, [])
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def available_clients() -> List[McpClientSpec]:
     return list(CLIENT_SPECS)
 
@@ -306,44 +343,12 @@ def install_client_config(
                 try:
                     import tomli_w
                 except ImportError:
-                    # Fallback: try tomllib (write not supported), use simple serializer
-                    try:
-                        import tomllib
-                    except ImportError:
-                        import tomli as tomllib
-                    
-                    # Simple TOML serializer for basic dict structures
-                    def _serialize_toml(data: dict, indent: int = 0) -> str:
-                        lines = []
-                        prefix = "  " * indent
-                        for key, value in data.items():
-                            if isinstance(value, dict):
-                                lines.append(f"{prefix}[{key}]")
-                                lines.append(_serialize_toml(value, indent + 1))
-                            elif isinstance(value, str):
-                                lines.append(f'{prefix}{key} = "{value}"')
-                            elif isinstance(value, list):
-                                lines.append(f"{prefix}{key} = {value}")
-                            elif isinstance(value, bool):
-                                lines.append(f"{prefix}{key} = {'true' if value else 'false'}")
-                            elif isinstance(value, (int, float)):
-                                lines.append(f"{prefix}{key} = {value}")
-                        return "\n".join(lines)
-                    
                     tomli_w = None
                 
                 if tomli_w:
                     target_path.write_text(tomli_w.dumps(payload), encoding="utf-8")
                 else:
-                    # Simple TOML writer for MCP config
-                    lines = []
-                    lines.append("# OpenLMlib MCP Server Configuration")
-                    lines.append("")
-                    lines.append("[mcp_servers.openlmlib]")
-                    lines.append(f'command = "{new_entry["command"]}"')
-                    args_list = ', '.join(f'"{arg}"' for arg in new_entry["args"])
-                    lines.append(f"args = [{args_list}]")
-                    target_path.write_text("\n".join(lines), encoding="utf-8")
+                    target_path.write_text(_dump_simple_toml(payload), encoding="utf-8")
             else:
                 # Default JSON serialization
                 target_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")

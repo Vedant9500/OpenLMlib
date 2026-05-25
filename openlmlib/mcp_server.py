@@ -1133,8 +1133,8 @@ def search_knowledge(query: str, limit: int = 10) -> dict:
     # retrieve_findings already performs hybrid search (semantic + FTS) internally
     # with proper scoring and deduplication (see openlmlib/retrieval.py)
     try:
-        result = retrieve_findings(
-            _settings_path(),
+        result = lib_retrieve_findings(
+            settings_path=_settings_path(),
             query=query,
             final_k=limit,
         )

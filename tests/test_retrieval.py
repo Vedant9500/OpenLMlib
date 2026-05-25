@@ -28,6 +28,18 @@ class DummyEmbedder:
         return vectors
 
 
+class ExpansionDummyEmbedder:
+    def encode(self, texts):
+        vectors = []
+        for text in texts:
+            lower = text.lower()
+            if "database" in lower or "schema" in lower or "migration" in lower:
+                vectors.append([1.0, 0.0])
+            else:
+                vectors.append([0.0, 1.0])
+        return vectors
+
+
 class DummySettings:
     def __init__(self):
         self.retrieval = RetrievalSettings(
@@ -288,6 +300,66 @@ class TestRetrieval(unittest.TestCase):
             self.assertEqual(item["project"], "glassbox")
             self.assertIn("confidence", item)
             self.assertIn("pending_review", item)
+
+    def test_enhanced_query_expansion_uses_variant_results(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "findings.db"
+            conn = db.connect(db_path)
+            db.init_db(conn)
+
+            _insert_finding(
+                conn,
+                finding_id="f-schema",
+                embedding_id=101,
+                project="glassbox",
+                claim="Schema migration checklist",
+                tags=["db"],
+                confidence=0.9,
+                created_at="2026-03-30T00:00:00Z",
+            )
+            _insert_finding(
+                conn,
+                finding_id="f-queue",
+                embedding_id=202,
+                project="glassbox",
+                claim="Queue workers need backoff",
+                tags=["queue"],
+                confidence=0.85,
+                created_at="2025-03-30T00:00:00Z",
+            )
+
+            store = NumpyVectorStore(dim=2, metric="cosine")
+            store.add([101, 202], [[1.0, 0.0], [0.0, 1.0]])
+
+            engine = RetrievalEngine(
+                conn=conn,
+                embedder=ExpansionDummyEmbedder(),
+                vector_store=store,
+                settings=DummySettings(),
+            )
+
+            result = engine.search_enhanced(
+                "sql query",
+                options=Phase4Options(
+                    rerank=False,
+                    expand_query=True,
+                    decompose=False,
+                    deduplicate=False,
+                    reasoning_trace=False,
+                    pack_context=False,
+                ),
+            )
+            conn.close()
+
+            self.assertEqual(result["items"][0]["id"], "f-schema")
+            self.assertIn(
+                "sql query database schema migration",
+                result["items"][0]["expansion_variants"],
+            )
+            self.assertGreaterEqual(
+                result["meta"]["phase4"]["expansion"]["merged_count"],
+                2,
+            )
 
 
 if __name__ == "__main__":

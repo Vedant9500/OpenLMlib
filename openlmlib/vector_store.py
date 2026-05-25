@@ -138,17 +138,22 @@ class NumpyVectorStore(VectorStore):
     def __init__(self, dim: int, metric: str) -> None:
         super().__init__(dim, metric)
         self._vectors = {}
+        self._deleted_ids: set[int] = set()
 
     def add(self, ids: Iterable[int], vectors: Iterable[Iterable[float]]) -> None:
         for idx, vec in zip(ids, vectors):
+            idx = int(idx)
             arr = np.asarray(vec, dtype=np.float32)
             if arr.shape[0] != self.dim:
                 raise ValueError("Vector dimension mismatch")
-            self._vectors[int(idx)] = arr
+            self._vectors[idx] = arr
+            self._deleted_ids.discard(idx)
 
     def delete(self, ids: Iterable[int]) -> None:
         for idx in ids:
-            self._vectors.pop(int(idx), None)
+            idx = int(idx)
+            self._vectors.pop(idx, None)
+            self._deleted_ids.add(idx)
 
     def search(self, query_vector: Iterable[float], k: int) -> List[Tuple[int, float]]:
         query = np.asarray(list(query_vector), dtype=np.float32)
@@ -178,6 +183,7 @@ class NumpyVectorStore(VectorStore):
             payload = pickle.load(handle)
         store = cls(int(payload["dim"]), metric)
         store._vectors = payload["vectors"]
+        store._deleted_ids = set()
         return store
 
 
@@ -230,12 +236,18 @@ def load_vector_store(index_path: Path, meta_path: Path) -> VectorStore:
     return create_vector_store(dim=0, metric="cosine", prefer_faiss=False)
 
 
-def save_vector_store(store: VectorStore, index_path: Path, meta_path: Path) -> None:
+def save_vector_store(
+    store: VectorStore,
+    index_path: Path,
+    meta_path: Path,
+    merge_existing: bool = True,
+) -> None:
     from .file_lock import interprocess_lock
 
     lock_path = meta_path.with_suffix(meta_path.suffix + ".lock")
     with interprocess_lock(lock_path, timeout_sec=60.0):
-        if meta_path.exists():
+        original_store = store
+        if merge_existing and meta_path.exists():
             try:
                 existing_meta = load_meta(meta_path)
                 if existing_meta.backend == store.backend and existing_meta.metric == store.metric:
@@ -244,6 +256,9 @@ def save_vector_store(store: VectorStore, index_path: Path, meta_path: Path) -> 
                             existing_store = NumpyVectorStore.load(index_path, existing_meta.metric)
                             if getattr(store, "_vectors", None) is not None:
                                 existing_store._vectors.update(store._vectors)
+                                for deleted_id in getattr(store, "_deleted_ids", set()):
+                                    existing_store._vectors.pop(int(deleted_id), None)
+                                existing_store._deleted_ids = set(getattr(store, "_deleted_ids", set()))
                                 store = existing_store
                         except Exception:
                             pass
@@ -258,3 +273,7 @@ def save_vector_store(store: VectorStore, index_path: Path, meta_path: Path) -> 
             index_path=str(index_path),
         )
         save_meta(meta_path, meta)
+        if hasattr(store, "_deleted_ids"):
+            store._deleted_ids.clear()
+        if original_store is not store and hasattr(original_store, "_deleted_ids"):
+            original_store._deleted_ids.clear()

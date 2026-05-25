@@ -7,6 +7,7 @@ row_factory, and FTS5 virtual tables.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -208,6 +209,14 @@ def _json_load(value: Optional[str], default=None):
     if value is None:
         return default
     return json.loads(value)
+
+
+def normalize_fts_query(query: str) -> str:
+    """Normalize user text into a conservative FTS5 query."""
+    tokens = re.findall(r"[A-Za-z0-9_]+", query or "")
+    if not tokens:
+        return ""
+    return " ".join(tokens)
 
 
 def _row_to_message(row: sqlite3.Row) -> Dict:
@@ -594,6 +603,10 @@ def grep_messages(
     msg_types: Optional[List[str]] = None,
 ) -> List[Dict]:
     """Search messages by keyword using FTS5."""
+    normalized_pattern = normalize_fts_query(pattern)
+    if not normalized_pattern:
+        return []
+
     sql = """
         SELECT m.msg_id, m.session_id, m.seq, m.from_agent, m.from_model,
                m.msg_type, m.to_agent, m.content, m.metadata_json, m.created_at
@@ -601,7 +614,7 @@ def grep_messages(
         JOIN messages AS m ON m.rowid = fts.rowid
         WHERE m.session_id = ? AND messages_fts MATCH ?
     """
-    params: list = [session_id, pattern]
+    params: list = [session_id, normalized_pattern]
 
     if msg_types:
         placeholders = ",".join("?" for _ in msg_types)

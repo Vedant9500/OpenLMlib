@@ -197,6 +197,12 @@ class TestCollabDB(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["msg_id"], "msg_001")
 
+        hyphen_results = grep_messages(self.conn, "sess_001", "error-correction")
+        self.assertEqual(len(hyphen_results), 1)
+        self.assertEqual(hyphen_results[0]["msg_id"], "msg_001")
+
+        self.assertEqual(grep_messages(self.conn, "sess_001", "!!!"), [])
+
     def test_task_crud(self):
         create_session(
             self.conn,
@@ -938,6 +944,24 @@ class TestMultiSession(unittest.TestCase):
         result = get_session_relationships(self.conn, self.r1["session_id"])
         self.assertIn("by_shared_agents", result)
         self.assertGreaterEqual(len(result["by_orchestrator"]), 1)
+
+    def test_search_sessions_by_content_normalizes_user_query(self):
+        from openlmlib.collab.message_bus import MessageBus
+        from openlmlib.collab.multi_session import search_sessions_by_content
+
+        bus = MessageBus(self.conn, self.sessions_dir)
+        bus.send(
+            session_id=self.r1["session_id"],
+            from_agent="system",
+            msg_type="system",
+            content="Found papers on error correction and fault tolerance",
+            created_at="2026-04-05T10:00:00Z",
+        )
+
+        results = search_sessions_by_content(self.conn, "error-correction")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["session_id"], self.r1["session_id"])
+        self.assertEqual(search_sessions_by_content(self.conn, "!!!"), [])
 
 
 class TestExportBridge(unittest.TestCase):

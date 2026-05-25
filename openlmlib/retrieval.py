@@ -100,9 +100,11 @@ class RetrievalEngine:
         t0 = monotonic()
         effective_query = query
         expansion_info: Dict[str, Any] = {}
+        expanded_items: Optional[List[Dict[str, Any]]] = None
         if options.expand_query:
             expansion_info = self._expand_query(query, filters)
             effective_query = expansion_info.get("primary_query", query)
+            expanded_items = expansion_info.pop("items", None)
         timings["expansion"] = monotonic() - t0
 
         # Step 2: Base retrieval (dual-index search)
@@ -117,10 +119,24 @@ class RetrievalEngine:
         if options.rerank:
             effective_semantic_k = semantic_k * max(1, self._settings.retrieval.semantic_oversample_factor)
 
-        semantic_items = self._semantic_search(effective_query, filters, effective_semantic_k)
-        lexical_items = self._lexical_search(effective_query, filters, lexical_k)
-        merged = self._merge_results(semantic_items, lexical_items)
-        candidates = sorted(merged.values(), key=lambda item: item["_sort"], reverse=True)
+        if expanded_items is not None:
+            semantic_items = []
+            lexical_items = []
+            candidates = sorted(
+                expanded_items,
+                key=lambda item: item.get("_sort", (0, item.get("final_score", 0.0))),
+                reverse=True,
+            )
+            semantic_candidate_count = int(expansion_info.get("semantic_candidates", 0))
+            lexical_candidate_count = int(expansion_info.get("lexical_candidates", 0))
+        else:
+            semantic_items = self._semantic_search(effective_query, filters, effective_semantic_k)
+            lexical_items = self._lexical_search(effective_query, filters, lexical_k)
+            merged = self._merge_results(semantic_items, lexical_items)
+            candidates = sorted(merged.values(), key=lambda item: item["_sort"], reverse=True)
+            semantic_candidate_count = len(semantic_items)
+            lexical_candidate_count = len(lexical_items)
+
         for item in candidates:
             item.pop("_sort", None)
         timings["retrieval"] = monotonic() - t1
@@ -175,8 +191,8 @@ class RetrievalEngine:
             },
             "items": top,
             "meta": {
-                "semantic_candidates": len(semantic_items),
-                "lexical_candidates": len(lexical_items),
+                "semantic_candidates": semantic_candidate_count,
+                "lexical_candidates": lexical_candidate_count,
                 "combined_candidates": len(candidates),
                 "final_k": final_k,
                 "phase4": {
@@ -326,23 +342,45 @@ class RetrievalEngine:
         variants = expander.expand(query, strategy=self._settings.phase4.query_expansion.strategy)
 
         all_items: Dict[str, Dict[str, Any]] = {}
+        semantic_candidate_count = 0
+        lexical_candidate_count = 0
         for variant in variants:
             semantic_items = self._semantic_search(variant, filters, self._settings.retrieval.semantic_k)
             lexical_items = self._lexical_search(variant, filters, self._settings.retrieval.lexical_k)
+            semantic_candidate_count += len(semantic_items)
+            lexical_candidate_count += len(lexical_items)
             merged = self._merge_results(semantic_items, lexical_items)
             for item_id, item in merged.items():
-                if item_id not in all_items:
-                    item["expansion_variant"] = variant
+                item["_expansion_variants"] = [variant]
+                existing = all_items.get(item_id)
+                if existing is None:
+                    all_items[item_id] = item
+                    continue
+
+                existing.setdefault("_expansion_variants", []).append(variant)
+                if item.get("_sort", (0, item.get("final_score", 0.0))) > existing.get("_sort", (0, existing.get("final_score", 0.0))):
+                    item["_expansion_variants"] = existing["_expansion_variants"]
                     all_items[item_id] = item
 
         merged_list = list(all_items.values())
-        merged_list.sort(key=lambda x: x.get("final_score", 0.0), reverse=True)
+        merged_list.sort(
+            key=lambda x: x.get("_sort", (0, x.get("final_score", 0.0))),
+            reverse=True,
+        )
+        for item in merged_list:
+            variants_for_item = item.pop("_expansion_variants", [])
+            if variants_for_item:
+                item["expansion_variants"] = variants_for_item
+                item["expansion_variant"] = variants_for_item[0]
 
         return {
             "status": "ok",
             "variants": variants,
             "primary_query": query,
             "merged_count": len(merged_list),
+            "semantic_candidates": semantic_candidate_count,
+            "lexical_candidates": lexical_candidate_count,
+            "items": merged_list,
         }
 
     def _rerank(

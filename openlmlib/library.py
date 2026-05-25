@@ -47,7 +47,7 @@ def init_library(settings_path: Path) -> Dict[str, Any]:
 
     if not settings.vector_index_path.exists() or not settings.vector_meta_path.exists():
         store = create_vector_store(settings.embedding_dim, settings.embedding_metric)
-        save_vector_store(store, settings.vector_index_path, settings.vector_meta_path)
+        save_vector_store(store, settings.vector_index_path, settings.vector_meta_path, merge_existing=False)
 
     return {
         "status": "ok",
@@ -110,7 +110,7 @@ def rebuild_vector_index(settings_path: Path) -> Dict[str, Any]:
         shutil.copy2(settings.vector_meta_path, meta_backup)
 
     try:
-        save_vector_store(store, settings.vector_index_path, settings.vector_meta_path)
+        save_vector_store(store, settings.vector_index_path, settings.vector_meta_path, merge_existing=False)
     except Exception:
         # Restore backups on failure
         if index_backup and index_backup.exists():

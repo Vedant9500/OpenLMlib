@@ -424,6 +424,10 @@ class SessionManager:
         if not self.active_sessions:
             return
 
+        if not self._storage_is_available():
+            self.active_sessions.clear()
+            return
+
         logger.info(f"Cleaning up {len(self.active_sessions)} active sessions on exit")
         session_ids = list(self.active_sessions.keys())
         for session_id in session_ids:
@@ -431,9 +435,29 @@ class SessionManager:
                 self.storage.end_session(session_id)
                 logger.debug(f"Ended session {session_id} on exit")
             except Exception as e:
+                if "closed database" in str(e).lower():
+                    logger.debug(
+                        "Skipping session cleanup after storage was closed"
+                    )
+                    break
                 logger.error(f"Failed to end session {session_id} on exit: {e}")
 
         self.active_sessions.clear()
+
+    def _storage_is_available(self) -> bool:
+        """Return False when the underlying SQLite connection is already closed."""
+        conn = getattr(self.storage, "conn", None)
+        if conn is None:
+            return False
+        try:
+            conn.execute("SELECT 1")
+            return True
+        except Exception as exc:
+            if "closed database" in str(exc).lower():
+                logger.debug("Skipping session cleanup after storage was closed")
+                return False
+            logger.error(f"Failed to check memory storage during cleanup: {exc}")
+            return False
 
     def get_active_sessions(self) -> List[Dict[str, Any]]:
         """

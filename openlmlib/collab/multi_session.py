@@ -9,6 +9,8 @@ from __future__ import annotations
 import sqlite3
 from typing import Dict, List, Optional
 
+from .db import normalize_fts_query
+
 
 def get_agent_sessions(conn: sqlite3.Connection, agent_id: str, status: Optional[str] = None) -> List[Dict]:
     """Get all sessions an agent has participated in.
@@ -103,6 +105,10 @@ def search_sessions_by_content(
     Returns:
         List of sessions with matching messages
     """
+    normalized_query = normalize_fts_query(query)
+    if not normalized_query:
+        return []
+
     sql = """
         SELECT DISTINCT s.session_id, s.title, s.status, s.created_at,
                COUNT(m.msg_id) as match_count
@@ -111,7 +117,7 @@ def search_sessions_by_content(
         JOIN sessions s ON m.session_id = s.session_id
         WHERE messages_fts MATCH ?
     """
-    params: list = [query]
+    params: list = [normalized_query]
 
     if status:
         sql += " AND s.status = ?"

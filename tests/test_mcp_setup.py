@@ -3,6 +3,10 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+try:
+    import tomllib
+except ImportError:  # pragma: no cover
+    import tomli as tomllib
 
 from openlmlib.mcp_setup import (
     install_client_config,
@@ -157,6 +161,30 @@ class TestMcpSetup(unittest.TestCase):
             configured = {item["client"] for item in result["results"]}
             # Default includes VS Code + popular CLI tools with native MCP support
             self.assertEqual(configured, {"vscode", "claude_code", "gemini_cli", "qwen_code", "opencode", "codex_cli"})
+
+    def test_install_codex_cli_preserves_existing_toml_settings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            settings_path = home / ".openlmlib" / "config" / "settings.json"
+            config_path = home / ".codex" / "config.toml"
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            config_path.write_text(
+                'model = "gpt-5"\n\n[profiles.default]\nreasoning_effort = "medium"\n',
+                encoding="utf-8",
+            )
+
+            result = install_client_config(
+                "codex_cli",
+                settings_path=settings_path,
+                platform="linux",
+                home=home,
+            )
+
+            self.assertEqual(result["status"], "ok")
+            payload = tomllib.loads(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["model"], "gpt-5")
+            self.assertEqual(payload["profiles"]["default"]["reasoning_effort"], "medium")
+            self.assertIn("openlmlib", payload["mcp_servers"])
 
 
 if __name__ == "__main__":

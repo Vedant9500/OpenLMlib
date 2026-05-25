@@ -390,7 +390,6 @@ BENCHMARKS = {
     "state_update": bench_state_update,
     "artifact_save": bench_artifact_save,
     "message_tail": bench_message_tail,
-    "concurrent_writes": bench_concurrent_writes,
 }
 
 
@@ -408,7 +407,21 @@ def run_all(iterations: int = 100) -> List[Dict[str, Any]]:
     return results
 
 
-def print_results(results: List[Dict[str, Any]]) -> None:
+def results_pass(results: List[Dict[str, Any]]) -> bool:
+    for r in results:
+        if "error" in r:
+            return False
+        if r.get("operation") == "concurrent_writes":
+            if r.get("errors", 0) or r.get("actual_messages") != r.get("total_messages"):
+                return False
+            continue
+        target = r.get("target_ms")
+        if target is not None and r["stats"]["median_ms"] > target:
+            return False
+    return True
+
+
+def print_results(results: List[Dict[str, Any]]) -> bool:
     """Print benchmark results in a readable format."""
     print("\n" + "=" * 80)
     print("COLLAB SESSIONS PERFORMANCE BENCHMARK RESULTS")
@@ -419,6 +432,11 @@ def print_results(results: List[Dict[str, Any]]) -> None:
         if "error" in r:
             print(f"\n  {r['operation']}: ERROR - {r['error']}")
             all_pass = False
+            continue
+
+        if r.get("operation") == "concurrent_writes":
+            if r.get("errors", 0) or r.get("actual_messages") != r.get("total_messages"):
+                all_pass = False
             continue
 
         stats = r["stats"]
@@ -452,6 +470,7 @@ def print_results(results: List[Dict[str, Any]]) -> None:
     print("\n" + "=" * 80)
     print(f"  OVERALL: {'ALL TESTS PASSED' if all_pass else 'SOME TESTS FAILED'}")
     print("=" * 80 + "\n")
+    return all_pass
 
 
 def main():
@@ -465,23 +484,26 @@ def main():
     print(f"Running CollabSessions benchmarks (iterations={args.iterations})...")
 
     if args.benchmark:
-        if args.benchmark not in BENCHMARKS:
+        if args.benchmark == "concurrent_writes":
+            results = [bench_concurrent_writes(num_writers=args.writers)]
+        elif args.benchmark not in BENCHMARKS:
             print(f"Unknown benchmark: {args.benchmark}")
-            print(f"Available: {list(BENCHMARKS.keys())}")
+            print(f"Available: {list(BENCHMARKS.keys()) + ['concurrent_writes']}")
             sys.exit(1)
-        results = [BENCHMARKS[args.benchmark](args.iterations)]
+        else:
+            results = [BENCHMARKS[args.benchmark](args.iterations)]
     else:
         results = run_all(args.iterations)
-        if "concurrent_writes" not in [r.get("operation") for r in results]:
-            print(f"  Running concurrent_writes...")
-            results.append(bench_concurrent_writes(num_writers=args.writers))
+        print(f"  Running concurrent_writes...")
+        results.append(bench_concurrent_writes(num_writers=args.writers))
 
     if args.json:
         print(json.dumps(results, indent=2))
+        all_pass = results_pass(results)
     else:
-        print_results(results)
+        all_pass = print_results(results)
 
-    sys.exit(0 if all("error" not in r for r in results) else 1)
+    sys.exit(0 if all_pass else 1)
 
 
 if __name__ == "__main__":

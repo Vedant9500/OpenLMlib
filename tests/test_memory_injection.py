@@ -283,6 +283,16 @@ class TestSessionManager(unittest.TestCase):
         self.assertTrue(result["summary_generated"])
         self.assertEqual(result["observation_count"], 3)
 
+    def test_cleanup_after_storage_closed_is_quiet(self):
+        """Atexit cleanup should not log errors after storage is closed."""
+        self.session_manager.on_session_start("test_sess_closed", "user")
+        self.conn.close()
+
+        with self.assertNoLogs("openlmlib.memory.session_manager", level="ERROR"):
+            self.session_manager._cleanup_on_exit()
+
+        self.assertEqual(self.session_manager.active_sessions, {})
+
 
 # ==================== Privacy Tests ====================
 
