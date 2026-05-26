@@ -14,9 +14,46 @@ import glob
 import datetime
 import platform
 
-def get_benchmark_files(results_dir="results"):
+
+def load_report_config(results_dir="results"):
+    config_path = os.path.join(results_dir, "benchmark_report_config.json")
+    default_config = {
+        "exclude_files": [],
+        "exclude_comparisons": [],
+        "comparison_metric": "mean_ms",
+    }
+    if not os.path.exists(config_path):
+        return default_config
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            loaded = json.load(f)
+    except Exception as e:
+        print(f"Warning: Failed to parse {config_path}: {e}")
+        return default_config
+
+    if not isinstance(loaded, dict):
+        print(f"Warning: {config_path} must contain a JSON object.")
+        return default_config
+
+    config = dict(default_config)
+    config.update(loaded)
+    if not isinstance(config.get("exclude_files"), list):
+        config["exclude_files"] = []
+    if not isinstance(config.get("exclude_comparisons"), list):
+        config["exclude_comparisons"] = []
+    return config
+
+
+def get_benchmark_files(results_dir="results", report_config=None):
     pattern = os.path.join(results_dir, "benchmark_*.json")
     files = glob.glob(pattern)
+    excluded = set(report_config.get("exclude_files", [])) if report_config else set()
+    files = [
+        f for f in files
+        if re.fullmatch(r"benchmark_\d{8}_\d{6}\.json", os.path.basename(f))
+        and os.path.basename(f) not in excluded
+    ]
     # Sort files chronologically based on filename timestamp
     def extract_time(fpath):
         fname = os.path.basename(fpath)
@@ -60,6 +97,8 @@ def parse_benchmark_data(files):
                 "filepath": filepath,
                 "filename": os.path.basename(filepath),
                 "timestamp": formatted_time,
+                "config": data.get("config", {}),
+                "environment": data.get("environment", {}),
                 "results": data.get("results", [])
             })
         except Exception as e:
@@ -117,19 +156,45 @@ def process_metrics(runs):
             
     return {
         "runs": all_runs_timestamps,
+        "run_details": [
+            {
+                "timestamp": run["timestamp"],
+                "filename": run["filename"],
+                "config": run.get("config", {}),
+                "environment": run.get("environment", {}),
+            }
+            for run in runs
+        ],
         "tools": structured_data
     }
 
-def generate_comparison_summary(processed_data):
+def _build_excluded_comparison_map(report_config):
+    excluded = {}
+    for item in report_config.get("exclude_comparisons", []):
+        if not isinstance(item, dict):
+            continue
+        tool = item.get("tool")
+        mode = item.get("mode")
+        if not tool or not mode:
+            continue
+        excluded[(tool, mode)] = item.get("reason", "")
+    return excluded
+
+
+def generate_comparison_summary(processed_data, report_config=None):
     runs = processed_data.get("runs", [])
     tools = processed_data.get("tools", {})
+    report_config = report_config or {}
+    excluded_map = _build_excluded_comparison_map(report_config)
+    comparison_metric = report_config.get("comparison_metric", "mean_ms")
     
     if len(runs) < 2:
         return {
             "improvements": [],
             "regressions": [],
             "overall_warm_change_pct": 0.0,
-            "overall_cold_change_pct": 0.0
+            "overall_cold_change_pct": 0.0,
+            "excluded_comparisons": [],
         }
         
     first_run = runs[0]
@@ -139,9 +204,14 @@ def generate_comparison_summary(processed_data):
     
     for tool, modes in tools.items():
         for mode, metrics in modes.items():
-            means = metrics["mean_ms"]
-            first_val = means[0]
-            last_val = means[-1]
+            excluded_reason = excluded_map.get((tool, mode))
+            if excluded_reason is not None:
+                continue
+            series = metrics.get(comparison_metric) or metrics.get("mean_ms") or []
+            if not series:
+                continue
+            first_val = series[0]
+            last_val = series[-1]
             
             if first_val is None or last_val is None:
                 continue
@@ -199,8 +269,110 @@ def generate_comparison_summary(processed_data):
         "regressions": regressions[:10],
         "overall_warm_change_pct": overall_warm_change,
         "overall_cold_change_pct": overall_cold_change,
-        "all_comparisons": comparisons
+        "all_comparisons": comparisons,
+        "excluded_comparisons": [
+            {"tool": tool, "mode": mode, "reason": reason}
+            for (tool, mode), reason in sorted(excluded_map.items())
+        ],
+        "comparison_window": {
+            "first_run": first_run,
+            "last_run": last_run,
+        },
+        "comparison_metric": comparison_metric,
     }
+
+
+def write_llm_json_report(processed_data, comparison_summary, output_path, report_config=None):
+    payload = {
+        "report_type": "openlmlib_benchmark_llm_summary",
+        "generated_at": datetime.datetime.now().isoformat(),
+        "included_runs": processed_data.get("runs", []),
+        "run_details": processed_data.get("run_details", []),
+        "excluded_files": (report_config or {}).get("exclude_files", []),
+        "comparison_metric": comparison_summary.get("comparison_metric", "mean_ms"),
+        "comparison_window": comparison_summary.get("comparison_window", {}),
+        "overall_warm_change_pct": comparison_summary.get("overall_warm_change_pct", 0.0),
+        "overall_cold_change_pct": comparison_summary.get("overall_cold_change_pct", 0.0),
+        "top_improvements": comparison_summary.get("improvements", []),
+        "top_regressions": comparison_summary.get("regressions", []),
+        "excluded_comparisons": comparison_summary.get("excluded_comparisons", []),
+        "all_comparisons": comparison_summary.get("all_comparisons", []),
+    }
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+
+
+def write_markdown_report(processed_data, comparison_summary, output_path, report_config=None):
+    runs = processed_data.get("runs", [])
+    window = comparison_summary.get("comparison_window", {})
+
+    lines = []
+    lines.append("# OpenLMlib Benchmark Summary")
+    lines.append("")
+    lines.append(f"- Included runs: {len(runs)}")
+    if window:
+        lines.append(
+            f"- Comparison window: {window.get('first_run', 'N/A')} -> {window.get('last_run', 'N/A')}"
+        )
+    lines.append(
+        f"- Comparison metric: {comparison_summary.get('comparison_metric', 'mean_ms')}"
+    )
+    excluded_files = (report_config or {}).get("exclude_files", [])
+    if excluded_files:
+        lines.append("- Excluded files: " + ", ".join(excluded_files))
+    lines.append(
+        f"- Overall warm change: {comparison_summary.get('overall_warm_change_pct', 0.0):+.1f}%"
+    )
+    lines.append(
+        f"- Overall cold change: {comparison_summary.get('overall_cold_change_pct', 0.0):+.1f}%"
+    )
+    lines.append("")
+
+    run_details = processed_data.get("run_details", [])
+    if run_details:
+        lines.append("## Runs")
+        lines.append("")
+        for run in run_details:
+            cfg = run.get("config", {})
+            env = run.get("environment", {})
+            commit = env.get("commit") or "unknown"
+            lines.append(
+                f"- `{run.get('timestamp', 'N/A')}`: warm={cfg.get('iterations', '?')}, cold={cfg.get('cold_iterations', '?')}, warmup={cfg.get('warmup', '?')}, commit={commit}"
+            )
+        lines.append("")
+
+    excluded_comparisons = comparison_summary.get("excluded_comparisons", [])
+    if excluded_comparisons:
+        lines.append("## Excluded Comparisons")
+        lines.append("")
+        for item in excluded_comparisons:
+            lines.append(
+                f"- `{item['tool']}` ({item['mode']}): {item.get('reason', 'excluded')}"
+            )
+        lines.append("")
+
+    lines.append("## Top Improvements")
+    lines.append("")
+    for item in comparison_summary.get("improvements", []):
+        lines.append(
+            f"- `{item['tool']}` ({item['mode']}): {item['first_val']:.2f}ms -> {item['last_val']:.2f}ms ({item['pct_change']:+.1f}%)"
+        )
+    if not comparison_summary.get("improvements"):
+        lines.append("- None")
+    lines.append("")
+
+    lines.append("## Top Regressions")
+    lines.append("")
+    for item in comparison_summary.get("regressions", []):
+        lines.append(
+            f"- `{item['tool']}` ({item['mode']}): {item['first_val']:.2f}ms -> {item['last_val']:.2f}ms ({item['pct_change']:+.1f}%)"
+        )
+    if not comparison_summary.get("regressions"):
+        lines.append("- None")
+    lines.append("")
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
 
 def build_html_report(processed_data, comparison_summary, output_path):
     import json
@@ -1513,7 +1685,8 @@ def build_html_report(processed_data, comparison_summary, output_path):
 
 def main():
     print("Collecting benchmark files...")
-    files = get_benchmark_files()
+    report_config = load_report_config()
+    files = get_benchmark_files(report_config=report_config)
     
     if not files:
         print("Error: No benchmark result files found matching results/benchmark_*.json.")
@@ -1525,14 +1698,20 @@ def main():
         
     runs = parse_benchmark_data(files)
     processed_data = process_metrics(runs)
-    comparison_summary = generate_comparison_summary(processed_data)
+    comparison_summary = generate_comparison_summary(processed_data, report_config=report_config)
     
     output_path = os.path.join("results", "benchmark_report.html")
+    llm_json_path = os.path.join("results", "benchmark_report_llm.json")
+    markdown_path = os.path.join("results", "benchmark_report.md")
     build_html_report(processed_data, comparison_summary, output_path)
+    write_llm_json_report(processed_data, comparison_summary, llm_json_path, report_config=report_config)
+    write_markdown_report(processed_data, comparison_summary, markdown_path, report_config=report_config)
     
     print("\n" + "="*60)
     print("Benchmark Report Successfully Generated!")
     print(f"Saved to: {os.path.abspath(output_path)}")
+    print(f"Saved to: {os.path.abspath(llm_json_path)}")
+    print(f"Saved to: {os.path.abspath(markdown_path)}")
     print("="*60)
     
     if len(files) >= 2:

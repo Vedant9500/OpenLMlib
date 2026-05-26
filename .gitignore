@@ -61,4 +61,8 @@ CI_CHECKS.md
 run_ci_checks.sh
 run_ci_checks.ps1
 .agents/
+
+#Benchmark 
+.bench_probe/
+.bench_tmp/
 results/
