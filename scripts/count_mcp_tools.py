@@ -9,6 +9,12 @@ For a source checkout on Windows that usually means:
 from __future__ import annotations
 
 import sys
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if (REPO_ROOT / "openlmlib" / "mcp_server.py").exists():
+    sys.path.insert(0, str(REPO_ROOT))
 
 
 EXPECTED_CORE = {
@@ -119,6 +125,7 @@ def main() -> int:
 
         _register_memory_tools()
         _register_collab_tools()
+        import openlmlib
     except ImportError as exc:
         print("ERROR: failed to import openlmlib.mcp_server")
         print(f"  {exc}")
@@ -132,6 +139,7 @@ def main() -> int:
     missing = sorted(EXPECTED_ALL - found)
     extra = sorted(found - EXPECTED_ALL)
 
+    print(f"OpenLMlib import: {openlmlib.__file__}")
     print(f"Total MCP tools: {len(found)}")
     print(f"Expected minimum: {len(EXPECTED_ALL)}")
     _print_group("Core tools", EXPECTED_CORE, found)

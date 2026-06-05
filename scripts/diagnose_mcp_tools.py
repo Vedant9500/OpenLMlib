@@ -9,6 +9,13 @@ Python executable used by the MCP client entry:
 from __future__ import annotations
 
 import traceback
+import sys
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if (REPO_ROOT / "openlmlib" / "mcp_server.py").exists():
+    sys.path.insert(0, str(REPO_ROOT))
 
 EXPECTED_TOTAL = 76
 EXPECTED_CO_SCIENTIST = {
@@ -29,9 +36,11 @@ def main() -> int:
 
     print("\n[Test 1] Import openlmlib.mcp_server")
     try:
+        import openlmlib
         from openlmlib import mcp_server
 
         print("  OK: mcp_server imported")
+        print(f"  Source: {openlmlib.__file__}")
     except Exception as exc:
         print(f"  FAIL: {exc}")
         traceback.print_exc()

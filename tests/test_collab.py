@@ -27,6 +27,7 @@ from openlmlib.collab.db import (
     get_max_seq,
     insert_task,
     update_task_status,
+    complete_tasks_for_artifact_type,
     get_session_tasks,
     insert_artifact,
     get_session_artifacts,
@@ -231,6 +232,48 @@ class TestCollabDB(unittest.TestCase):
         )
         tasks = get_session_tasks(self.conn, "sess_001", status="in_progress")
         self.assertEqual(len(tasks), 1)
+
+    def test_complete_tasks_for_artifact_type(self):
+        create_session(
+            self.conn,
+            session_id="sess_001",
+            title="Test",
+            created_by="test",
+            created_at="2026-04-05T10:00:00Z",
+        )
+        insert_task(
+            self.conn,
+            task_id="task_001",
+            session_id="sess_001",
+            step_num=1,
+            description="Save artifact_type `evidence_verification` with citations.",
+            created_at="2026-04-05T10:00:00Z",
+            assigned_to="any",
+        )
+        insert_task(
+            self.conn,
+            task_id="task_002",
+            session_id="sess_001",
+            step_num=2,
+            description="Unrelated analysis task.",
+            created_at="2026-04-05T10:00:00Z",
+            assigned_to="any",
+        )
+
+        completed = complete_tasks_for_artifact_type(
+            self.conn,
+            "sess_001",
+            "evidence_verification",
+            "2026-04-05T10:10:00Z",
+            completed_by="agent_001",
+        )
+        tasks = get_session_tasks(self.conn, "sess_001")
+        statuses = {task["task_id"]: task["status"] for task in tasks}
+
+        self.assertEqual([task["task_id"] for task in completed], ["task_001"])
+        self.assertEqual(statuses["task_001"], "completed")
+        self.assertEqual(statuses["task_002"], "pending")
+        self.assertEqual(tasks[0]["assigned_to"], "agent_001")
 
     def test_artifact_crud(self):
         create_session(

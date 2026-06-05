@@ -144,26 +144,37 @@ function discoverLocalSourceCandidates() {
 function validateInstalledOpenLMlib(VENV_PYTHON) {
   const scriptPath = path.join(os.tmpdir(), `openlmlib-validate-${Date.now()}.py`);
   const checkScript = [
+    'import openlmlib',
     'import openlmlib.mcp_server as m',
     'required_core = ["init_library", "save_finding", "retrieve_findings", "health"]',
-    'required_collab = ["create_session", "help_collab"]',
     'missing_core = [name for name in required_core if not hasattr(m, name)]',
-    'missing_collab = [name for name in required_collab if not hasattr(m, name)]',
     'if missing_core:',
     '    raise SystemExit("missing_core_mcp_tools:" + ",".join(missing_core))',
-    'if missing_collab:',
-    '    print("missing_collab_mcp_tools:" + ",".join(missing_collab))',
-    'print("ok")',
+    'for hook in ("_register_memory_tools", "_register_collab_tools"):',
+    '    if not hasattr(m, hook):',
+    '        raise SystemExit("missing_registration_hook:" + hook)',
+    'm._register_memory_tools()',
+    'm._register_collab_tools()',
+    'tools = set(m.mcp._tool_manager._tools)',
+    'required_tools = {',
+    '    "create_session",',
+    '    "help_collab",',
+    '    "create_co_scientist_run",',
+    '    "submit_hypothesis",',
+    '    "start_hypothesis_verification",',
+    '    "submit_verification",',
+    '    "create_co_scientist_final_report",',
+    '}',
+    'missing_tools = sorted(required_tools - tools)',
+    'if missing_tools:',
+    '    raise SystemExit("missing_registered_tools:" + ",".join(missing_tools))',
+    'if len(tools) < 76:',
+    '    raise SystemExit(f"incomplete_mcp_tool_surface:{len(tools)}")',
+    'print("ok:" + openlmlib.__file__ + ":" + str(len(tools)))',
   ].join('\n');
   fs.writeFileSync(scriptPath, checkScript, { encoding: 'utf-8' });
   try {
-    const output = execFileSync(VENV_PYTHON, [scriptPath], { stdio: 'pipe', encoding: 'utf-8' });
-    if (output && output.includes('missing_collab_mcp_tools:')) {
-      const warningLine = output.split('\n').find((line) => line.startsWith('missing_collab_mcp_tools:'));
-      if (warningLine) {
-        return { status: 'warn', message: warningLine };
-      }
-    }
+    execFileSync(VENV_PYTHON, [scriptPath], { stdio: 'pipe', encoding: 'utf-8' });
     return { status: 'ok' };
   } finally {
     try {

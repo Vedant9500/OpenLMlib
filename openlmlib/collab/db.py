@@ -10,7 +10,7 @@ import json
 import re
 import sqlite3
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional
 
 
 COLLAB_SCHEMA = """
@@ -703,6 +703,83 @@ def update_task_status(
                 "UPDATE tasks SET status = ? WHERE task_id = ?",
                 (status, task_id),
             )
+
+
+def complete_tasks_for_artifact_type(
+    conn: sqlite3.Connection,
+    session_id: str,
+    artifact_type: Optional[str],
+    completed_at: str,
+    *,
+    completed_by: Optional[str] = None,
+    skip_artifact_types: Optional[Iterable[str]] = None,
+) -> List[Dict]:
+    """Complete open tasks whose text explicitly asks for an artifact type.
+
+    Template tasks describe expected outputs as ``artifact_type `<name>``` so
+    saving that exact artifact is a deterministic completion signal. The match
+    is intentionally narrow to avoid marking unrelated tasks as done.
+    """
+    if not artifact_type:
+        return []
+    artifact_type = artifact_type.strip()
+    if not artifact_type:
+        return []
+    if skip_artifact_types and artifact_type in set(skip_artifact_types):
+        return []
+
+    patterns = [
+        f"%artifact_type `{artifact_type}`%",
+        f"%artifact_type \"{artifact_type}\"%",
+        f"%artifact_type '{artifact_type}'%",
+    ]
+    rows = conn.execute(
+        """
+        SELECT *
+        FROM tasks
+        WHERE session_id = ?
+          AND status IN ('pending', 'in_progress')
+          AND (
+            description LIKE ?
+            OR description LIKE ?
+            OR description LIKE ?
+          )
+        ORDER BY step_num ASC, created_at ASC, task_id ASC
+        """,
+        (session_id, *patterns),
+    ).fetchall()
+    if not rows:
+        return []
+
+    completed: List[Dict] = []
+    with conn:
+        for row in rows:
+            task = dict(row)
+            if completed_by and task.get("assigned_to") in (None, "any"):
+                conn.execute(
+                    """
+                    UPDATE tasks
+                    SET status = 'completed', completed_at = ?, assigned_to = ?
+                    WHERE task_id = ?
+                    """,
+                    (completed_at, completed_by, task["task_id"]),
+                )
+                task["assigned_to"] = completed_by
+            else:
+                conn.execute(
+                    """
+                    UPDATE tasks
+                    SET status = 'completed', completed_at = ?
+                    WHERE task_id = ?
+                    """,
+                    (completed_at, task["task_id"]),
+                )
+            task["status"] = "completed"
+            task["completed_at"] = completed_at
+            completed.append(task)
+        touch_session(conn, session_id, completed_at)
+
+    return completed
 
 
 def claim_task(

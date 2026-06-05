@@ -141,6 +141,13 @@ class TestCoScientistRunOrchestrator(unittest.TestCase):
 
         self.assertEqual(listed["count"], 2)
         self.assertEqual(handoff["hypothesis_ids"], [high["hypothesis_id"]])
+        self.assertEqual(len(handoff["completed_generation_task_ids"]), 6)
+        self.assertTrue(
+            all(
+                task["status"] == "completed"
+                for task in collab_db.get_session_tasks(self.conn, run["generation_session_id"])
+            )
+        )
         self.assertEqual(payload["hypothesis_ids"], [high["hypothesis_id"]])
         self.assertEqual(payload["hypothesis_packets"][0]["claim"], high["claim"])
         self.assertNotIn("Lower ranked packet", content)
@@ -173,6 +180,14 @@ class TestCoScientistRunOrchestrator(unittest.TestCase):
         self.assertEqual(result["phase"], "synthesis")
         self.assertTrue(report["ready_for_synthesis"])
         self.assertEqual(report["verification_report_count"], 1)
+        self.assertEqual(report["hypotheses"][0]["status"], "verified")
+        self.assertEqual(len(result["completed_verification_task_ids"]), 5)
+        self.assertTrue(
+            all(
+                task["status"] == "completed"
+                for task in collab_db.get_session_tasks(self.conn, run["verification_session_id"])
+            )
+        )
         self.assertEqual(
             report["verification_reports"][0]["hypothesis_id"],
             packet["hypothesis_id"],

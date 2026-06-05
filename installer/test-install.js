@@ -73,7 +73,19 @@ const venvPython = process.platform === 'win32'
   : path.join(openlmlibHome, 'venv', 'bin', 'python');
 run(venvPython, [
   '-c',
-  'import openlmlib.mcp_server as m; assert hasattr(m, "init_library"); assert hasattr(m, "save_finding"); print("mcp-import-ok")',
-], { stdio: 'inherit' });
+  [
+    'import openlmlib, openlmlib.mcp_server as m',
+    'assert hasattr(m, "init_library")',
+    'assert hasattr(m, "save_finding")',
+    'm._register_memory_tools()',
+    'm._register_collab_tools()',
+    'tools = set(m.mcp._tool_manager._tools)',
+    'required = {"create_co_scientist_run", "submit_hypothesis", "start_hypothesis_verification", "submit_verification", "create_co_scientist_final_report"}',
+    'missing = sorted(required - tools)',
+    'assert not missing, missing',
+    'assert len(tools) >= 76, len(tools)',
+    'print(f"mcp-import-ok:{openlmlib.__file__}:{len(tools)}")',
+  ].join('; '),
+], { cwd: projectDir, stdio: 'inherit' });
 
 console.log('Installer smoke test passed');

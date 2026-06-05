@@ -22,13 +22,17 @@ if not exist "%VENV_PYTHON%" (
 echo Python: %VENV_PYTHON%
 echo.
 
-REM Run the tool count check
-"%VENV_PYTHON%" -c "from openlmlib.mcp_server import mcp; tools = mcp._tool_manager._tools; core = [n for n in tools if n.startswith('openlmlib_')]; collab = [n for n in tools if n.startswith('collab_')]; print(f'Total tools: {len(tools)}'); print(f'  Core tools: {len(core)}'); print(f'  Collab tools: {len(collab)}'); print(); exit(0 if len(tools) == 41 else 1)"
+REM Run the tool count check. Importing the module alone only shows core tools;
+REM the MCP server registers memory and collaboration tools during startup.
+pushd "%USERPROFILE%\.openlmlib" >nul
+"%VENV_PYTHON%" -c "import openlmlib; from openlmlib import mcp_server as m; m._register_memory_tools(); m._register_collab_tools(); tools = set(m.mcp._tool_manager._tools); required = {'create_co_scientist_run','submit_hypothesis','start_hypothesis_verification','submit_verification','create_co_scientist_final_report'}; missing = sorted(required - tools); print(f'OpenLMlib import: {openlmlib.__file__}'); print(f'Total tools: {len(tools)}'); print(f'Missing required Co-Scientist tools: {missing}'); print(); exit(0 if len(tools) >= 76 and not missing else 1)"
+set "VERIFY_ERRORLEVEL=%ERRORLEVEL%"
+popd >nul
 
-if %ERRORLEVEL% EQU 0 (
+if %VERIFY_ERRORLEVEL% EQU 0 (
     echo.
     echo ========================================
-    echo ✓ SUCCESS: All 41 MCP tools registered!
+    echo SUCCESS: All expected MCP tools registered!
     echo ========================================
     echo.
     echo If your IDE shows fewer tools, try:
@@ -39,10 +43,10 @@ if %ERRORLEVEL% EQU 0 (
 ) else (
     echo.
     echo ========================================
-    echo ✗ ERROR: Not all tools registered
+    echo ERROR: Not all tools registered
     echo ========================================
     echo.
-    echo Expected: 41 tools
+    echo Expected: at least 76 tools with Co-Scientist lifecycle tools
     echo.
     echo Troubleshooting:
     echo   1. Check installation: openlmlib doctor
@@ -51,4 +55,4 @@ if %ERRORLEVEL% EQU 0 (
     echo.
 )
 
-exit /b %ERRORLEVEL%
+exit /b %VERIFY_ERRORLEVEL%

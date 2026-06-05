@@ -1229,6 +1229,14 @@ def save_artifact(
                 tags=tags,
                 shared=shared,
             )
+            completed_tasks = collab_db.complete_tasks_for_artifact_type(
+                conn,
+                session_id,
+                artifact_type,
+                now,
+                completed_by=created_by,
+                skip_artifact_types={"verification_report"},
+            )
 
             bus = MessageBus(conn, sessions_dir)
             bus.send(
@@ -1242,6 +1250,7 @@ def save_artifact(
                     "artifact_id": result["artifact_id"],
                     "title": safe_title,
                     "word_count": result["word_count"],
+                    "completed_task_ids": [task["task_id"] for task in completed_tasks],
                 },
             )
 
@@ -1253,6 +1262,7 @@ def save_artifact(
                 "word_count": result["word_count"],
                 "file_path": result["file_path"],
                 "shared": result["shared"],
+                "completed_task_ids": [task["task_id"] for task in completed_tasks],
             }
     except Exception as e:
         return _handle_tool_error("save_artifact", e)

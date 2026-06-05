@@ -328,6 +328,11 @@ def start_hypothesis_verification(
         run_state["hypotheses"][hypothesis_id]["sent_to_verification_at"] = created_at
     run_state["updated_at"] = created_at
     _write_run_state_to_sessions(conn, run_state, updated_by=actor, updated_at=created_at)
+    completed_generation_tasks = _complete_open_session_tasks(
+        conn,
+        run_state["generation_session_id"],
+        completed_at=created_at,
+    )
 
     MessageBus(conn, sessions_dir).send(
         session_id=run_state["verification_session_id"],
@@ -353,6 +358,7 @@ def start_hypothesis_verification(
         "verification_input_artifact_id": artifact["artifact_id"],
         "hypothesis_ids": selected_ids,
         "count": len(selected_ids),
+        "completed_generation_task_ids": [task["task_id"] for task in completed_generation_tasks],
     }
 
 
@@ -427,10 +433,18 @@ def submit_verification(
         run_state["verification_report_ids"].append(artifact["artifact_id"])
     run_state["hypotheses"][hypothesis_id]["verification_status"] = verdict
     run_state["hypotheses"][hypothesis_id]["verification_report_artifact_id"] = artifact["artifact_id"]
+    run_state["hypotheses"][hypothesis_id]["status"] = _hypothesis_status_for_verdict(verdict)
+    completed_verification_tasks: List[Dict[str, Any]] = []
     if _selected_reports_complete(run_state):
         run_state["phase"] = "synthesis"
     run_state["updated_at"] = created_at
     _write_run_state_to_sessions(conn, run_state, updated_by=actor, updated_at=created_at)
+    if _selected_reports_complete(run_state):
+        completed_verification_tasks = _complete_open_session_tasks(
+            conn,
+            run_state["verification_session_id"],
+            completed_at=created_at,
+        )
 
     MessageBus(conn, sessions_dir).send(
         session_id=run_state["verification_session_id"],
@@ -453,6 +467,7 @@ def submit_verification(
         "verdict": verdict,
         "phase": run_state["phase"],
         "verification_report_count": len(run_state["verification_reports"]),
+        "completed_verification_task_ids": [task["task_id"] for task in completed_verification_tasks],
     }
 
 
@@ -836,6 +851,36 @@ def _selected_reports_complete(run_state: Dict[str, Any]) -> bool:
         return False
     reports = run_state.get("verification_reports", {})
     return all(hypothesis_id in reports for hypothesis_id in selected)
+
+
+def _hypothesis_status_for_verdict(verdict: str) -> str:
+    if verdict in {"contradicted", "unsafe_or_out_of_scope"}:
+        return "rejected"
+    return "verified"
+
+
+def _complete_open_session_tasks(
+    conn: sqlite3.Connection,
+    session_id: str,
+    *,
+    completed_at: str,
+) -> List[Dict[str, Any]]:
+    """Close template tasks once the Co-Scientist phase has actually advanced."""
+    completed: List[Dict[str, Any]] = []
+    for task in collab_db.get_session_tasks(conn, session_id):
+        if task.get("status") in {"completed", "cancelled"}:
+            continue
+        collab_db.update_task_status(
+            conn,
+            task["task_id"],
+            "completed",
+            completed_at=completed_at,
+        )
+        updated = dict(task)
+        updated["status"] = "completed"
+        updated["completed_at"] = completed_at
+        completed.append(updated)
+    return completed
 
 
 def _validate_non_empty_string_list(
