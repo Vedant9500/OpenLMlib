@@ -14,6 +14,11 @@ import functools
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from openlmlib.co_scientist.templates import (
+    CO_SCIENTIST_GENERATE_TEMPLATE,
+    CO_SCIENTIST_VERIFY_TEMPLATE,
+)
+
 TEMPLATES: Dict[str, Dict] = {
     "deep_research": {
         "name": "Deep Research",
@@ -104,6 +109,8 @@ TEMPLATES: Dict[str, Dict] = {
             {"step": 4, "task": "Write review: Comprehensive literature review document", "assigned_to": "orchestrator"},
         ],
     },
+    "co_scientist_generate": CO_SCIENTIST_GENERATE_TEMPLATE,
+    "co_scientist_verify": CO_SCIENTIST_VERIFY_TEMPLATE,
 }
 
 _custom_templates_dir: Optional[Path] = None

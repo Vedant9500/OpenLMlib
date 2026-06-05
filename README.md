@@ -172,6 +172,8 @@ openlmlib-mcp --call save_artifact '{...}'
 - `market_analysis` - Market/competitor analysis (4 steps, 4 agents)
 - `incident_investigation` - Root cause analysis (4 steps, 3 agents)
 - `literature_review` - Academic literature review (6 steps, 5 agents)
+- `co_scientist_generate` - Co-Scientist hypothesis generation (6 steps, 7 agents)
+- `co_scientist_verify` - Co-Scientist independent verification (5 steps, 6 agents)
 
 📖 **[Full CollabSessions guide →](docs/COLLAB_SESSIONS.md)**
 

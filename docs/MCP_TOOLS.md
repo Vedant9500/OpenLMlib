@@ -544,7 +544,7 @@ Send a message to a session.
 **Parameters:**
 - `session_id` (string): Target session
 - `from_agent` (string): Sender agent ID
-- `msg_type` (string): Message type (system/task/result/artifact/discussion)
+- `msg_type` (string): Message type (system/task/result/artifact/question/answer/update/ack/complete/summary)
 - `content` (string): Message content
 - `to_agent` (string, optional): Recipient agent
 - `metadata` (object, optional): Additional metadata

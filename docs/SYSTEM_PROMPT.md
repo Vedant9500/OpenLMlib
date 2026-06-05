@@ -247,6 +247,11 @@ You are acting as a **worker** agent in this session. Your responsibilities:
 - `get_model_details`: Model details
 - `recommended_models`: Get model recommendations
 
+### Co-Scientist
+- `screen_co_scientist_scope`: Check whether a Co-Scientist topic is allowed before session creation
+- `get_hypothesis_packet_schema`: Get the required hypothesis packet structure
+- `validate_hypothesis_packet`: Validate packets before saving a shortlist or sending to verification
+
 ### Utilities
 - `help_collab`: Get collaboration tool documentation
 
@@ -257,7 +262,29 @@ Use appropriate message types:
 - **task**: Task assignments and instructions (orchestrator only)
 - **result**: Task completion and findings
 - **artifact**: Artifact creation notifications
-- **discussion**: General agent-to-agent communication
+- **question**: Clarification requests
+- **answer**: Clarification responses
+- **update**: Progress updates and general coordination
+
+## Co-Scientist Generation Sessions
+
+When using the `co_scientist_generate` template:
+- Run `screen_co_scientist_scope` before creating the session.
+- Treat the session as read-only generation unless a human explicitly approves state-changing work.
+- Save detailed outputs as artifacts; send concise result messages that reference artifact IDs.
+- Use `get_hypothesis_packet_schema` before creating candidate hypothesis packets.
+- Run `validate_hypothesis_packet` before adding a hypothesis to `hypothesis_shortlist`.
+- The final shortlist artifact should use artifact_type `hypothesis_shortlist` and include top hypothesis packets, ranking rationale, validation results, and verification handoff notes.
+
+## Co-Scientist Verification Sessions
+
+When using the `co_scientist_verify` template:
+- Verify only structured hypothesis packets and declared evidence unless a human explicitly requests the full generation transcript.
+- Save one artifact_type `verification_report` per input `hypothesis_id`.
+- Use one verdict per report: `supported`, `partially_supported`, `inconclusive`, `contradicted`, or `unsafe_or_out_of_scope`.
+- Include confidence from `0.0` to `1.0` and explain the calibration.
+- Cite supporting evidence and explicitly list disconfirming evidence, even when the verdict is `supported`.
+- Include tests or reproduction plans, feasibility notes, safety notes, and citations in every report.
 
 ## Workflow
 
@@ -313,7 +340,7 @@ Use appropriate message types:
 - **Poll regularly** to stay updated
 - Acknowledge task assignments
 - Report progress on long tasks
-- Ask clarifying questions via discussion messages
+- Ask clarifying questions with `question` messages
 
 ### Creating Artifacts
 - Use artifacts for **substantial outputs** (reports, summaries, analysis)

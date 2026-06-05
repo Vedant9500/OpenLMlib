@@ -26,18 +26,28 @@ from .hypothesis import (
     validate_hypothesis_packet,
     validation_issues_to_dicts,
 )
+from .templates import (
+    CO_SCIENTIST_GENERATE_TEMPLATE,
+    CO_SCIENTIST_VERIFY_TEMPLATE,
+    VERIFICATION_CONFIDENCE_RULES,
+    VERIFICATION_VERDICTS,
+)
 
 __all__ = [
     "ACCEPTED_DOMAINS",
     "APPROVAL_REQUIRED_ACTIONS",
     "BLOCKED_DOMAINS",
     "CoScientistScopeError",
+    "CO_SCIENTIST_GENERATE_TEMPLATE",
+    "CO_SCIENTIST_VERIFY_TEMPLATE",
     "EVIDENCE_SUPPORTS",
     "HYPOTHESIS_ID_RE",
     "HYPOTHESIS_STATUSES",
     "PHASE_0_LIMITS",
     "RUN_ID_RE",
     "SCORE_FIELDS",
+    "VERIFICATION_CONFIDENCE_RULES",
+    "VERIFICATION_VERDICTS",
     "HypothesisEvidence",
     "HypothesisLineage",
     "HypothesisPacket",

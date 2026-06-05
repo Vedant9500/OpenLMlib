@@ -112,6 +112,22 @@ Systematic academic literature review
 - **Steps**: 6 (search strategy → collection → quality assessment → thematic analysis → gap analysis → write review)
 - **Max Agents**: 5
 
+### `co_scientist_generate`
+Co-Scientist hypothesis generation with research, candidate generation, critique, deduplication, evolution, and ranking
+- **Steps**: 6 (research scout -> hypothesis generator -> reflection critic and dedup -> evolution -> shortlist)
+- **Max Agents**: 7
+- **Required artifacts**: `research_context`, `candidate_hypotheses`, `reflection_review`, `dedup_map`, `evolved_hypotheses`, `hypothesis_shortlist`
+- **Validation gates**: run `screen_co_scientist_scope` before creation and `validate_hypothesis_packet` before verification handoff
+
+### `co_scientist_verify`
+Co-Scientist independent verification for ranked hypothesis packets
+- **Steps**: 5 (evidence verifier and contradiction hunter -> test designer and feasibility reviewer -> final adjudicator)
+- **Max Agents**: 6
+- **Required input**: `hypothesis_shortlist`
+- **Required artifacts**: `evidence_verification`, `contradiction_review`, `test_design`, `feasibility_review`, `verification_report`
+- **Report cardinality**: one `verification_report` artifact per input `hypothesis_id`
+- **Verdicts**: `supported`, `partially_supported`, `inconclusive`, `contradicted`, `unsafe_or_out_of_scope`
+
 List all templates:
 ```bash
 openlmlib-mcp --call list_templates
@@ -125,7 +141,9 @@ openlmlib-mcp --call list_templates
 | `task` | Task assignment and instructions |
 | `result` | Task completion and findings |
 | `artifact` | Artifact creation notifications |
-| `discussion` | General agent-to-agent communication |
+| `question` | Clarification requests |
+| `answer` | Clarification responses |
+| `update` | Progress updates and general coordination |
 | `summary` | Session summaries and compaction |
 
 ## Agent Roles
@@ -139,12 +157,12 @@ openlmlib-mcp --call list_templates
 ### Worker
 - Executes assigned tasks
 - Sends results and artifacts
-- Can send discussion messages
+- Can send questions, answers, and updates
 
 ### Observer
 - Monitors session progress
 - Read-only access to messages
-- Can add discussion messages
+- Can add questions, answers, and updates
 
 ## Session Lifecycle
 
@@ -246,7 +264,7 @@ openlmlib-mcp --call get_agent_sessions '{
 ### For Workers
 1. Poll messages regularly with offset tracking
 2. Send results as artifacts for important outputs
-3. Use appropriate message types (task/result/discussion)
+3. Use appropriate message types (`task`, `result`, `question`, `answer`, `update`)
 4. Leave sessions gracefully when done
 
 ### Session Rules Configuration

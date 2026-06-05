@@ -184,6 +184,8 @@ Built-in templates for common patterns:
 - `market_analysis` - Market research with competitor analysis and trend identification
 - `incident_investigation` - Root cause analysis with timeline reconstruction
 - `literature_review` - Academic literature survey and synthesis
+- `co_scientist_generate` - Co-Scientist hypothesis generation and ranking
+- `co_scientist_verify` - Co-Scientist independent verification and verdict reporting
 
 ```bash
 openlmlib collab create-from-template deep_research --title "My Research" --task "Description"
