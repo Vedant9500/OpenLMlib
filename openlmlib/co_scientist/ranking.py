@@ -8,6 +8,7 @@ import re
 
 from openlmlib.schema import ValidationIssue
 
+from .evidence import evidence_quality_score
 from .hypothesis import (
     HYPOTHESIS_ID_RE,
     SCORE_FIELDS,
@@ -388,7 +389,7 @@ def _evidence_quality(packet: Dict[str, Any]) -> float:
     evidence = packet.get("evidence") or []
     if not evidence:
         return 0.0
-    return sum(float(item["confidence"]) for item in evidence) / len(evidence)
+    return sum(evidence_quality_score(item) for item in evidence) / len(evidence)
 
 
 def _optional_score(packet: Dict[str, Any], field: str, default: float) -> float:

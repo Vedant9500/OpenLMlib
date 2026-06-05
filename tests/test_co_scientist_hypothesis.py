@@ -34,6 +34,8 @@ def valid_packet():
                 "summary": "The phase plan requires explicit citations and assumptions.",
                 "supports": "claim",
                 "confidence": 0.86,
+                "label": "support",
+                "quality": "primary_source",
             }
         ],
         "citations": ["docs/CO_SCIENTIST_PHASE_PLAN.md"],
@@ -98,6 +100,17 @@ class TestCoScientistHypothesisPacket(unittest.TestCase):
 
         self.assertIn("evidence", fields)
         self.assertIn("citations", fields)
+
+    def test_validates_optional_phase_6_evidence_fields(self):
+        packet = valid_packet()
+        packet["evidence"][0]["label"] = "maybe"
+        packet["evidence"][0]["quality"] = "bloggy"
+
+        issues = validate_hypothesis_packet(packet)
+        fields = {issue.field for issue in issues}
+
+        self.assertIn("evidence[0].label", fields)
+        self.assertIn("evidence[0].quality", fields)
 
     def test_rejects_invalid_scores_and_boolean_numbers(self):
         packet = valid_packet()

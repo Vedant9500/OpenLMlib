@@ -65,11 +65,13 @@ from .security import (
 from .notification import write_notification
 from .notification import wait_for_notification, clear_notification
 from openlmlib.co_scientist import (
+    get_evidence_quality_rubric as _get_evidence_quality_rubric,
     get_co_scientist_scope_policy as _get_co_scientist_scope_policy,
     get_hypothesis_packet_schema as _get_hypothesis_packet_schema,
     screen_co_scientist_scope as _screen_co_scientist_scope,
     validate_hypothesis_packet as _validate_hypothesis_packet,
     validation_issues_to_dicts as _validation_issues_to_dicts,
+    verify_citations as _verify_citations,
 )
 from openlmlib.co_scientist.orchestrator import (
     CoScientistRunError,
@@ -299,6 +301,8 @@ __all__ = [
     "get_co_scientist_scope_policy",
     "screen_co_scientist_scope",
     "get_hypothesis_packet_schema",
+    "get_evidence_quality_rubric",
+    "verify_co_scientist_citations",
     "validate_hypothesis_packet",
     "create_co_scientist_run",
     "submit_hypothesis",
@@ -1991,6 +1995,53 @@ def get_hypothesis_packet_schema() -> Dict:
 
 
 @collab_mcp.tool()
+def get_evidence_quality_rubric() -> Dict:
+    """Get Phase 6 Co-Scientist evidence labels and quality rubric.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - Creating or checking Co-Scientist hypothesis evidence
+    - A verifier needs the accepted support/refute/neutral labels
+    - A client needs the deterministic evidence quality levels
+
+    WORKFLOW POSITION: Use before writing hypothesis evidence or verification
+    reports that will be promoted to verification.
+    """
+    return _get_evidence_quality_rubric()
+
+
+@collab_mcp.tool()
+def verify_co_scientist_citations(
+    citations: List[str],
+    session_ids: Optional[List[str]] = None,
+) -> Dict:
+    """Verify Co-Scientist citations against URLs, artifacts, or local files.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - Preflighting hypothesis packet citations before verification handoff
+    - Checking verification report citations before submission
+    - A citation may refer to an artifact ID or local workspace file
+
+    WORKFLOW POSITION: Use after packet validation and before
+    start_hypothesis_verification or submit_verification.
+
+    PARAMETERS:
+    - citations: Non-empty list of citation strings
+    - session_ids: Optional session IDs to scope artifact citation lookup
+    """
+    try:
+        with _collab_connection() as (conn, _sessions_dir):
+            result = _verify_citations(
+                citations,
+                conn=conn,
+                session_ids=session_ids,
+                workspace_root=Path.cwd(),
+            )
+        return {"success": True, **result}
+    except Exception as e:
+        return _handle_tool_error("verify_co_scientist_citations", e)
+
+
+@collab_mcp.tool()
 def validate_hypothesis_packet(packet: Dict) -> Dict:
     """Validate a Co-Scientist hypothesis packet before verification.
 
@@ -2539,6 +2590,19 @@ def help_collab(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with valid status, issue count, and actionable validation issues",
         },
+        "get_evidence_quality_rubric": {
+            "description": "Get Phase 6 Co-Scientist support/refute/neutral evidence labels and quality rubric.",
+            "args": {},
+            "returns": "Dict with evidence labels and quality-level descriptions",
+        },
+        "verify_co_scientist_citations": {
+            "description": "Verify Co-Scientist citations against URL syntax, local artifacts, or workspace files.",
+            "args": {
+                "citations": "Non-empty list of citation strings",
+                "session_ids": "Optional session IDs to scope artifact lookup",
+            },
+            "returns": "Dict with resolved citation records and actionable issues",
+        },
         "create_co_scientist_run": {
             "description": "Create linked Co-Scientist generation and verification sessions in one workflow.",
             "args": {
@@ -2664,6 +2728,8 @@ def help_collab(tool_name: Optional[str] = None) -> Dict:
             "get_co_scientist_scope_policy",
             "screen_co_scientist_scope",
             "get_hypothesis_packet_schema",
+            "get_evidence_quality_rubric",
+            "verify_co_scientist_citations",
             "validate_hypothesis_packet",
             "create_co_scientist_run",
             "submit_hypothesis",

@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-Complete reference for all 68 MCP tools available in OpenLMlib.
+Complete reference for all 70 MCP tools available in OpenLMlib.
 
 ## Table of Contents
 
@@ -9,14 +9,14 @@ Complete reference for all 68 MCP tools available in OpenLMlib.
   - [Session Lifecycle (3)](#session-lifecycle)
   - [Progressive Retrieval (4)](#progressive-retrieval)
   - [Context Injection (3)](#context-injection)
-- [Collaboration Session Tools (41)](#collaboration-session-tools)
+- [Collaboration Session Tools (43)](#collaboration-session-tools)
   - [Session Management (7)](#session-management)
   - [Message Operations (7)](#message-operations)
   - [Artifact Management (4)](#artifact-management)
   - [Session Discovery & Analytics (6)](#session-discovery--analytics)
   - [Templates (3)](#templates)
   - [Model Discovery (3)](#model-discovery)
-  - [Co-Scientist (10)](#co-scientist)
+  - [Co-Scientist (12)](#co-scientist)
   - [Utilities (1)](#utilities)
 
 ---
@@ -830,6 +830,26 @@ Get the Phase 1 Co-Scientist hypothesis packet schema for generation-to-verifica
 
 ---
 
+#### `get_evidence_quality_rubric`
+Get the Phase 6 Co-Scientist evidence labels and quality rubric.
+
+**Parameters:** None
+
+**Returns:** Evidence labels plus quality levels and scores
+
+---
+
+#### `verify_co_scientist_citations`
+Verify Co-Scientist citations against URL syntax, local artifacts, or workspace files.
+
+**Parameters:**
+- `citations` (array): Citation strings to resolve
+- `session_ids` (array, optional): Session IDs used to scope artifact lookup
+
+**Returns:** Resolved citation records and actionable issues
+
+---
+
 #### `validate_hypothesis_packet`
 Validate a Co-Scientist hypothesis packet before saving it or sending it to verification.
 
@@ -967,6 +987,6 @@ Get help for collaboration tools.
 | Session Discovery | 6 | Find and analyze sessions |
 | Templates | 3 | Predefined session plans |
 | Model Discovery | 3 | OpenRouter model information |
-| Co-Scientist | 10 | Scope screening, packet validation, linked run orchestration, handoff, and reports |
+| Co-Scientist | 12 | Scope screening, packet validation, citation grounding, linked run orchestration, handoff, and reports |
 | Utilities | 1 | Help and documentation |
-| **Total** | **68** | |
+| **Total** | **70** | |

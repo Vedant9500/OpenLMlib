@@ -13,6 +13,7 @@ import re
 import uuid
 
 from openlmlib.schema import ValidationIssue
+from .evidence import EVIDENCE_LABELS, EVIDENCE_QUALITY_LEVELS
 
 
 HYPOTHESIS_ID_RE = re.compile(r"^hyp_[a-f0-9]{12}$")
@@ -41,6 +42,8 @@ class HypothesisEvidence:
     summary: str
     supports: str
     confidence: float
+    label: str = "support"
+    quality: str = "secondary_analysis"
 
     def to_dict(self) -> Dict[str, object]:
         return {
@@ -48,6 +51,8 @@ class HypothesisEvidence:
             "summary": self.summary,
             "supports": self.supports,
             "confidence": self.confidence,
+            "label": self.label,
+            "quality": self.quality,
         }
 
 
@@ -124,6 +129,8 @@ class HypothesisPacket:
                     summary=str(item["summary"]).strip(),
                     supports=str(item["supports"]).strip(),
                     confidence=float(item["confidence"]),
+                    label=str(item.get("label", "support")).strip(),
+                    quality=str(item.get("quality", "secondary_analysis")).strip(),
                 )
                 for item in evidence_payload
             ],
@@ -179,6 +186,8 @@ def get_hypothesis_packet_schema() -> Dict[str, object]:
         },
         "enums": {
             "evidence.supports": sorted(EVIDENCE_SUPPORTS),
+            "evidence.label": sorted(EVIDENCE_LABELS),
+            "evidence.quality": sorted(EVIDENCE_QUALITY_LEVELS),
             "status": sorted(HYPOTHESIS_STATUSES),
         },
         "score_fields": {
@@ -353,6 +362,22 @@ def _validate_evidence(value: Any, issues: List[ValidationIssue]) -> None:
                 )
             )
         _validate_score(item.get("confidence"), f"{field_prefix}.confidence", issues)
+        label = item.get("label")
+        if label is not None and label not in EVIDENCE_LABELS:
+            issues.append(
+                ValidationIssue(
+                    field=f"{field_prefix}.label",
+                    message=f"Must be one of: {sorted(EVIDENCE_LABELS)}",
+                )
+            )
+        quality = item.get("quality")
+        if quality is not None and quality not in EVIDENCE_QUALITY_LEVELS:
+            issues.append(
+                ValidationIssue(
+                    field=f"{field_prefix}.quality",
+                    message=f"Must be one of: {sorted(EVIDENCE_QUALITY_LEVELS)}",
+                )
+            )
 
 
 def _validate_lineage(value: Any, issues: List[ValidationIssue]) -> None:

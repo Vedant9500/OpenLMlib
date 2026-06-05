@@ -250,6 +250,8 @@ You are acting as a **worker** agent in this session. Your responsibilities:
 ### Co-Scientist
 - `screen_co_scientist_scope`: Check whether a Co-Scientist topic is allowed before session creation
 - `get_hypothesis_packet_schema`: Get the required hypothesis packet structure
+- `get_evidence_quality_rubric`: Get the support/refute/neutral labels and evidence quality rubric
+- `verify_co_scientist_citations`: Preflight citations against URLs, artifacts, or workspace files
 - `validate_hypothesis_packet`: Validate packets before saving a shortlist or sending to verification
 - `create_co_scientist_run`: Create linked generation and verification sessions
 - `submit_hypothesis`: Persist a validated hypothesis packet in run state
@@ -287,10 +289,12 @@ When using the `co_scientist_generate` template:
 When the run-level tools are available:
 - Use `create_co_scientist_run` instead of manually creating separate generation and verification sessions.
 - Use `submit_hypothesis` for each validated packet so the run state indexes the packet artifact.
+- Use `get_evidence_quality_rubric` and `verify_co_scientist_citations` before promoting packets when citation quality is uncertain.
 - Use `start_hypothesis_verification` to create a compact verification input artifact; do not paste the full generation transcript into verification.
 - Use `submit_verification` once per `hypothesis_id`.
 - Use `get_co_scientist_report` to inspect linked session IDs, selected hypotheses, verification reports, and synthesis readiness.
 - Use deterministic ranking/proximity/evolution helpers for shortlist work: pairwise comparisons should include compared IDs, winner, criteria, rationale, judge agent, and confidence.
+- Do not ask the MCP server to spawn external agent processes. For real local Codex/Claude/Gemini workers, use the external runner CLI (`openlmlib co-worker-run`) so process lifecycle, logs, heartbeats, timeouts, and cancellation remain outside MCP.
 
 ## Co-Scientist Verification Sessions
 
@@ -300,6 +304,7 @@ When using the `co_scientist_verify` template:
 - Use one verdict per report: `supported`, `partially_supported`, `inconclusive`, `contradicted`, or `unsafe_or_out_of_scope`.
 - Include confidence from `0.0` to `1.0` and explain the calibration.
 - Cite supporting evidence and explicitly list disconfirming evidence, even when the verdict is `supported`.
+- Use `verify_co_scientist_citations` before `submit_verification` when citations are local files or artifact IDs.
 - Include tests or reproduction plans, feasibility notes, safety notes, and citations in every report.
 
 ## Workflow

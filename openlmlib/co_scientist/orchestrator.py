@@ -15,6 +15,11 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from openlmlib.schema import utc_now_iso
 
+from .evidence import (
+    evidence_issues_to_dicts,
+    validate_hypothesis_grounding,
+    verify_citations,
+)
 from .hypothesis import (
     SCORE_FIELDS,
     new_co_scientist_run_id,
@@ -277,6 +282,13 @@ def start_hypothesis_verification(
     actor = created_by or run_state["verification_orchestrator_agent_id"]
     selected_ids = _select_hypothesis_ids(run_state, hypothesis_ids, top_k)
     packets = [_load_hypothesis_packet(conn, sessions_dir, run_state, hypothesis_id) for hypothesis_id in selected_ids]
+    grounding_issues = _validate_handoff_grounding(conn, run_state, packets)
+    if grounding_issues:
+        raise CoScientistRunError(
+            "Selected hypotheses do not satisfy evidence grounding requirements",
+            error_type="grounding_error",
+            issues=grounding_issues,
+        )
 
     handoff = {
         "run_id": run_id,
@@ -364,6 +376,14 @@ def submit_verification(
     report = dict(verification_report)
     report.setdefault("hypothesis_id", hypothesis_id)
     issues = validate_verification_report(report, hypothesis_id)
+    citation_result = verify_citations(
+        report.get("citations"),
+        conn=conn,
+        session_ids=[run_state["generation_session_id"], run_state["verification_session_id"]],
+        workspace_root=Path.cwd(),
+    )
+    if not citation_result["valid"]:
+        issues.extend(citation_result["issues"])
     if issues:
         raise CoScientistRunError(
             "Invalid verification report",
@@ -441,10 +461,29 @@ def get_co_scientist_report(
         for hypothesis_id in run_state.get("hypothesis_ids", [])
         if hypothesis_id in run_state.get("hypotheses", {})
     ]
+    hypotheses_by_id = {item["hypothesis_id"]: item for item in hypotheses}
     verification_reports = [
         deepcopy(run_state["verification_reports"][hypothesis_id])
         for hypothesis_id in run_state.get("selected_hypothesis_ids", [])
         if hypothesis_id in run_state.get("verification_reports", {})
+    ]
+    verified_claims = [
+        hypotheses_by_id[hypothesis_id]
+        for hypothesis_id, report in run_state.get("verification_reports", {}).items()
+        if report.get("verdict") in {"supported", "partially_supported"}
+        and hypothesis_id in hypotheses_by_id
+    ]
+    contradicted_claims = [
+        hypotheses_by_id[hypothesis_id]
+        for hypothesis_id, report in run_state.get("verification_reports", {}).items()
+        if report.get("verdict") in {"contradicted", "unsafe_or_out_of_scope"}
+        and hypothesis_id in hypotheses_by_id
+    ]
+    plausible_unverified = [
+        item
+        for item in hypotheses
+        if item["hypothesis_id"] not in run_state.get("verification_reports", {})
+        and item.get("status") != "rejected"
     ]
 
     return {
@@ -459,6 +498,9 @@ def get_co_scientist_report(
         "verification_report_count": len(verification_reports),
         "hypotheses": hypotheses,
         "verification_reports": verification_reports,
+        "verified_claims": verified_claims,
+        "contradicted_claims": contradicted_claims,
+        "plausible_unverified_hypotheses": plausible_unverified,
         "verification_input_artifact_id": run_state.get("verification_input_artifact_id"),
         "verification_policy": deepcopy(run_state["verification_policy"]),
         "state_locations": [
@@ -669,6 +711,7 @@ def _hypothesis_summary(
 ) -> Dict[str, Any]:
     scores = {field: float(packet[field]) for field in SCORE_FIELDS}
     ranked_score = score_hypothesis(packet)
+    evidence = packet.get("evidence", [])
     return {
         "hypothesis_id": packet["hypothesis_id"],
         "title": packet["title"],
@@ -678,6 +721,12 @@ def _hypothesis_summary(
         "scores": scores,
         "scoring_axes": ranked_score["axes"],
         "overall_score": ranked_score["base_score"],
+        "citation_count": len(packet.get("citations", [])),
+        "evidence_labels": sorted({
+            item.get("label", "unlabeled")
+            for item in evidence
+            if isinstance(item, dict)
+        }),
         "lineage": deepcopy(packet["lineage"]),
         "submitted_by": created_by,
         "submitted_at": created_at,
@@ -722,6 +771,29 @@ def _select_hypothesis_ids(
             error_type="not_found",
         )
     return selected
+
+
+def _validate_handoff_grounding(
+    conn: sqlite3.Connection,
+    run_state: Dict[str, Any],
+    packets: Iterable[Dict[str, Any]],
+) -> List[Dict[str, str]]:
+    issues: List[Dict[str, str]] = []
+    for packet in packets:
+        hypothesis_id = packet.get("hypothesis_id", "unknown")
+        packet_issues = validate_hypothesis_grounding(
+            packet,
+            conn=conn,
+            session_ids=[run_state["generation_session_id"], run_state["verification_session_id"]],
+            workspace_root=Path.cwd(),
+        )
+        for issue in evidence_issues_to_dicts(packet_issues):
+            issues.append({
+                "field": f"hypotheses[{hypothesis_id}].{issue['field']}",
+                "message": issue["message"],
+                "severity": issue.get("severity", "error"),
+            })
+    return issues
 
 
 def _load_hypothesis_packet(

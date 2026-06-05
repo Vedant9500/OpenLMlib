@@ -504,12 +504,8 @@ def cmd_eval(args) -> int:
 
 def _get_collab_paths(settings_path: Path) -> tuple:
     """Get collab DB path and sessions directory from settings."""
-    if settings_path.exists():
-        with open(settings_path) as f:
-            cfg = json.load(f)
-        data_root = Path(cfg.get("data_root", "data"))
-    else:
-        data_root = Path("data")
+    settings = load_settings(settings_path)
+    data_root = settings.data_root
     return data_root / "collab_sessions.db", data_root / "sessions"
 
 
@@ -867,6 +863,60 @@ def cmd_collab_search(args) -> int:
         return 0
     finally:
         conn.close()
+
+
+def cmd_co_worker_run(args) -> int:
+    from openlmlib.co_scientist.worker_runner import (
+        WorkerBudget,
+        WorkerLaunchSpec,
+        load_worker_specs,
+        run_worker_specs_from_settings,
+    )
+
+    if args.spec:
+        specs = load_worker_specs(Path(args.spec))
+    else:
+        prompt = args.prompt or ""
+        if args.prompt_file:
+            prompt = Path(args.prompt_file).read_text(encoding="utf-8")
+        specs = [
+            WorkerLaunchSpec(
+                session_id=args.session_id,
+                agent_role=args.agent_role,
+                task_prompt=prompt,
+                command=list(args.command or []),
+                model=args.model,
+                capabilities=args.capabilities or [],
+                budget=WorkerBudget(
+                    timeout_seconds=args.timeout_seconds,
+                    max_tokens=args.max_tokens,
+                    max_cost_usd=args.max_cost_usd,
+                ),
+                read_only=not args.allow_writes,
+                cwd=Path(args.cwd) if args.cwd else None,
+                prompt_to_stdin=not args.no_prompt_stdin,
+            )
+        ]
+
+    results = run_worker_specs_from_settings(
+        specs,
+        settings_path=Path(args.settings),
+        heartbeat_interval_seconds=args.heartbeat_interval,
+    )
+    print(json.dumps({"results": [item.to_dict() for item in results], "count": len(results)}, indent=2))
+    return 0 if all(item.status == "succeeded" for item in results) else 1
+
+
+def cmd_co_worker_cancel(args) -> int:
+    from openlmlib.co_scientist.worker_runner import request_worker_cancel
+
+    cancel_path = request_worker_cancel(
+        Path(args.worker_dir),
+        reason=args.reason,
+        requested_by=args.requested_by,
+    )
+    print(json.dumps({"cancel_path": str(cancel_path)}, indent=2))
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1280,6 +1330,36 @@ def build_parser() -> argparse.ArgumentParser:
     collab_search_p.add_argument("--status", help="Filter sessions by status")
     collab_search_p.add_argument("--limit", type=int, default=20, help="Max results")
     collab_search_p.set_defaults(func=cmd_collab_search)
+
+    co_worker_run_p = subparsers.add_parser(
+        "co-worker-run",
+        help="Launch external Co-Scientist workers outside the MCP server",
+    )
+    co_worker_run_p.add_argument("--spec", help="JSON worker spec file; may contain one object or a list")
+    co_worker_run_p.add_argument("--session-id", help="Session ID for single-worker mode")
+    co_worker_run_p.add_argument("--agent-role", default="research_worker", help="Worker role label")
+    co_worker_run_p.add_argument("--model", default="external-worker", help="Model or CLI identifier")
+    co_worker_run_p.add_argument("--prompt", help="Task prompt for single-worker mode")
+    co_worker_run_p.add_argument("--prompt-file", help="Read task prompt from file")
+    co_worker_run_p.add_argument("--capabilities", action="append", help="Worker capability; repeatable")
+    co_worker_run_p.add_argument("--timeout-seconds", type=int, default=900)
+    co_worker_run_p.add_argument("--max-tokens", type=int)
+    co_worker_run_p.add_argument("--max-cost-usd", type=float)
+    co_worker_run_p.add_argument("--allow-writes", action="store_true", help="Disable read-only prompt/env guard")
+    co_worker_run_p.add_argument("--cwd", help="Working directory for the worker command")
+    co_worker_run_p.add_argument("--no-prompt-stdin", action="store_true", help="Only pass prompt by file/env")
+    co_worker_run_p.add_argument("--heartbeat-interval", type=float, default=5.0)
+    co_worker_run_p.add_argument("command", nargs="*", help="Command argv for single-worker mode")
+    co_worker_run_p.set_defaults(func=cmd_co_worker_run)
+
+    co_worker_cancel_p = subparsers.add_parser(
+        "co-worker-cancel",
+        help="Request cancellation for an external Co-Scientist worker",
+    )
+    co_worker_cancel_p.add_argument("--worker-dir", required=True)
+    co_worker_cancel_p.add_argument("--reason", default="cancelled")
+    co_worker_cancel_p.add_argument("--requested-by", default="user")
+    co_worker_cancel_p.set_defaults(func=cmd_co_worker_cancel)
 
     return parser
 

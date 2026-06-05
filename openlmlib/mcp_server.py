@@ -87,6 +87,7 @@ def _register_collab_tools() -> None:
         create_from_template,
         export_to_library,
         sessions_summary,
+        get_evidence_quality_rubric,
         get_co_scientist_report,
         get_agent_sessions,
         get_artifact,
@@ -122,6 +123,7 @@ def _register_collab_tools() -> None:
         terminate_session,
         update_session_state,
         validate_hypothesis_packet,
+        verify_co_scientist_citations,
     )
 
     mcp.tool()(create_session)
@@ -157,6 +159,8 @@ def _register_collab_tools() -> None:
     mcp.tool()(get_co_scientist_scope_policy)
     mcp.tool()(screen_co_scientist_scope)
     mcp.tool()(get_hypothesis_packet_schema)
+    mcp.tool()(get_evidence_quality_rubric)
+    mcp.tool()(verify_co_scientist_citations)
     mcp.tool()(validate_hypothesis_packet)
     mcp.tool()(create_co_scientist_run)
     mcp.tool()(submit_hypothesis)
@@ -1666,6 +1670,8 @@ def help_library(tool_name: Optional[str] = None) -> dict:
         "get_co_scientist_scope_policy": "Get Phase 0 Co-Scientist scope and safety policy.",
         "screen_co_scientist_scope": "Screen a proposed Co-Scientist run before creating sessions.",
         "get_hypothesis_packet_schema": "Get Phase 1 Co-Scientist hypothesis packet schema.",
+        "get_evidence_quality_rubric": "Get Phase 6 Co-Scientist evidence labels and quality rubric.",
+        "verify_co_scientist_citations": "Verify Co-Scientist citations against URLs, artifacts, and workspace files.",
         "validate_hypothesis_packet": "Validate a Co-Scientist hypothesis packet before verification.",
         "create_co_scientist_run": "Create linked Co-Scientist generation and verification sessions.",
         "submit_hypothesis": "Persist a validated hypothesis packet in a Co-Scientist run.",
@@ -1726,7 +1732,7 @@ def help_library(tool_name: Optional[str] = None) -> dict:
                 "note": "Use help_library(tool_name='memory_<tool>') for detailed usage",
             },
             "CollabSession Tools": {
-                "description": "Multi-agent collaboration session management (41 tools)",
+                "description": "Multi-agent collaboration session management (43 tools)",
                 "summary": collab_tools_summary,
                 "note": "Use help_collab() for detailed collab tool documentation",
             },

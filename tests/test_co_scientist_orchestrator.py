@@ -34,6 +34,8 @@ def valid_packet(run_id, title, score=0.7, hypothesis_id=None):
                 "summary": "The run orchestrator stores packets as artifacts.",
                 "supports": "claim",
                 "confidence": score,
+                "label": "support",
+                "quality": "reproducible",
             }
         ],
         "citations": ["tests/test_co_scientist_orchestrator.py"],
@@ -196,6 +198,78 @@ class TestCoScientistRunOrchestrator(unittest.TestCase):
 
         self.assertEqual(raised.exception.error_type, "validation_error")
         self.assertTrue(any(issue["field"] == "verdict" for issue in raised.exception.issues))
+
+    def test_verification_handoff_rejects_unresolved_citations(self):
+        run = create_co_scientist_run(
+            self.conn,
+            self.sessions_dir,
+            topic="Research citation gate behavior",
+        )
+        packet = valid_packet(run["run_id"], "Unresolved citation packet")
+        packet["citations"] = ["docs/does-not-exist.md"]
+        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], packet)
+
+        with self.assertRaises(CoScientistRunError) as raised:
+            start_hypothesis_verification(
+                self.conn,
+                self.sessions_dir,
+                run["run_id"],
+                hypothesis_ids=[packet["hypothesis_id"]],
+            )
+
+        self.assertEqual(raised.exception.error_type, "grounding_error")
+        self.assertTrue(any("citations" in issue["field"] for issue in raised.exception.issues))
+
+    def test_verification_handoff_requires_phase_6_evidence_label(self):
+        run = create_co_scientist_run(
+            self.conn,
+            self.sessions_dir,
+            topic="Research evidence label gate behavior",
+        )
+        packet = valid_packet(run["run_id"], "Missing label packet")
+        del packet["evidence"][0]["label"]
+        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], packet)
+
+        with self.assertRaises(CoScientistRunError) as raised:
+            start_hypothesis_verification(
+                self.conn,
+                self.sessions_dir,
+                run["run_id"],
+                hypothesis_ids=[packet["hypothesis_id"]],
+            )
+
+        self.assertEqual(raised.exception.error_type, "grounding_error")
+        self.assertTrue(any("evidence[0].label" in issue["field"] for issue in raised.exception.issues))
+
+    def test_verification_report_rejects_unresolved_citations(self):
+        run = create_co_scientist_run(
+            self.conn,
+            self.sessions_dir,
+            topic="Research verification report citation gate",
+            top_k=1,
+        )
+        packet = valid_packet(run["run_id"], "Report citation packet")
+        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], packet)
+        start_hypothesis_verification(
+            self.conn,
+            self.sessions_dir,
+            run["run_id"],
+            hypothesis_ids=[packet["hypothesis_id"]],
+        )
+        report = valid_report(packet["hypothesis_id"])
+        report["citations"] = ["docs/does-not-exist.md"]
+
+        with self.assertRaises(CoScientistRunError) as raised:
+            submit_verification(
+                self.conn,
+                self.sessions_dir,
+                run["run_id"],
+                packet["hypothesis_id"],
+                report,
+            )
+
+        self.assertEqual(raised.exception.error_type, "validation_error")
+        self.assertTrue(any(issue["field"] == "citations[0]" for issue in raised.exception.issues))
 
 
 class TestCoScientistRunMCP(unittest.TestCase):
