@@ -64,6 +64,10 @@ from .security import (
 )
 from .notification import write_notification
 from .notification import wait_for_notification, clear_notification
+from openlmlib.co_scientist import (
+    get_co_scientist_scope_policy as _get_co_scientist_scope_policy,
+    screen_co_scientist_scope as _screen_co_scientist_scope,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -270,6 +274,8 @@ __all__ = [
     "list_models",
     "get_model_details",
     "recommended_models",
+    "get_co_scientist_scope_policy",
+    "screen_co_scientist_scope",
     "help_collab",
 ]
 
@@ -1258,7 +1264,7 @@ def get_artifact(
 
     PARAMETERS:
     - session_id: Session containing the artifact
-    - artifact_id: ID of the artifact (e.g., "art_001")
+    - artifact_id: ID of the artifact (e.g., "art_abcdef12")
     - agent_id: Your agent ID (must belong to the session)
     """
     try:
@@ -1896,6 +1902,47 @@ def recommended_models(task_type: str) -> Dict:
 
 
 @collab_mcp.tool()
+def get_co_scientist_scope_policy() -> Dict:
+    """Get the Phase 0 Co-Scientist scope and safety policy.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - Planning a Co-Scientist or hypothesis-generation workflow
+    - Checking what topics are allowed before creating research sessions
+    - Reviewing human approval gates for multi-agent research
+
+    WORKFLOW POSITION: Use before Co-Scientist session creation.
+
+    Returns accepted domains, blocked domains, approval-required actions, and
+    Phase 0 limits.
+    """
+    return _get_co_scientist_scope_policy()
+
+
+@collab_mcp.tool()
+def screen_co_scientist_scope(
+    topic: str,
+    constraints: Optional[List[str]] = None,
+) -> Dict:
+    """Screen a proposed Co-Scientist run before creating sessions.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - User asks to start Co-Scientist, hypothesis generation, or hypothesis verification
+    - You need to decide whether a multi-agent research topic is in scope
+    - A request may require human approval before state-changing or high-stakes action
+
+    WORKFLOW POSITION: First gate before any Co-Scientist session creation.
+
+    PARAMETERS:
+    - topic: Proposed research objective
+    - constraints: Optional hard limits, domain notes, or requested actions
+
+    Returns allowed status, risk level, matched categories, reasons, and
+    required approvals. If allowed=False, do not create a Co-Scientist session.
+    """
+    return _screen_co_scientist_scope(topic=topic, constraints=constraints)
+
+
+@collab_mcp.tool()
 def help_collab(tool_name: Optional[str] = None) -> Dict:
     """Get help about all collab MCP tools or a specific tool.
 
@@ -2057,7 +2104,7 @@ def help_collab(tool_name: Optional[str] = None) -> Dict:
             "description": "Get the full content of a specific artifact.",
             "args": {
                 "session_id": "Session containing the artifact",
-                "artifact_id": "ID of the artifact to retrieve",
+                "artifact_id": "ID of the artifact to retrieve (format: art_<8 lowercase hex chars>)",
                 "agent_id": "Your agent ID (must belong to the session)",
             },
             "returns": "Dict with artifact content and metadata",
@@ -2192,6 +2239,19 @@ def help_collab(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with recommended model IDs and their details",
         },
+        "get_co_scientist_scope_policy": {
+            "description": "Get Phase 0 Co-Scientist accepted domains, blocked domains, approval gates, and limits.",
+            "args": {},
+            "returns": "Dict with scope policy and Phase 0 limits",
+        },
+        "screen_co_scientist_scope": {
+            "description": "Screen a proposed Co-Scientist run before creating generation or verification sessions.",
+            "args": {
+                "topic": "Proposed research objective",
+                "constraints": "Optional list of hard limits, domain notes, or requested actions",
+            },
+            "returns": "Dict with allowed status, risk level, categories, reasons, and required approvals",
+        },
         "help_collab": {
             "description": "Get help about all collab MCP tools or a specific tool (this tool).",
             "args": {
@@ -2258,6 +2318,10 @@ def help_collab(tool_name: Optional[str] = None) -> Dict:
             "list_models",
             "get_model_details",
             "recommended_models",
+        ],
+        "Co-Scientist": [
+            "get_co_scientist_scope_policy",
+            "screen_co_scientist_scope",
         ],
         "Help": [
             "help_collab",

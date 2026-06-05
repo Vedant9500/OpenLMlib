@@ -43,6 +43,7 @@ from openlmlib.collab.session import (
     leave_collab_session,
     terminate_collab_session,
 )
+from openlmlib.collab.errors import SecurityError
 
 
 class TestCollabDB(unittest.TestCase):
@@ -454,6 +455,25 @@ class TestArtifactStore(unittest.TestCase):
         self.assertIn("Quantum Computing Research", content)
         state = get_session_state(self.conn, "sess_001")
         self.assertEqual(state["state"]["artifact_count"], 1)
+
+    def test_save_rejects_invalid_custom_artifact_id(self):
+        create_session(
+            self.conn,
+            session_id="sess_001",
+            title="Test",
+            created_by="test",
+            created_at="2026-04-05T10:00:00Z",
+        )
+
+        with self.assertRaises(SecurityError):
+            self.store.save(
+                session_id="sess_001",
+                created_by="agent_001",
+                title="Escaping Artifact",
+                content="content",
+                created_at="2026-04-05T10:01:00Z",
+                artifact_id="../art_abcdef12",
+            )
 
     def test_shared_artifact(self):
         create_session(
@@ -1012,6 +1032,38 @@ class TestExportBridge(unittest.TestCase):
             self.assertTrue(kwargs["confirm"])
             self.assertNotIn("source", kwargs)
             self.assertEqual(kwargs["claim"], "Summary")
+        finally:
+            if conn is not None:
+                conn.close()
+            tmp.cleanup()
+
+    def test_export_bridge_rejects_invalid_artifact_filter_id(self):
+        from openlmlib.collab.export_bridge import export_session_to_library
+
+        tmp = tempfile.TemporaryDirectory()
+        conn = None
+        try:
+            sessions_dir = Path(tmp.name) / "sessions"
+            sessions_dir.mkdir(parents=True)
+            conn = connect_collab_db(Path(tmp.name) / "test.db")
+            init_collab_db(conn)
+            result = create_collab_session(
+                conn,
+                sessions_dir,
+                title="Export Test",
+                created_by="orch",
+            )
+
+            export_result = export_session_to_library(
+                settings_path=Path(tmp.name) / "settings.json",
+                session_id=result["session_id"],
+                collab_conn=conn,
+                sessions_dir=sessions_dir,
+                artifact_ids=["../art_abcdef12"],
+            )
+
+            self.assertEqual(export_result["exported"], 0)
+            self.assertEqual(export_result["error_type"], "validation_error")
         finally:
             if conn is not None:
                 conn.close()

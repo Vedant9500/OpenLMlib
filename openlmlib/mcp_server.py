@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import importlib
 from pathlib import Path
 from typing import List, Optional
 from typing import List as TypingList
@@ -88,7 +89,9 @@ def _register_collab_tools() -> None:
         get_agent_sessions,
         get_artifact,
         get_model_details,
+        get_co_scientist_scope_policy,
         recommended_models,
+        screen_co_scientist_scope,
         session_context,
         session_relationships,
         get_session_state,
@@ -143,6 +146,8 @@ def _register_collab_tools() -> None:
     mcp.tool()(list_models)
     mcp.tool()(get_model_details)
     mcp.tool()(recommended_models)
+    mcp.tool()(get_co_scientist_scope_policy)
+    mcp.tool()(screen_co_scientist_scope)
     mcp.tool()(help_collab)
 
     _collab_registered = True
@@ -782,6 +787,26 @@ def _ensure_runtime_background() -> Optional[object]:
     t = threading.Thread(target=_ensure_runtime, daemon=True, name="openlmlib-runtime-prewarm")
     t.start()
     return t
+
+
+def _preimport_embedding_dependencies() -> bool:
+    """Import the embedding stack before FastMCP starts handling requests.
+
+    On Windows, importing sentence-transformers from a FastMCP tool request can
+    hang inside scipy/sklearn extension loading. Importing the dependency stack
+    once on the main thread avoids cold-starting those modules from the MCP
+    request path while still keeping full runtime/model initialization lazy.
+    """
+    if os.environ.get("OPENLMLIB_MCP_PREIMPORT_EMBEDDINGS", "1") == "0":
+        return False
+
+    try:
+        importlib.import_module("sentence_transformers")
+        return True
+    except Exception:
+        # Keep the server usable for non-embedding tools. Semantic tools will
+        # surface the dependency/model error when invoked.
+        return False
 
 
 def _check_active_sessions() -> Optional[str]:
@@ -1622,6 +1647,8 @@ def help_library(tool_name: Optional[str] = None) -> dict:
         "list_models": "List available models from OpenRouter API.",
         "get_model_details": "Get detailed information about a specific OpenRouter model.",
         "recommended_models": "Get recommended OpenRouter models for a specific task type.",
+        "get_co_scientist_scope_policy": "Get Phase 0 Co-Scientist scope and safety policy.",
+        "screen_co_scientist_scope": "Screen a proposed Co-Scientist run before creating sessions.",
         "help_collab": "Get help about collab MCP tools.",
     }
 
@@ -1778,6 +1805,11 @@ def main() -> None:
     # Register collab tools just before the server starts (not at import time).
     # This avoids the heavy collab module import penalty during Python startup.
     _register_collab_tools()
+
+    # Import embedding dependencies on the main thread before MCP starts serving
+    # requests. This prevents the first semantic tool call from cold-importing
+    # scipy/sklearn inside FastMCP's request execution path.
+    _preimport_embedding_dependencies()
 
     # Start runtime pre-warming in background if explicitly enabled.
     # This avoids thread-init deadlocks during model load on some setups.

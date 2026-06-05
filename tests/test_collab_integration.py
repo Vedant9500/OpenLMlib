@@ -54,6 +54,7 @@ from openlmlib.collab.errors import (
     CollabError,
     InvalidMessageTypeError,
     MessageTooLongError,
+    SecurityError,
     SessionFullError,
     SessionNotActiveError,
     SessionNotFoundError,
@@ -62,6 +63,7 @@ from openlmlib.collab.errors import (
 from openlmlib.collab.security import (
     validate_session_id,
     validate_agent_id,
+    validate_artifact_id,
     validate_message_type,
     verify_agent_in_session,
     verify_orchestrator,
@@ -524,6 +526,15 @@ class TestSecurityHardening(unittest.TestCase):
         from openlmlib.collab.security import validate_agent_id
         with self.assertRaises(Exception):
             validate_agent_id("../../../etc")
+
+    def test_artifact_id_must_match_generated_format(self):
+        self.assertEqual(validate_artifact_id("art_abcdef12"), "art_abcdef12")
+
+        with self.assertRaises(SecurityError):
+            validate_artifact_id("art_001")
+
+        with self.assertRaises(SecurityError):
+            validate_artifact_id("../art_abcdef12")
 
     def test_content_sanitization(self):
         malicious = "Normal text <script>alert('xss')</script> and ```code```"

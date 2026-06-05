@@ -13,6 +13,13 @@ from typing import Dict, List, Optional
 from ..library import add_finding
 from .db import get_session, get_session_artifacts
 from .artifact_store import ArtifactStore
+from .security import validate_artifact_id
+
+
+def _validate_artifact_filter_ids(artifact_ids: Optional[List[str]]) -> Optional[List[str]]:
+    if artifact_ids is None:
+        return None
+    return [validate_artifact_id(artifact_id) for artifact_id in artifact_ids]
 
 
 def export_session_to_library(
@@ -43,6 +50,15 @@ def export_session_to_library(
     session = get_session(collab_conn, session_id)
     if session is None:
         return {"error": f"Session {session_id} not found", "exported": 0}
+
+    try:
+        artifact_ids = _validate_artifact_filter_ids(artifact_ids)
+    except Exception as exc:
+        return {
+            "error": str(exc),
+            "error_type": "validation_error",
+            "exported": 0,
+        }
 
     store = ArtifactStore(collab_conn, sessions_dir)
     artifacts = store.list_artifacts(session_id)

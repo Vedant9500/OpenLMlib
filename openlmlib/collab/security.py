@@ -82,9 +82,15 @@ def validate_artifact_id(artifact_id: str) -> str:
     """Validate artifact ID format."""
     if not artifact_id or not isinstance(artifact_id, str):
         raise SecurityError("artifact_id is required")
+    artifact_id = artifact_id.strip()
     if _has_path_traversal(artifact_id):
         raise SecurityError("artifact_id contains path traversal characters")
-    return artifact_id.strip()
+    if not ARTIFACT_ID_RE.match(artifact_id):
+        raise SecurityError(
+            f"Invalid artifact_id format: {artifact_id}. "
+            "Expected format: art_<8 lowercase hex chars>"
+        )
+    return artifact_id
 
 
 def validate_message_type(msg_type: str) -> str:

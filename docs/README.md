@@ -9,9 +9,10 @@ Complete documentation for OpenLMlib - Local knowledge and research library for 
 - **[Installation Guide](#installation)** - Detailed installation options
 
 ### Core Features
-- **[MCP Tools Reference](MCP_TOOLS.md)** - Complete reference for all 58 MCP tools
+- **[MCP Tools Reference](MCP_TOOLS.md)** - Complete reference for MCP tools
 - **[Knowledge Base Guide](#knowledge-base)** - Managing findings and retrieval
 - **[Memory System Quickstart](MEMORY_QUICKSTART.md)** - Session persistence and progressive retrieval
+- **[Co-Scientist Scope Policy](CO_SCIENTIST_SCOPE_POLICY.md)** - Phase 0 safety and approval gates
 
 ### Collaboration
 - **[CollabSessions Guide](COLLAB_SESSIONS.md)** - Multi-agent collaboration

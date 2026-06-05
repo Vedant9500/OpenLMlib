@@ -13,6 +13,7 @@ from typing import Dict, List, Optional
 import sqlite3
 
 from . import db
+from .security import validate_artifact_id
 
 
 class ArtifactStore:
@@ -78,7 +79,7 @@ class ArtifactStore:
         artifact_id: Optional[str] = None,
     ) -> Dict:
         """Save an artifact to disk and register in the index."""
-        artifact_id = artifact_id or f"art_{uuid.uuid4().hex[:8]}"
+        artifact_id = validate_artifact_id(artifact_id or f"art_{uuid.uuid4().hex[:8]}")
 
         if shared:
             base_dir = self._shared_dir(session_id)

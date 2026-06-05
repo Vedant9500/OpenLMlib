@@ -9,13 +9,14 @@ Complete reference for all 58 MCP tools available in OpenLMlib.
   - [Session Lifecycle (3)](#session-lifecycle)
   - [Progressive Retrieval (4)](#progressive-retrieval)
   - [Context Injection (3)](#context-injection)
-- [Collaboration Session Tools (31)](#collaboration-session-tools)
+- [Collaboration Session Tools (33)](#collaboration-session-tools)
   - [Session Management (7)](#session-management)
   - [Message Operations (7)](#message-operations)
   - [Artifact Management (4)](#artifact-management)
   - [Session Discovery & Analytics (6)](#session-discovery--analytics)
   - [Templates (3)](#templates)
   - [Model Discovery (3)](#model-discovery)
+  - [Co-Scientist (2)](#co-scientist)
   - [Utilities (1)](#utilities)
 
 ---
@@ -648,7 +649,7 @@ Get artifact content and metadata.
 
 **Parameters:**
 - `session_id` (string): Session identifier
-- `artifact_id` (string): Artifact identifier
+- `artifact_id` (string): Artifact identifier (`art_<8 lowercase hex chars>`)
 
 **Returns:** Artifact with content
 
@@ -798,6 +799,28 @@ Get model recommendations for specific tasks.
 
 ---
 
+### Co-Scientist
+
+#### `get_co_scientist_scope_policy`
+Get the Phase 0 Co-Scientist scope and safety policy.
+
+**Parameters:** None
+
+**Returns:** Accepted domains, blocked domains, approval gates, and Phase 0 limits
+
+---
+
+#### `screen_co_scientist_scope`
+Screen a proposed Co-Scientist run before creating generation or verification sessions.
+
+**Parameters:**
+- `topic` (string): Proposed research objective
+- `constraints` (array, optional): Hard limits, domain notes, or requested actions
+
+**Returns:** Allowed status, risk level, matched categories, reasons, and required approvals
+
+---
+
 ### Utilities
 
 #### `help_collab`
@@ -853,5 +876,6 @@ Get help for collaboration tools.
 | Session Discovery | 6 | Find and analyze sessions |
 | Templates | 3 | Predefined session plans |
 | Model Discovery | 3 | OpenRouter model information |
+| Co-Scientist | 2 | Scope policy and pre-run safety screening |
 | Utilities | 1 | Help and documentation |
-| **Total** | **58** | |
+| **Total** | **60** | |
