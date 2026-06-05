@@ -66,7 +66,10 @@ from .notification import write_notification
 from .notification import wait_for_notification, clear_notification
 from openlmlib.co_scientist import (
     get_co_scientist_scope_policy as _get_co_scientist_scope_policy,
+    get_hypothesis_packet_schema as _get_hypothesis_packet_schema,
     screen_co_scientist_scope as _screen_co_scientist_scope,
+    validate_hypothesis_packet as _validate_hypothesis_packet,
+    validation_issues_to_dicts as _validation_issues_to_dicts,
 )
 
 logger = logging.getLogger(__name__)
@@ -276,6 +279,8 @@ __all__ = [
     "recommended_models",
     "get_co_scientist_scope_policy",
     "screen_co_scientist_scope",
+    "get_hypothesis_packet_schema",
+    "validate_hypothesis_packet",
     "help_collab",
 ]
 
@@ -1943,6 +1948,50 @@ def screen_co_scientist_scope(
 
 
 @collab_mcp.tool()
+def get_hypothesis_packet_schema() -> Dict:
+    """Get the Phase 1 Co-Scientist hypothesis packet schema.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - Creating hypotheses for a Co-Scientist generation session
+    - Preparing packets to send into an independent verification session
+    - A client needs the required fields, ID formats, score ranges, or status values
+
+    WORKFLOW POSITION: Use after scope screening and before saving or sending
+    hypothesis packet artifacts.
+
+    Returns a JSON-compatible schema description for artifact-first hypothesis
+    packets.
+    """
+    return _get_hypothesis_packet_schema()
+
+
+@collab_mcp.tool()
+def validate_hypothesis_packet(packet: Dict) -> Dict:
+    """Validate a Co-Scientist hypothesis packet before verification.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - A generation agent proposes a hypothesis packet
+    - Before saving a hypothesis packet artifact
+    - Before sending a hypothesis to a verification session
+    - You need actionable errors for missing citations, evidence, lineage, or scores
+
+    WORKFLOW POSITION: Gate every packet before verification. If valid=False,
+    fix the returned issues before continuing.
+
+    PARAMETERS:
+    - packet: JSON-compatible hypothesis packet object
+
+    Returns valid status, issue count, and actionable validation issues.
+    """
+    issues = _validate_hypothesis_packet(packet)
+    return {
+        "valid": not issues,
+        "issue_count": len(issues),
+        "issues": _validation_issues_to_dicts(issues),
+    }
+
+
+@collab_mcp.tool()
 def help_collab(tool_name: Optional[str] = None) -> Dict:
     """Get help about all collab MCP tools or a specific tool.
 
@@ -2252,6 +2301,18 @@ def help_collab(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with allowed status, risk level, categories, reasons, and required approvals",
         },
+        "get_hypothesis_packet_schema": {
+            "description": "Get the Phase 1 Co-Scientist hypothesis packet schema for generation-to-verification handoff.",
+            "args": {},
+            "returns": "Dict with required fields, ID formats, score fields, enums, and lineage rules",
+        },
+        "validate_hypothesis_packet": {
+            "description": "Validate a Co-Scientist hypothesis packet before saving or sending it to verification.",
+            "args": {
+                "packet": "JSON-compatible hypothesis packet object",
+            },
+            "returns": "Dict with valid status, issue count, and actionable validation issues",
+        },
         "help_collab": {
             "description": "Get help about all collab MCP tools or a specific tool (this tool).",
             "args": {
@@ -2322,6 +2383,8 @@ def help_collab(tool_name: Optional[str] = None) -> Dict:
         "Co-Scientist": [
             "get_co_scientist_scope_policy",
             "screen_co_scientist_scope",
+            "get_hypothesis_packet_schema",
+            "validate_hypothesis_packet",
         ],
         "Help": [
             "help_collab",

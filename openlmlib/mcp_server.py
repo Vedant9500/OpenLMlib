@@ -90,6 +90,7 @@ def _register_collab_tools() -> None:
         get_artifact,
         get_model_details,
         get_co_scientist_scope_policy,
+        get_hypothesis_packet_schema,
         recommended_models,
         screen_co_scientist_scope,
         session_context,
@@ -114,6 +115,7 @@ def _register_collab_tools() -> None:
         tail_messages,
         terminate_session,
         update_session_state,
+        validate_hypothesis_packet,
     )
 
     mcp.tool()(create_session)
@@ -148,6 +150,8 @@ def _register_collab_tools() -> None:
     mcp.tool()(recommended_models)
     mcp.tool()(get_co_scientist_scope_policy)
     mcp.tool()(screen_co_scientist_scope)
+    mcp.tool()(get_hypothesis_packet_schema)
+    mcp.tool()(validate_hypothesis_packet)
     mcp.tool()(help_collab)
 
     _collab_registered = True
@@ -1649,6 +1653,8 @@ def help_library(tool_name: Optional[str] = None) -> dict:
         "recommended_models": "Get recommended OpenRouter models for a specific task type.",
         "get_co_scientist_scope_policy": "Get Phase 0 Co-Scientist scope and safety policy.",
         "screen_co_scientist_scope": "Screen a proposed Co-Scientist run before creating sessions.",
+        "get_hypothesis_packet_schema": "Get Phase 1 Co-Scientist hypothesis packet schema.",
+        "validate_hypothesis_packet": "Validate a Co-Scientist hypothesis packet before verification.",
         "help_collab": "Get help about collab MCP tools.",
     }
 
@@ -1702,7 +1708,7 @@ def help_library(tool_name: Optional[str] = None) -> dict:
                 "note": "Use help_library(tool_name='memory_<tool>') for detailed usage",
             },
             "CollabSession Tools": {
-                "description": "Multi-agent collaboration session management (30 tools)",
+                "description": "Multi-agent collaboration session management (35 tools)",
                 "summary": collab_tools_summary,
                 "note": "Use help_collab() for detailed collab tool documentation",
             },

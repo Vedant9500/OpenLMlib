@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-Complete reference for all 58 MCP tools available in OpenLMlib.
+Complete reference for all 62 MCP tools available in OpenLMlib.
 
 ## Table of Contents
 
@@ -9,14 +9,14 @@ Complete reference for all 58 MCP tools available in OpenLMlib.
   - [Session Lifecycle (3)](#session-lifecycle)
   - [Progressive Retrieval (4)](#progressive-retrieval)
   - [Context Injection (3)](#context-injection)
-- [Collaboration Session Tools (33)](#collaboration-session-tools)
+- [Collaboration Session Tools (35)](#collaboration-session-tools)
   - [Session Management (7)](#session-management)
   - [Message Operations (7)](#message-operations)
   - [Artifact Management (4)](#artifact-management)
   - [Session Discovery & Analytics (6)](#session-discovery--analytics)
   - [Templates (3)](#templates)
   - [Model Discovery (3)](#model-discovery)
-  - [Co-Scientist (2)](#co-scientist)
+  - [Co-Scientist (4)](#co-scientist)
   - [Utilities (1)](#utilities)
 
 ---
@@ -821,6 +821,25 @@ Screen a proposed Co-Scientist run before creating generation or verification se
 
 ---
 
+#### `get_hypothesis_packet_schema`
+Get the Phase 1 Co-Scientist hypothesis packet schema for generation-to-verification handoff.
+
+**Parameters:** None
+
+**Returns:** Required fields, ID formats, score ranges, enum values, and lineage rules
+
+---
+
+#### `validate_hypothesis_packet`
+Validate a Co-Scientist hypothesis packet before saving it or sending it to verification.
+
+**Parameters:**
+- `packet` (object): JSON-compatible hypothesis packet object
+
+**Returns:** Valid status, issue count, and actionable validation issues
+
+---
+
 ### Utilities
 
 #### `help_collab`
@@ -876,6 +895,6 @@ Get help for collaboration tools.
 | Session Discovery | 6 | Find and analyze sessions |
 | Templates | 3 | Predefined session plans |
 | Model Discovery | 3 | OpenRouter model information |
-| Co-Scientist | 2 | Scope policy and pre-run safety screening |
+| Co-Scientist | 4 | Scope policy, pre-run safety screening, and hypothesis packet validation |
 | Utilities | 1 | Help and documentation |
-| **Total** | **60** | |
+| **Total** | **62** | |
