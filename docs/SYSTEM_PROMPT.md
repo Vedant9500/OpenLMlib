@@ -251,6 +251,12 @@ You are acting as a **worker** agent in this session. Your responsibilities:
 - `screen_co_scientist_scope`: Check whether a Co-Scientist topic is allowed before session creation
 - `get_hypothesis_packet_schema`: Get the required hypothesis packet structure
 - `validate_hypothesis_packet`: Validate packets before saving a shortlist or sending to verification
+- `create_co_scientist_run`: Create linked generation and verification sessions
+- `submit_hypothesis`: Persist a validated hypothesis packet in run state
+- `list_hypotheses`: Inspect generated hypothesis packet summaries
+- `start_hypothesis_verification`: Send selected packets to verification without copying the generation transcript
+- `submit_verification`: Persist one verification report for one hypothesis
+- `get_co_scientist_report`: Inspect run progress, selected hypotheses, reports, and synthesis readiness
 
 ### Utilities
 - `help_collab`: Get collaboration tool documentation
@@ -275,6 +281,16 @@ When using the `co_scientist_generate` template:
 - Use `get_hypothesis_packet_schema` before creating candidate hypothesis packets.
 - Run `validate_hypothesis_packet` before adding a hypothesis to `hypothesis_shortlist`.
 - The final shortlist artifact should use artifact_type `hypothesis_shortlist` and include top hypothesis packets, ranking rationale, validation results, and verification handoff notes.
+
+## Co-Scientist Run Workflow
+
+When the run-level tools are available:
+- Use `create_co_scientist_run` instead of manually creating separate generation and verification sessions.
+- Use `submit_hypothesis` for each validated packet so the run state indexes the packet artifact.
+- Use `start_hypothesis_verification` to create a compact verification input artifact; do not paste the full generation transcript into verification.
+- Use `submit_verification` once per `hypothesis_id`.
+- Use `get_co_scientist_report` to inspect linked session IDs, selected hypotheses, verification reports, and synthesis readiness.
+- Use deterministic ranking/proximity/evolution helpers for shortlist work: pairwise comparisons should include compared IDs, winner, criteria, rationale, judge agent, and confidence.
 
 ## Co-Scientist Verification Sessions
 

@@ -128,6 +128,10 @@ Co-Scientist independent verification for ranked hypothesis packets
 - **Report cardinality**: one `verification_report` artifact per input `hypothesis_id`
 - **Verdicts**: `supported`, `partially_supported`, `inconclusive`, `contradicted`, `unsafe_or_out_of_scope`
 
+For end-to-end Co-Scientist workflows, prefer `create_co_scientist_run`. It creates
+linked generation and verification sessions, mirrors run metadata into both session
+states, and uses artifacts for hypothesis packets and verification reports.
+
 List all templates:
 ```bash
 openlmlib-mcp --call list_templates

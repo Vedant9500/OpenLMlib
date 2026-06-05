@@ -71,6 +71,15 @@ from openlmlib.co_scientist import (
     validate_hypothesis_packet as _validate_hypothesis_packet,
     validation_issues_to_dicts as _validation_issues_to_dicts,
 )
+from openlmlib.co_scientist.orchestrator import (
+    CoScientistRunError,
+    create_co_scientist_run as _create_co_scientist_run,
+    get_co_scientist_report as _get_co_scientist_report,
+    list_hypotheses as _list_hypotheses,
+    start_hypothesis_verification as _start_hypothesis_verification,
+    submit_hypothesis as _submit_hypothesis,
+    submit_verification as _submit_verification,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +235,16 @@ def _handle_tool_error(func_name: str, exc: Exception) -> Dict:
         }
 
 
+def _handle_co_scientist_run_error(exc: CoScientistRunError) -> Dict:
+    """Convert Co-Scientist orchestration errors into MCP responses."""
+    return {
+        "success": False,
+        "error": str(exc),
+        "error_type": exc.error_type,
+        "issues": exc.issues,
+    }
+
+
 def _require_reader_access(
     conn: sqlite3.Connection,
     session_id: str,
@@ -281,6 +300,12 @@ __all__ = [
     "screen_co_scientist_scope",
     "get_hypothesis_packet_schema",
     "validate_hypothesis_packet",
+    "create_co_scientist_run",
+    "submit_hypothesis",
+    "list_hypotheses",
+    "start_hypothesis_verification",
+    "submit_verification",
+    "get_co_scientist_report",
     "help_collab",
 ]
 
@@ -1992,6 +2017,207 @@ def validate_hypothesis_packet(packet: Dict) -> Dict:
 
 
 @collab_mcp.tool()
+def create_co_scientist_run(
+    topic: str,
+    constraints: Optional[List[str]] = None,
+    created_by: str = "orchestrator",
+    top_k: int = 5,
+) -> Dict:
+    """Create a linked Co-Scientist generation and verification workflow.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - User asks to start a Co-Scientist run
+    - You need two linked sessions for hypothesis generation and independent verification
+    - A research task should generate hypotheses and verify them without transcript leakage
+
+    WORKFLOW POSITION: Use after confirming the topic is in scope. This creates
+    both the generation and verification sessions in one call.
+
+    PARAMETERS:
+    - topic: Research objective for the run
+    - constraints: Optional limits, domain notes, or requested actions
+    - created_by: Creator/model identifier
+    - top_k: Default number of hypotheses to send to verification
+    """
+    try:
+        safe_topic = sanitize_content(topic)
+        safe_constraints = [sanitize_content(item) for item in (constraints or [])]
+        with _collab_connection() as (conn, sessions_dir):
+            result = _create_co_scientist_run(
+                conn=conn,
+                sessions_dir=sessions_dir,
+                topic=safe_topic,
+                constraints=safe_constraints,
+                created_by=created_by,
+                top_k=top_k,
+            )
+        return {"success": True, **result}
+    except CoScientistRunError as e:
+        return _handle_co_scientist_run_error(e)
+    except Exception as e:
+        return _handle_tool_error("create_co_scientist_run", e)
+
+
+@collab_mcp.tool()
+def submit_hypothesis(
+    run_id: str,
+    hypothesis_packet: Dict,
+    created_by: Optional[str] = None,
+) -> Dict:
+    """Submit a validated hypothesis packet to a Co-Scientist run.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - A generation session has produced a hypothesis packet
+    - You need to persist a packet before ranking or verification
+    - You want run state to index the packet without copying large JSON into chat
+
+    WORKFLOW POSITION: Use during the generation phase after
+    validate_hypothesis_packet passes.
+
+    PARAMETERS:
+    - run_id: Co-Scientist run ID
+    - hypothesis_packet: JSON-compatible hypothesis packet
+    - created_by: Optional submitting agent ID or model identifier
+    """
+    try:
+        with _collab_connection() as (conn, sessions_dir):
+            result = _submit_hypothesis(
+                conn=conn,
+                sessions_dir=sessions_dir,
+                run_id=run_id,
+                hypothesis_packet=hypothesis_packet,
+                created_by=created_by,
+            )
+        return {"success": True, **result}
+    except CoScientistRunError as e:
+        return _handle_co_scientist_run_error(e)
+    except Exception as e:
+        return _handle_tool_error("submit_hypothesis", e)
+
+
+@collab_mcp.tool()
+def list_hypotheses(run_id: str, status: Optional[str] = None) -> Dict:
+    """List compact hypothesis summaries for a Co-Scientist run.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - Inspecting generated hypotheses
+    - Selecting hypotheses for verification
+    - Checking which packets have been sent to verification
+
+    PARAMETERS:
+    - run_id: Co-Scientist run ID
+    - status: Optional packet status filter
+    """
+    try:
+        with _collab_connection() as (conn, _sessions_dir):
+            result = _list_hypotheses(conn=conn, run_id=run_id, status=status)
+        return {"success": True, **result}
+    except CoScientistRunError as e:
+        return _handle_co_scientist_run_error(e)
+    except Exception as e:
+        return _handle_tool_error("list_hypotheses", e)
+
+
+@collab_mcp.tool()
+def start_hypothesis_verification(
+    run_id: str,
+    hypothesis_ids: Optional[List[str]] = None,
+    top_k: Optional[int] = None,
+    created_by: Optional[str] = None,
+) -> Dict:
+    """Send selected Co-Scientist hypotheses to the verification session.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - Generation has produced a shortlist
+    - You need to transfer top hypotheses to independent verification
+    - You want to avoid copying the full generation transcript
+
+    WORKFLOW POSITION: Use after submit_hypothesis has indexed at least one
+    packet. If hypothesis_ids is omitted, top_k highest-scored packets are sent.
+
+    PARAMETERS:
+    - run_id: Co-Scientist run ID
+    - hypothesis_ids: Optional explicit hypothesis IDs to verify
+    - top_k: Optional override for how many top hypotheses to send
+    - created_by: Optional actor for the handoff artifact/message
+    """
+    try:
+        with _collab_connection() as (conn, sessions_dir):
+            result = _start_hypothesis_verification(
+                conn=conn,
+                sessions_dir=sessions_dir,
+                run_id=run_id,
+                hypothesis_ids=hypothesis_ids,
+                top_k=top_k,
+                created_by=created_by,
+            )
+        return {"success": True, **result}
+    except CoScientistRunError as e:
+        return _handle_co_scientist_run_error(e)
+    except Exception as e:
+        return _handle_tool_error("start_hypothesis_verification", e)
+
+
+@collab_mcp.tool()
+def submit_verification(
+    run_id: str,
+    hypothesis_id: str,
+    verification_report: Dict,
+    created_by: Optional[str] = None,
+) -> Dict:
+    """Submit a verification report for one Co-Scientist hypothesis.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - A verification agent has adjudicated a hypothesis
+    - You need to persist verdict, confidence, evidence, tests, and citations
+    - You are completing the one-report-per-hypothesis handoff
+
+    PARAMETERS:
+    - run_id: Co-Scientist run ID
+    - hypothesis_id: Hypothesis being verified
+    - verification_report: JSON-compatible verification report
+    - created_by: Optional submitting agent ID or model identifier
+    """
+    try:
+        with _collab_connection() as (conn, sessions_dir):
+            result = _submit_verification(
+                conn=conn,
+                sessions_dir=sessions_dir,
+                run_id=run_id,
+                hypothesis_id=hypothesis_id,
+                verification_report=verification_report,
+                created_by=created_by,
+            )
+        return {"success": True, **result}
+    except CoScientistRunError as e:
+        return _handle_co_scientist_run_error(e)
+    except Exception as e:
+        return _handle_tool_error("submit_verification", e)
+
+
+@collab_mcp.tool()
+def get_co_scientist_report(run_id: str) -> Dict:
+    """Get the current synthesized state of a Co-Scientist run.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - Inspecting linked generation and verification progress
+    - Checking whether selected hypotheses have reports
+    - Preparing a final Co-Scientist summary
+
+    PARAMETERS:
+    - run_id: Co-Scientist run ID
+    """
+    try:
+        with _collab_connection() as (conn, _sessions_dir):
+            result = _get_co_scientist_report(conn=conn, run_id=run_id)
+        return {"success": True, **result}
+    except CoScientistRunError as e:
+        return _handle_co_scientist_run_error(e)
+    except Exception as e:
+        return _handle_tool_error("get_co_scientist_report", e)
+
+
+@collab_mcp.tool()
 def help_collab(tool_name: Optional[str] = None) -> Dict:
     """Get help about all collab MCP tools or a specific tool.
 
@@ -2313,6 +2539,60 @@ def help_collab(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with valid status, issue count, and actionable validation issues",
         },
+        "create_co_scientist_run": {
+            "description": "Create linked Co-Scientist generation and verification sessions in one workflow.",
+            "args": {
+                "topic": "Research objective for the run",
+                "constraints": "Optional list of hard limits, domain notes, or requested actions",
+                "created_by": "Creator/model identifier",
+                "top_k": "Default number of hypotheses to send to verification",
+            },
+            "returns": "Dict with run ID, linked session IDs, orchestrator agent IDs, and next steps",
+        },
+        "submit_hypothesis": {
+            "description": "Persist a validated hypothesis packet and index it in Co-Scientist run state.",
+            "args": {
+                "run_id": "Co-Scientist run ID",
+                "hypothesis_packet": "JSON-compatible hypothesis packet",
+                "created_by": "Optional submitting agent ID or model identifier",
+            },
+            "returns": "Dict with hypothesis ID, artifact ID, count, and phase",
+        },
+        "list_hypotheses": {
+            "description": "List compact hypothesis summaries for a Co-Scientist run.",
+            "args": {
+                "run_id": "Co-Scientist run ID",
+                "status": "Optional hypothesis status filter",
+            },
+            "returns": "Dict with hypothesis summaries and run phase",
+        },
+        "start_hypothesis_verification": {
+            "description": "Create a verification handoff artifact for selected hypotheses without copying the generation transcript.",
+            "args": {
+                "run_id": "Co-Scientist run ID",
+                "hypothesis_ids": "Optional explicit hypothesis IDs to verify",
+                "top_k": "Optional override for number of top hypotheses",
+                "created_by": "Optional actor for the handoff artifact/message",
+            },
+            "returns": "Dict with verification input artifact ID and selected hypothesis IDs",
+        },
+        "submit_verification": {
+            "description": "Persist a verification report for one Co-Scientist hypothesis.",
+            "args": {
+                "run_id": "Co-Scientist run ID",
+                "hypothesis_id": "Hypothesis being verified",
+                "verification_report": "JSON-compatible verification report",
+                "created_by": "Optional submitting agent ID or model identifier",
+            },
+            "returns": "Dict with verification report artifact ID, verdict, and run phase",
+        },
+        "get_co_scientist_report": {
+            "description": "Inspect linked Co-Scientist run state, hypotheses, selected IDs, and verification reports.",
+            "args": {
+                "run_id": "Co-Scientist run ID",
+            },
+            "returns": "Dict with synthesized run state and readiness for synthesis",
+        },
         "help_collab": {
             "description": "Get help about all collab MCP tools or a specific tool (this tool).",
             "args": {
@@ -2385,6 +2665,12 @@ def help_collab(tool_name: Optional[str] = None) -> Dict:
             "screen_co_scientist_scope",
             "get_hypothesis_packet_schema",
             "validate_hypothesis_packet",
+            "create_co_scientist_run",
+            "submit_hypothesis",
+            "list_hypotheses",
+            "start_hypothesis_verification",
+            "submit_verification",
+            "get_co_scientist_report",
         ],
         "Help": [
             "help_collab",

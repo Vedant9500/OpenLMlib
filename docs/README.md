@@ -108,7 +108,7 @@ openlmlib-mcp --call save_artifact '{...}'
 
 ## MCP Tools Overview
 
-OpenLMlib provides **62 MCP tools** across three categories:
+OpenLMlib provides **68 MCP tools** across three categories:
 
 ### Core Library Tools (17)
 - Knowledge base management (`init`, `add`, `delete`, `health`)
@@ -123,14 +123,14 @@ OpenLMlib provides **62 MCP tools** across three categories:
 - Context injection and recap (`inject_context`, `session_recap`, `topic_context`)
 - Retroactive ingestion (`ingest_git_history`)
 
-### Collaboration Tools (35)
+### Collaboration Tools (41)
 - **Session Management** (7): Create, join, terminate sessions
 - **Message Operations** (7): Send, read, poll, search messages
 - **Artifact Management** (4): Add, list, get, search artifacts
 - **Session Discovery** (6): Find and analyze sessions
 - **Templates** (3): Predefined session plans
 - **Model Discovery** (3): OpenRouter model information
-- **Co-Scientist** (4): Scope screening and hypothesis packet validation
+- **Co-Scientist** (10): Scope screening, hypothesis packet validation, linked runs, verification handoff, and reports
 - **Utilities** (1): Help and documentation
 
 📖 **See [MCP_TOOLS.md](MCP_TOOLS.md) for complete tool reference with all parameters and examples.**

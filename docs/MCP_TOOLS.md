@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-Complete reference for all 62 MCP tools available in OpenLMlib.
+Complete reference for all 68 MCP tools available in OpenLMlib.
 
 ## Table of Contents
 
@@ -9,14 +9,14 @@ Complete reference for all 62 MCP tools available in OpenLMlib.
   - [Session Lifecycle (3)](#session-lifecycle)
   - [Progressive Retrieval (4)](#progressive-retrieval)
   - [Context Injection (3)](#context-injection)
-- [Collaboration Session Tools (35)](#collaboration-session-tools)
+- [Collaboration Session Tools (41)](#collaboration-session-tools)
   - [Session Management (7)](#session-management)
   - [Message Operations (7)](#message-operations)
   - [Artifact Management (4)](#artifact-management)
   - [Session Discovery & Analytics (6)](#session-discovery--analytics)
   - [Templates (3)](#templates)
   - [Model Discovery (3)](#model-discovery)
-  - [Co-Scientist (4)](#co-scientist)
+  - [Co-Scientist (10)](#co-scientist)
   - [Utilities (1)](#utilities)
 
 ---
@@ -840,6 +840,78 @@ Validate a Co-Scientist hypothesis packet before saving it or sending it to veri
 
 ---
 
+#### `create_co_scientist_run`
+Create linked Co-Scientist generation and verification sessions in one workflow.
+
+**Parameters:**
+- `topic` (string): Research objective for the run
+- `constraints` (array, optional): Hard limits, domain notes, or requested actions
+- `created_by` (string, optional): Creator/model identifier
+- `top_k` (integer, optional): Default number of hypotheses to send to verification
+
+**Returns:** Run ID, linked session IDs, orchestrator agent IDs, scope decision, and next steps
+
+---
+
+#### `submit_hypothesis`
+Persist a validated hypothesis packet and index it in Co-Scientist run state.
+
+**Parameters:**
+- `run_id` (string): Co-Scientist run ID
+- `hypothesis_packet` (object): JSON-compatible hypothesis packet
+- `created_by` (string, optional): Submitting agent ID or model identifier
+
+**Returns:** Hypothesis ID, artifact ID, hypothesis count, and current phase
+
+---
+
+#### `list_hypotheses`
+List compact hypothesis summaries for a Co-Scientist run.
+
+**Parameters:**
+- `run_id` (string): Co-Scientist run ID
+- `status` (string, optional): Hypothesis status filter
+
+**Returns:** Hypothesis summaries and current run phase
+
+---
+
+#### `start_hypothesis_verification`
+Create a verification handoff artifact for selected hypotheses without copying the generation transcript.
+
+**Parameters:**
+- `run_id` (string): Co-Scientist run ID
+- `hypothesis_ids` (array, optional): Explicit hypothesis IDs to verify
+- `top_k` (integer, optional): Override for number of top hypotheses
+- `created_by` (string, optional): Actor for the handoff artifact/message
+
+**Returns:** Verification input artifact ID and selected hypothesis IDs
+
+---
+
+#### `submit_verification`
+Persist a verification report for one Co-Scientist hypothesis.
+
+**Parameters:**
+- `run_id` (string): Co-Scientist run ID
+- `hypothesis_id` (string): Hypothesis being verified
+- `verification_report` (object): JSON-compatible verification report
+- `created_by` (string, optional): Submitting agent ID or model identifier
+
+**Returns:** Verification report artifact ID, verdict, report count, and current phase
+
+---
+
+#### `get_co_scientist_report`
+Inspect linked Co-Scientist run state, hypotheses, selected IDs, and verification reports.
+
+**Parameters:**
+- `run_id` (string): Co-Scientist run ID
+
+**Returns:** Synthesized run state and readiness for synthesis
+
+---
+
 ### Utilities
 
 #### `help_collab`
@@ -895,6 +967,6 @@ Get help for collaboration tools.
 | Session Discovery | 6 | Find and analyze sessions |
 | Templates | 3 | Predefined session plans |
 | Model Discovery | 3 | OpenRouter model information |
-| Co-Scientist | 4 | Scope policy, pre-run safety screening, and hypothesis packet validation |
+| Co-Scientist | 10 | Scope screening, packet validation, linked run orchestration, handoff, and reports |
 | Utilities | 1 | Help and documentation |
-| **Total** | **62** | |
+| **Total** | **68** | |

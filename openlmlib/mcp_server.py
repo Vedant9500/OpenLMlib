@@ -82,10 +82,12 @@ def _register_collab_tools() -> None:
 
     from .collab.collab_mcp import (
         save_artifact,
+        create_co_scientist_run,
         create_session,
         create_from_template,
         export_to_library,
         sessions_summary,
+        get_co_scientist_report,
         get_agent_sessions,
         get_artifact,
         get_model_details,
@@ -104,6 +106,7 @@ def _register_collab_tools() -> None:
         join_session,
         leave_session,
         list_artifacts,
+        list_hypotheses,
         list_models,
         list_sessions,
         list_templates,
@@ -112,6 +115,9 @@ def _register_collab_tools() -> None:
         read_messages,
         search_sessions,
         send_message,
+        start_hypothesis_verification,
+        submit_hypothesis,
+        submit_verification,
         tail_messages,
         terminate_session,
         update_session_state,
@@ -152,6 +158,12 @@ def _register_collab_tools() -> None:
     mcp.tool()(screen_co_scientist_scope)
     mcp.tool()(get_hypothesis_packet_schema)
     mcp.tool()(validate_hypothesis_packet)
+    mcp.tool()(create_co_scientist_run)
+    mcp.tool()(submit_hypothesis)
+    mcp.tool()(list_hypotheses)
+    mcp.tool()(start_hypothesis_verification)
+    mcp.tool()(submit_verification)
+    mcp.tool()(get_co_scientist_report)
     mcp.tool()(help_collab)
 
     _collab_registered = True
@@ -1655,6 +1667,12 @@ def help_library(tool_name: Optional[str] = None) -> dict:
         "screen_co_scientist_scope": "Screen a proposed Co-Scientist run before creating sessions.",
         "get_hypothesis_packet_schema": "Get Phase 1 Co-Scientist hypothesis packet schema.",
         "validate_hypothesis_packet": "Validate a Co-Scientist hypothesis packet before verification.",
+        "create_co_scientist_run": "Create linked Co-Scientist generation and verification sessions.",
+        "submit_hypothesis": "Persist a validated hypothesis packet in a Co-Scientist run.",
+        "list_hypotheses": "List compact hypothesis summaries for a Co-Scientist run.",
+        "start_hypothesis_verification": "Send selected hypotheses to the verification session.",
+        "submit_verification": "Persist a verification report for one hypothesis.",
+        "get_co_scientist_report": "Inspect synthesized Co-Scientist run state and reports.",
         "help_collab": "Get help about collab MCP tools.",
     }
 
@@ -1708,7 +1726,7 @@ def help_library(tool_name: Optional[str] = None) -> dict:
                 "note": "Use help_library(tool_name='memory_<tool>') for detailed usage",
             },
             "CollabSession Tools": {
-                "description": "Multi-agent collaboration session management (35 tools)",
+                "description": "Multi-agent collaboration session management (41 tools)",
                 "summary": collab_tools_summary,
                 "note": "Use help_collab() for detailed collab tool documentation",
             },
