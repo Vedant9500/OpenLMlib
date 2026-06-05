@@ -449,7 +449,8 @@ compressor = MemoryCompressor(
 
 ## 📖 MCP Integration
 
-All 10 memory tools are available via MCP for AI assistants:
+All 11 memory tools are available via MCP for AI assistants, including the
+adaptive `query_memory` retriever:
 
 ```bash
 # Install OpenLMlib MCP server to your AI assistant
@@ -476,7 +477,7 @@ gemini
 ## 📚 Additional Resources
 
 - [Memory System Quickstart](MEMORY_QUICKSTART.md) - This guide
-- [MCP Tools Reference](MCP_TOOLS.md) - Complete MCP tool reference (52 tools)
+- [MCP Tools Reference](MCP_TOOLS.md) - Complete MCP tool reference (76 tools)
 - [CLI MCP Integration](../CLI_MCP_GLOBAL_CONFIG.md) - Global MCP config for CLI tools
 - [Caveman Compression](CAVEMAN_COMPRESSION.md) - Token-efficient linguistic compression
 - [CHANGELOG](../CHANGELOG.md) - Release history and feature additions

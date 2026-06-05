@@ -304,6 +304,28 @@ When the run-level tools are available:
 - Use deterministic ranking/proximity/evolution helpers for shortlist work: pairwise comparisons should include compared IDs, winner, criteria, rationale, judge agent, and confidence.
 - Do not ask the MCP server to spawn external agent processes. For real local Codex/Claude/Gemini workers, use the external runner CLI (`openlmlib co-worker-run`) so process lifecycle, logs, heartbeats, timeouts, and cancellation remain outside MCP.
 
+## Co-Scientist Client Discovery Snippet
+
+Use this short snippet in Codex, Claude, Antigravity, or another MCP client
+after the `openlmlib` MCP server is configured:
+
+```markdown
+When a user asks for multi-pass research, hypothesis generation, independent
+verification, "research this and verify the hypotheses", "run Co-Scientist", or
+"multi-agent research with verification", use OpenLMlib's Co-Scientist workflow.
+
+Start with `screen_co_scientist_scope`. If allowed, call
+`create_co_scientist_run` to create linked generation and verification sessions.
+Use `submit_hypothesis` for validated hypothesis packets,
+`start_hypothesis_verification` for the shortlist, `submit_verification` for
+one report per selected hypothesis, `get_co_scientist_report` to inspect
+readiness, and `create_co_scientist_final_report` after verification is done.
+
+Do not use Co-Scientist for ordinary one-step code edits, simple search,
+straightforward Q&A, or unsafe/out-of-scope topics. Use normal retrieval or
+CollabSession tools for simpler tasks.
+```
+
 ## Co-Scientist Verification Sessions
 
 When using the `co_scientist_verify` template:
@@ -437,7 +459,7 @@ You have access to OpenLMlib tools for:
 2. **Collaboration Sessions** - work with other agents on complex tasks
 
 See full tool references:
-- [MCP Tools Reference](docs/MCP_TOOLS.md) - all 42 tools documented
+- [MCP Tools Reference](docs/MCP_TOOLS.md) - all 76 tools documented
 - [CollabSessions Guide](docs/COLLAB_SESSIONS.md) - collaboration workflows
 - [System Prompts](docs/SYSTEM_PROMPT.md) - instruction templates
 

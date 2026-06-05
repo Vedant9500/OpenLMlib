@@ -1,90 +1,88 @@
 #!/usr/bin/env python3
-"""Diagnostic script to count registered MCP tools."""
-import sys
-import os
+"""Diagnose OpenLMlib MCP tool registration.
+
+This script is intentionally local and dependency-light. Run it with the same
+Python executable used by the MCP client entry:
+
+    .\\.venv\\Scripts\\python.exe scripts\\diagnose_mcp_tools.py
+"""
+from __future__ import annotations
+
 import traceback
 
-print("Testing MCP tool registration...", file=sys.stderr)
-print("="*60, file=sys.stderr)
+EXPECTED_TOTAL = 76
+EXPECTED_CO_SCIENTIST = {
+    "screen_co_scientist_scope",
+    "create_co_scientist_run",
+    "submit_hypothesis",
+    "start_hypothesis_verification",
+    "submit_verification",
+    "get_co_scientist_report",
+    "create_co_scientist_final_report",
+    "evaluate_co_scientist_run",
+}
 
-# Test 1: Try importing just the core mcp_server
-print("\n[Test 1] Import mcp_server module...", file=sys.stderr)
-try:
-    from openlmlib import mcp_server
-    print("  ✓ mcp_server imported", file=sys.stderr)
-except Exception as e:
-    print(f"  ✗ Failed: {e}", file=sys.stderr)
-    traceback.print_exc()
-    sys.exit(1)
 
-# Test 2: Try importing collab module  
-print("\n[Test 2] Import collab.collab_mcp...", file=sys.stderr)
-try:
-    from openlmlib.collab import collab_mcp
-    print("  ✓ collab_mcp imported", file=sys.stderr)
-except Exception as e:
-    print(f"  ✗ Failed: {e}", file=sys.stderr)
-    traceback.print_exc()
-    print("\n  >>> THIS IS LIKELY THE ISSUE! <<<", file=sys.stderr)
+def main() -> int:
+    print("Testing MCP tool registration...")
+    print("=" * 60)
 
-# Test 3: Count registered tools
-print("\n[Test 3] Count registered MCP tools...", file=sys.stderr)
-try:
-    from openlmlib.mcp_server import mcp
-    
-    tool_manager = mcp._tool_manager if hasattr(mcp, '_tool_manager') else None
-    if tool_manager and hasattr(tool_manager, '_tools'):
-        tools = tool_manager._tools
-    else:
-        print("  ✗ Cannot access tool manager structure", file=sys.stderr)
-        sys.exit(1)
-    
-    print(f"  ✓ Total registered: {len(tools)}", file=sys.stderr)
-    
-    # Print all tools
-    core_tools = sorted([name for name in tools.keys() if name.startswith('openlmlib_')])
-    collab_tools = sorted([name for name in tools.keys() if name.startswith('collab_')])
-    
-    print(f"\n  Core tools ({len(core_tools)}):", file=sys.stderr)
-    for name in core_tools:
-        print(f"    - {name}", file=sys.stderr)
-    
-    print(f"\n  Collab tools ({len(collab_tools)}):", file=sys.stderr)
-    for name in collab_tools:
-        print(f"    - {name}", file=sys.stderr)
-    
-    # Summary for the user
-    print("\n" + "="*60, file=sys.stderr)
-    if len(tools) == 41:
-        print("✓ ALL 41 TOOLS REGISTERED SUCCESSFULLY", file=sys.stderr)
-    elif len(tools) < 15:
-        print(f"⚠ ONLY {len(tools)} TOOLS REGISTERED (expected 41)", file=sys.stderr)
-        print("  This suggests collab module import failed!", file=sys.stderr)
-    else:
-        print(f"⚠ {len(tools)} TOOLS REGISTERED (expected 41)", file=sys.stderr)
-    
-except Exception as e:
-    print(f"  ✗ Failed: {e}", file=sys.stderr)
-    traceback.print_exc()
-    sys.exit(1)
+    print("\n[Test 1] Import openlmlib.mcp_server")
+    try:
+        from openlmlib import mcp_server
 
-# Test 4: Simulate MCP server module load
-print("\n[Test 4] Full module load simulation (like mcp_server:main)...", file=sys.stderr)
-try:
-    # This simulates what happens when `python -m openlmlib.mcp_server` runs
-    import importlib
-    mod = importlib.import_module('openlmlib.mcp_server')
-    if hasattr(mod, 'mcp') and hasattr(mod.mcp, '_tool_manager'):
-        tool_mgr = mod.mcp._tool_manager
-        if hasattr(tool_mgr, '_tools'):
-            count = len(tool_mgr._tools)
-            print(f"  ✓ Module loaded with {count} tools", file=sys.stderr)
-            if count < 41:
-                print(f"  ⚠ Expected 41 tools but got {count}!", file=sys.stderr)
-        else:
-            print("  ⚠ Tool manager has no _tools attribute", file=sys.stderr)
-    else:
-        print("  ⚠ Module doesn't have expected attributes", file=sys.stderr)
-except Exception as e:
-    print(f"  ✗ Failed: {e}", file=sys.stderr)
-    traceback.print_exc()
+        print("  OK: mcp_server imported")
+    except Exception as exc:
+        print(f"  FAIL: {exc}")
+        traceback.print_exc()
+        return 1
+
+    print("\n[Test 2] Register memory and collaboration tools")
+    try:
+        mcp_server._register_memory_tools()
+        mcp_server._register_collab_tools()
+        print("  OK: registration completed")
+    except Exception as exc:
+        print(f"  FAIL: {exc}")
+        traceback.print_exc()
+        return 1
+
+    print("\n[Test 3] Count registered tools")
+    try:
+        tools = set(mcp_server.mcp._tool_manager._tools)
+    except Exception as exc:
+        print(f"  FAIL: cannot inspect tool manager: {exc}")
+        traceback.print_exc()
+        return 1
+
+    print(f"  Registered tools: {len(tools)}")
+    if len(tools) < EXPECTED_TOTAL:
+        print(f"  FAIL: expected at least {EXPECTED_TOTAL} tools")
+        missing_core_hint = EXPECTED_CO_SCIENTIST - tools
+        if missing_core_hint:
+            print("  Missing Co-Scientist entry points:")
+            for name in sorted(missing_core_hint):
+                print(f"    - {name}")
+        return 1
+
+    print("  OK: expected tool count is present")
+
+    print("\n[Test 4] Co-Scientist entry points")
+    missing_co_scientist = EXPECTED_CO_SCIENTIST - tools
+    if missing_co_scientist:
+        print("  FAIL: missing Co-Scientist tools")
+        for name in sorted(missing_co_scientist):
+            print(f"    - {name}")
+        return 1
+
+    print("  OK: Co-Scientist workflow tools are registered")
+    print("\nRegistered tool names:")
+    for name in sorted(tools):
+        print(f"  - {name}")
+
+    print("\nOK: MCP tool registration looks complete.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

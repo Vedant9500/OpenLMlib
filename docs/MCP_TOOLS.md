@@ -1,14 +1,14 @@
 # MCP Tools Reference
 
-Complete reference for all 75 MCP tools available in OpenLMlib.
+Complete reference for all 76 MCP tools available in OpenLMlib.
 
 ## Table of Contents
 
 - [Core Library Tools (17)](#core-library-tools)
-- [Memory System Tools (10)](#memory-system-tools)
+- [Memory System Tools (11)](#memory-system-tools)
   - [Session Lifecycle (3)](#session-lifecycle)
   - [Progressive Retrieval (4)](#progressive-retrieval)
-  - [Context Injection (3)](#context-injection)
+  - [Context Injection & Synthesis (4)](#context-injection--synthesis)
 - [Collaboration Session Tools (48)](#collaboration-session-tools)
   - [Session Management (7)](#session-management)
   - [Message Operations (7)](#message-operations)
@@ -801,8 +801,15 @@ Get model recommendations for specific tasks.
 
 ### Co-Scientist
 
+Use the Co-Scientist tools for natural-language requests such as "research this
+and verify the hypotheses", "run multi-agent research", "generate hypotheses",
+"verify a hypothesis", or "create a Co-Scientist run". For ordinary one-step
+code edits, simple retrieval, or unsafe/out-of-scope topics, use the simpler
+OpenLMlib retrieval/collaboration tools instead.
+
 #### `get_co_scientist_scope_policy`
-Get the Phase 0 Co-Scientist scope and safety policy.
+Get the Phase 0 Co-Scientist scope and safety policy for hypothesis generation
+or multi-agent research.
 
 **Parameters:** None
 
@@ -811,7 +818,8 @@ Get the Phase 0 Co-Scientist scope and safety policy.
 ---
 
 #### `screen_co_scientist_scope`
-Screen a proposed Co-Scientist run before creating generation or verification sessions.
+Screen a proposed Co-Scientist run before hypothesis generation, verification,
+or linked sessions.
 
 **Parameters:**
 - `topic` (string): Proposed research objective
@@ -831,7 +839,7 @@ Get the Phase 1 Co-Scientist hypothesis packet schema for generation-to-verifica
 ---
 
 #### `get_evidence_quality_rubric`
-Get the Phase 6 Co-Scientist evidence labels and quality rubric.
+Get the Phase 6 Co-Scientist evidence labels and citation quality rubric.
 
 **Parameters:** None
 
@@ -840,7 +848,8 @@ Get the Phase 6 Co-Scientist evidence labels and quality rubric.
 ---
 
 #### `verify_co_scientist_citations`
-Verify Co-Scientist citations against URL syntax, local artifacts, or workspace files.
+Verify Co-Scientist citations against URL syntax, local artifacts, or workspace
+files before hypothesis verification or final report export.
 
 **Parameters:**
 - `citations` (array): Citation strings to resolve
@@ -861,7 +870,8 @@ Validate a Co-Scientist hypothesis packet before saving it or sending it to veri
 ---
 
 #### `create_co_scientist_run`
-Create linked Co-Scientist generation and verification sessions in one workflow.
+Create linked Co-Scientist generation and independent verification sessions for
+multi-agent research in one workflow.
 
 **Parameters:**
 - `topic` (string): Research objective for the run
@@ -897,7 +907,8 @@ List compact hypothesis summaries for a Co-Scientist run.
 ---
 
 #### `start_hypothesis_verification`
-Create a verification handoff artifact for selected hypotheses without copying the generation transcript.
+Create a verification handoff artifact for selected hypotheses without copying
+the generation transcript.
 
 **Parameters:**
 - `run_id` (string): Co-Scientist run ID
@@ -923,7 +934,8 @@ Persist a verification report for one Co-Scientist hypothesis.
 ---
 
 #### `get_co_scientist_report`
-Inspect linked Co-Scientist run state, hypotheses, selected IDs, and verification reports.
+Inspect linked Co-Scientist run state, hypotheses, selected IDs, verification
+reports, and synthesis readiness.
 
 **Parameters:**
 - `run_id` (string): Co-Scientist run ID
@@ -933,7 +945,8 @@ Inspect linked Co-Scientist run state, hypotheses, selected IDs, and verificatio
 ---
 
 #### `create_co_scientist_final_report`
-Create the final Co-Scientist report artifact and compact memory summaries.
+Create the final Co-Scientist report artifact and compact memory summaries after
+hypothesis verification.
 
 **Parameters:**
 - `run_id` (string): Co-Scientist run ID
@@ -1038,7 +1051,7 @@ Get help for collaboration tools.
 | Category | Tools | Purpose |
 |----------|-------|---------|
 | Core Library | 17 | Knowledge base management & retrieval |
-| Memory System | 10 | Session persistence & context injection |
+| Memory System | 11 | Session persistence, adaptive retrieval, context injection, and git ingestion |
 | Session Management | 7 | Create, join, terminate sessions |
 | Message Operations | 7 | Send, read, poll, search messages |
 | Artifact Management | 4 | Add, list, get, search artifacts |
@@ -1047,4 +1060,4 @@ Get help for collaboration tools.
 | Model Discovery | 3 | OpenRouter model information |
 | Co-Scientist | 17 | Scope screening, packet validation, citation grounding, linked run orchestration, handoff, reports, export, and evaluation |
 | Utilities | 1 | Help and documentation |
-| **Total** | **75** | |
+| **Total** | **76** | |

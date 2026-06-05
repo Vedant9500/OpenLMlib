@@ -14,6 +14,7 @@ Complete documentation for OpenLMlib - Local knowledge and research library for 
 - **[Memory System Quickstart](MEMORY_QUICKSTART.md)** - Session persistence and progressive retrieval
 - **[Co-Scientist Scope Policy](CO_SCIENTIST_SCOPE_POLICY.md)** - Phase 0 safety and approval gates
 - **[Co-Scientist Hypothesis Packet](CO_SCIENTIST_HYPOTHESIS_PACKET.md)** - Phase 1 generation-to-verification packet schema
+- **[Co-Scientist Phase Plan](CO_SCIENTIST_PHASE_PLAN.md)** - End-to-end implementation phases and status
 
 ### Collaboration
 - **[CollabSessions Guide](COLLAB_SESSIONS.md)** - Multi-agent collaboration
@@ -27,6 +28,7 @@ Complete documentation for OpenLMlib - Local knowledge and research library for 
 - **[System Prompt Templates](SYSTEM_PROMPT.md)** - Agent instruction templates
 - **[MCP Configuration](#mcp-client-configuration)** - IDE/client setup
 - **[CLI MCP Integration](../CLI_MCP_GLOBAL_CONFIG.md)** - Global MCP config for CLI tools
+- **[Co-Scientist Client Integration](MCP_CLI_INTEGRATION_RESEARCH.md#phase-10-co-scientist-client-integration)** - Codex, Claude, Antigravity, and smoke tests
 
 ### Development
 - **[CHANGELOG](../CHANGELOG.md)** - Release history
@@ -108,7 +110,7 @@ openlmlib-mcp --call save_artifact '{...}'
 
 ## MCP Tools Overview
 
-OpenLMlib provides **75 MCP tools** across three categories:
+OpenLMlib provides **76 MCP tools** across three categories:
 
 ### Core Library Tools (17)
 - Knowledge base management (`init`, `add`, `delete`, `health`)
@@ -117,9 +119,9 @@ OpenLMlib provides **75 MCP tools** across three categories:
 - Composite workflows (`start_research`, `end_session`, `check_context`, `save_finding_auto`)
 - Utilities (`evaluate_dataset`, `get_usage_analytics`, `help`)
 
-### Memory System Tools (10)
+### Memory System Tools (11)
 - Session lifecycle (`session_start`, `session_end`, `log_observation`)
-- Progressive retrieval (`search_memory`, `memory_timeline`, `get_observations`)
+- Adaptive and progressive retrieval (`query_memory`, `search_memory`, `memory_timeline`, `get_observations`)
 - Context injection and recap (`inject_context`, `session_recap`, `topic_context`)
 - Retroactive ingestion (`ingest_git_history`)
 
@@ -180,6 +182,9 @@ openlmlib mcp-config --ide vscode --ide cursor
 # Configure Codex CLI and Claude Code
 openlmlib mcp-config --ide codex_cli --ide claude_code
 
+# Configure the common Co-Scientist clients
+openlmlib mcp-config --ide codex_cli --ide claude_code --ide claude_desktop --ide antigravity
+
 # List supported IDEs
 openlmlib mcp-config --list-ides
 ```
@@ -189,6 +194,11 @@ Each client must have an `openlmlib` server entry in its own MCP config, then
 the client must be restarted or its MCP servers refreshed. System prompts help
 models decide when to use already-loaded tools, but they cannot load a missing
 MCP server.
+
+Co-Scientist discovery works best when the client has both the MCP config entry
+and a short instruction snippet. Use wording such as "research this and verify
+the hypotheses" or "start a Co-Scientist run" for clients that rely heavily on
+natural-language tool descriptions.
 
 **Supported clients:**
 - VS Code, Cursor, Claude Desktop
@@ -211,8 +221,8 @@ OpenLMlib
 │
 ├── MCP Server
 │   ├── 17 core library tools
-│   ├── 10 memory tools
-│   └── 31 collaboration tools
+│   ├── 11 memory tools
+│   └── 48 collaboration tools
 │
 ├── CLI
 │   ├── Setup and configuration

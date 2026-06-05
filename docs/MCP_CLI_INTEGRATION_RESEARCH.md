@@ -4,6 +4,116 @@
 
 Based on comprehensive research, here are the **most popular CLI coding assistants** and how to integrate OpenLMlib's MCP server with them.
 
+## Phase 10: Co-Scientist Client Integration
+
+This section is the practical setup path for making Co-Scientist discoverable in
+Codex, Claude, Antigravity, and other MCP clients.
+
+### Key Rule
+
+MCP clients do not discover servers from another app's custom prompt. Each
+client needs its own `openlmlib` MCP server entry, and the client must be
+restarted or refreshed after the config changes. A system prompt only helps a
+model decide when to use tools that are already loaded.
+
+### Configure The Common Co-Scientist Clients
+
+From a source checkout, run the CLI from the environment that can import
+`openlmlib.mcp_server`. On Windows that is usually:
+
+```powershell
+.\.venv\Scripts\openlmlib.exe --settings D:\LMlib\config\settings.json mcp-config --ide codex_cli --ide claude_code --ide claude_desktop --ide antigravity
+```
+
+From an installed package, the shorter form is usually enough:
+
+```bash
+openlmlib mcp-config --ide codex_cli --ide claude_code --ide claude_desktop --ide antigravity
+```
+
+The generated server entry uses the Python executable that ran `openlmlib`, so
+run this command from the same virtual environment or package install that has
+OpenLMlib and MCP dependencies installed.
+
+| Client | OpenLMlib ID | Config path | Config root | Restart/refresh |
+| --- | --- | --- | --- | --- |
+| Codex CLI | `codex_cli` | `~/.codex/config.toml` or `$CODEX_HOME/config.toml` | `mcp_servers` | Restart Codex session |
+| Claude Code | `claude_code` | `~/.claude.json` | `mcpServers` | Restart Claude Code or reload MCP servers |
+| Claude Desktop | `claude_desktop` | Windows: `%APPDATA%\Claude\claude_desktop_config.json`; macOS: `~/Library/Application Support/Claude/claude_desktop_config.json` | `mcpServers` | Fully quit and reopen Claude Desktop |
+| Antigravity | `antigravity` | `~/.gemini/antigravity/mcp_config.json` | `mcpServers` | Restart Antigravity |
+
+Use `openlmlib mcp-config --list-ides` to see every supported client ID.
+
+### Smoke Tests
+
+Run these checks with the same Python environment your MCP config points to:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\count_mcp_tools.py
+.\.venv\Scripts\python.exe scripts\diagnose_mcp_tools.py
+.\.venv\Scripts\python.exe scripts\check_mcp_config.py --ide codex_cli --settings D:\LMlib\config\settings.json --strict
+.\.venv\Scripts\python.exe scripts\check_mcp_config.py --ide claude_code --settings D:\LMlib\config\settings.json --strict
+.\.venv\Scripts\python.exe scripts\check_mcp_config.py --ide claude_desktop --settings D:\LMlib\config\settings.json --strict
+.\.venv\Scripts\python.exe scripts\check_mcp_config.py --ide antigravity --settings D:\LMlib\config\settings.json --strict
+```
+
+Expected tool surface:
+
+- 17 core library tools.
+- 11 memory tools.
+- 48 collaboration tools.
+- 76 total MCP tools, including 17 Co-Scientist tools.
+
+After restarting the client, use this prompt as an in-client smoke test:
+
+```text
+Do not modify files. Check whether OpenLMlib's Co-Scientist tools are available.
+Use help_collab for create_co_scientist_run and tell me the first three tools
+you would call for "research this and verify the hypotheses".
+```
+
+The expected first tools are `screen_co_scientist_scope`,
+`create_co_scientist_run`, and then either `get_hypothesis_packet_schema` or
+`submit_hypothesis` depending on whether a packet has already been drafted.
+
+### Prompt Snippet
+
+Add this to a client-level system prompt or project instructions after the MCP
+server is configured:
+
+```markdown
+Use OpenLMlib's Co-Scientist workflow when the user asks for multi-pass
+research, hypothesis generation, independent verification, "research this and
+verify the hypotheses", "run Co-Scientist", or "multi-agent research with
+verification".
+
+Start with `screen_co_scientist_scope`. If allowed, use
+`create_co_scientist_run`, then `submit_hypothesis`,
+`start_hypothesis_verification`, `submit_verification`,
+`get_co_scientist_report`, and `create_co_scientist_final_report` as the run
+progresses.
+
+Do not use Co-Scientist for ordinary one-step code edits, simple search,
+straightforward Q&A, or unsafe/out-of-scope topics.
+```
+
+### Troubleshooting: MCP Installed But Tools Not Considered
+
+- Confirm the client config contains an `openlmlib` server entry by running
+  `scripts/check_mcp_config.py --ide <client_id> --strict`.
+- Confirm the configured `command` points to a Python environment that can import
+  `openlmlib.mcp_server`; `python scripts/count_mcp_tools.py` should report 76
+  tools from that same environment.
+- Restart the client after writing config. Some clients cache MCP tool lists for
+  the whole session.
+- Use natural trigger words in the task: "hypothesis generation", "verify a
+  hypothesis", "multi-agent research", or "Co-Scientist run".
+- Do not rely on an Antigravity prompt to configure Codex or Claude. Prompts do
+  not install MCP servers into other clients.
+- If a first semantic retrieval call is slow, run `openlmlib setup` once from the
+  target environment so the embedding model and vector index are initialized
+  before the MCP client starts.
+
 ---
 
 ## 🏆 Top 6 CLI Coding Tools (by popularity & adoption)

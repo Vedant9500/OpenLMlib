@@ -2728,12 +2728,12 @@ def help_collab(tool_name: Optional[str] = None) -> Dict:
             "returns": "Dict with recommended model IDs and their details",
         },
         "get_co_scientist_scope_policy": {
-            "description": "Get Phase 0 Co-Scientist accepted domains, blocked domains, approval gates, and limits.",
+            "description": "Get Phase 0 Co-Scientist accepted domains, blocked domains, approval gates, and limits for hypothesis generation or multi-agent research.",
             "args": {},
             "returns": "Dict with scope policy and Phase 0 limits",
         },
         "screen_co_scientist_scope": {
-            "description": "Screen a proposed Co-Scientist run before creating generation or verification sessions.",
+            "description": "Screen a proposed Co-Scientist run before hypothesis generation, verification, or linked sessions.",
             "args": {
                 "topic": "Proposed research objective",
                 "constraints": "Optional list of hard limits, domain notes, or requested actions",
@@ -2753,12 +2753,12 @@ def help_collab(tool_name: Optional[str] = None) -> Dict:
             "returns": "Dict with valid status, issue count, and actionable validation issues",
         },
         "get_evidence_quality_rubric": {
-            "description": "Get Phase 6 Co-Scientist support/refute/neutral evidence labels and quality rubric.",
+            "description": "Get Phase 6 Co-Scientist support/refute/neutral evidence labels and citation quality rubric.",
             "args": {},
             "returns": "Dict with evidence labels and quality-level descriptions",
         },
         "verify_co_scientist_citations": {
-            "description": "Verify Co-Scientist citations against URL syntax, local artifacts, or workspace files.",
+            "description": "Verify Co-Scientist citations against URL syntax, local artifacts, or workspace files before hypothesis verification or final report export.",
             "args": {
                 "citations": "Non-empty list of citation strings",
                 "session_ids": "Optional session IDs to scope artifact lookup",
@@ -2766,7 +2766,7 @@ def help_collab(tool_name: Optional[str] = None) -> Dict:
             "returns": "Dict with resolved citation records and actionable issues",
         },
         "create_co_scientist_run": {
-            "description": "Create linked Co-Scientist generation and verification sessions in one workflow.",
+            "description": "Create linked Co-Scientist generation and independent verification sessions for multi-agent research in one workflow.",
             "args": {
                 "topic": "Research objective for the run",
                 "constraints": "Optional list of hard limits, domain notes, or requested actions",
@@ -2813,14 +2813,14 @@ def help_collab(tool_name: Optional[str] = None) -> Dict:
             "returns": "Dict with verification report artifact ID, verdict, and run phase",
         },
         "get_co_scientist_report": {
-            "description": "Inspect linked Co-Scientist run state, hypotheses, selected IDs, and verification reports.",
+            "description": "Inspect linked Co-Scientist run state, hypotheses, selected IDs, verification reports, and synthesis readiness.",
             "args": {
                 "run_id": "Co-Scientist run ID",
             },
             "returns": "Dict with synthesized run state and readiness for synthesis",
         },
         "create_co_scientist_final_report": {
-            "description": "Create the final Co-Scientist report artifact and compact run summaries.",
+            "description": "Create the final Co-Scientist report artifact and compact run summaries after hypothesis verification.",
             "args": {
                 "run_id": "Co-Scientist run ID",
                 "created_by": "Optional report creator identifier",

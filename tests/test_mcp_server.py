@@ -44,6 +44,28 @@ class TestMcpServerTools(unittest.TestCase):
         self.assertTrue(result)
         import_module.assert_called_once_with("sentence_transformers")
 
+    def test_full_registration_includes_co_scientist_discovery_surface(self):
+        mcp_server._register_memory_tools()
+        mcp_server._register_collab_tools()
+
+        tools = set(mcp_server.mcp._tool_manager._tools)
+        self.assertGreaterEqual(len(tools), 76)
+        for tool_name in {
+            "query_memory",
+            "screen_co_scientist_scope",
+            "create_co_scientist_run",
+            "start_hypothesis_verification",
+            "get_co_scientist_report",
+            "create_co_scientist_final_report",
+        }:
+            self.assertIn(tool_name, tools)
+
+        help_result = mcp_server.help_library("create_co_scientist_run")
+        description = help_result["description"]
+        self.assertIn("Co-Scientist", description)
+        self.assertIn("independent verification", description)
+        self.assertIn("multi-agent research", description)
+
 
 if __name__ == "__main__":
     unittest.main()
