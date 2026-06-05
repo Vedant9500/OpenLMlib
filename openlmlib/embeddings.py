@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterable, List, Optional
 import hashlib
-import pickle
+import json
 import os
 
 import numpy as np
@@ -26,8 +26,9 @@ class EmbeddingCache:
             return
         if self.path.exists():
             try:
-                with self.path.open("rb") as handle:
-                    self._cache = pickle.load(handle)
+                payload = json.loads(self.path.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    self._cache = payload
             except Exception:
                 self._cache = {}
         self._loaded = True
@@ -49,8 +50,11 @@ class EmbeddingCache:
         lock_path = self.path.with_suffix(self.path.suffix + ".lock")
         with interprocess_lock(lock_path, timeout_sec=60.0):
             tmp_path = self.path.with_suffix(self.path.suffix + f".{os.getpid()}.tmp")
-            with tmp_path.open("wb") as handle:
-                pickle.dump(self._cache, handle)
+            payload = {
+                key: np.asarray(value, dtype=np.float32).tolist()
+                for key, value in self._cache.items()
+            }
+            tmp_path.write_text(json.dumps(payload), encoding="utf-8")
             os.replace(tmp_path, self.path)
 
 

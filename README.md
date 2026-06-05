@@ -75,7 +75,15 @@ openlmlib setup
 
 # Or configure specific IDEs
 openlmlib mcp-config --ide vscode --ide cursor
+
+# Codex CLI / Claude Code
+openlmlib mcp-config --ide codex_cli --ide claude_code
 ```
+
+Each MCP client needs its own config entry. A custom prompt in Antigravity can
+encourage OpenLMlib usage there, but Codex or Claude will not see the MCP until
+`openlmlib` is registered in their MCP config and the client is restarted or
+refreshed.
 
 **Supported clients**: VS Code, Cursor, Claude Desktop, Claude Code, Gemini CLI, Aider, Windsurf, Zed, Cline, and more.
 

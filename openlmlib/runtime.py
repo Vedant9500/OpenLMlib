@@ -141,7 +141,16 @@ def shutdown_runtime(settings_path: Path) -> bool:
         if state is None:
             return False
 
-    # Close outside the lock to avoid blocking other threads.
+    # Flush dirty vector/cache state before closing. User-facing writes commit
+    # SQLite immediately, so leaving the process with a dirty runtime would make
+    # the vector index lag behind successful writes.
+    try:
+        with state.write_lock:
+            maybe_flush(state, force=True)
+    except Exception:
+        pass
+
+    # Close outside the global lock to avoid blocking other threads.
     # Connection may already be closed in edge cases.
     try:
         state.conn.close()

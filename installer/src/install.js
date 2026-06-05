@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
@@ -56,7 +56,7 @@ function createVenv(onProgress) {
   }
 
   try {
-    execSync(`${getActivePythonCmd()} -m venv "${VENV_DIR}"`, { stdio: 'pipe' });
+    execFileSync(getActivePythonCmd(), ['-m', 'venv', VENV_DIR], { stdio: 'pipe' });
     onProgress('Virtual environment created.');
   } catch (err) {
     if (fs.existsSync(VENV_PYTHON)) {
@@ -69,8 +69,8 @@ function createVenv(onProgress) {
 
 function installPackage(packageName, onProgress) {
   onProgress(`Installing ${packageName}...`);
-  execSync(`"${VENV_PYTHON}" -m pip install --upgrade pip`, { stdio: 'pipe' });
-  execSync(`"${VENV_PYTHON}" -m pip install "${packageName}"`, { stdio: 'pipe' });
+  execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', '--upgrade', 'pip'], { stdio: 'pipe' });
+  execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', packageName], { stdio: 'pipe' });
   onProgress(`${packageName} installed.`);
 }
 
@@ -113,7 +113,7 @@ function validateInstalledOpenLMlib() {
   ].join('\n');
   fs.writeFileSync(scriptPath, script, { encoding: 'utf-8' });
   try {
-    const output = execSync(`"${VENV_PYTHON}" "${scriptPath}"`, { stdio: 'pipe', encoding: 'utf-8' });
+    const output = execFileSync(VENV_PYTHON, [scriptPath], { stdio: 'pipe', encoding: 'utf-8' });
     if (output && output.includes('missing_collab_mcp_tools:')) {
       const warningLine = output.split('\n').find((line) => line.startsWith('missing_collab_mcp_tools:'));
       if (warningLine) {
@@ -132,7 +132,7 @@ function validateInstalledOpenLMlib() {
 
 function installFromLocal(localPath, onProgress) {
   onProgress('Installing openlmlib...');
-  execSync(`"${VENV_PYTHON}" -m pip install --upgrade pip`, { stdio: 'pipe' });
+  execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', '--upgrade', 'pip'], { stdio: 'pipe' });
 
   const localSourceCandidates = discoverLocalSourceCandidates(localPath);
 
@@ -144,27 +144,34 @@ function installFromLocal(localPath, onProgress) {
       break;
     }
   }
-  if (process.env.npm_package_version) {
-    candidates.push({
-      kind: 'package',
-      value: `git+https://github.com/Vedant9500/OpenLMlib.git@v${process.env.npm_package_version}`,
-      label: `OpenLMlib GitHub tag v${process.env.npm_package_version}`,
-    });
+  if (process.env.OPENLMLIB_ALLOW_NETWORK_INSTALL_FALLBACK === '1') {
+    if (process.env.npm_package_version) {
+      candidates.push({
+        kind: 'package',
+        value: `git+https://github.com/Vedant9500/OpenLMlib.git@v${process.env.npm_package_version}`,
+        label: `OpenLMlib GitHub tag v${process.env.npm_package_version}`,
+      });
+    }
+    candidates.push({ kind: 'package', value: 'git+https://github.com/Vedant9500/OpenLMlib.git', label: 'OpenLMlib from GitHub (main branch)' });
+    if (process.env.npm_package_version) {
+      candidates.push({ kind: 'package', value: `openlmlib==${process.env.npm_package_version}`, label: `openlmlib==${process.env.npm_package_version}` });
+    }
+    candidates.push({ kind: 'package', value: 'openlmlib', label: 'openlmlib (latest from PyPI)' });
+  } else if (candidates.length === 0) {
+    throw new Error(
+      'Bundled OpenLMlib Python source was not found. Reinstall the npm package, '
+      + 'or set OPENLMLIB_ALLOW_NETWORK_INSTALL_FALLBACK=1 to allow GitHub/PyPI fallback.'
+    );
   }
-  candidates.push({ kind: 'package', value: 'git+https://github.com/Vedant9500/OpenLMlib.git', label: 'OpenLMlib from GitHub (main branch)' });
-  if (process.env.npm_package_version) {
-    candidates.push({ kind: 'package', value: `openlmlib==${process.env.npm_package_version}`, label: `openlmlib==${process.env.npm_package_version}` });
-  }
-  candidates.push({ kind: 'package', value: 'openlmlib', label: 'openlmlib (latest from PyPI)' });
 
   let lastErr = null;
   for (const candidate of candidates) {
     try {
       onProgress(`Installing openlmlib (${candidate.label})...`);
       if (candidate.kind === 'editable') {
-        execSync(`"${VENV_PYTHON}" -m pip install -e "${candidate.value}"`, { stdio: 'pipe' });
+        execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', '-e', candidate.value], { stdio: 'pipe' });
       } else {
-        execSync(`"${VENV_PYTHON}" -m pip install "${candidate.value}"`, { stdio: 'pipe' });
+        execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', candidate.value], { stdio: 'pipe' });
       }
       const validation = validateInstalledOpenLMlib();
       if (validation?.status === 'warn') {
@@ -184,7 +191,7 @@ function downloadModel(modelName, onProgress) {
   onProgress(`Downloading embedding model: ${modelName}...`);
   const script = `from sentence_transformers import SentenceTransformer; SentenceTransformer("${modelName}"); print("model-downloaded")`;
   try {
-    execSync(`"${VENV_PYTHON}" -c "${script}"`, {
+    execFileSync(VENV_PYTHON, ['-c', script], {
       stdio: 'pipe',
       encoding: 'utf-8',
       timeout: 600000,
@@ -219,7 +226,7 @@ function runSetupWizard(config, onProgress) {
   fs.writeFileSync(scriptPath, script, { encoding: 'utf-8' });
 
   try {
-    execSync(`"${VENV_PYTHON}" "${scriptPath}"`, {
+    execFileSync(VENV_PYTHON, [scriptPath], {
       stdio: 'pipe',
       encoding: 'utf-8',
     });
@@ -237,7 +244,7 @@ function runSetupWizard(config, onProgress) {
 
 function getInstalledVersion() {
   try {
-    return execSync(`"${VENV_PYTHON}" -c "import openlmlib; print(openlmlib.__version__)"`, {
+    return execFileSync(VENV_PYTHON, ['-c', 'import openlmlib; print(openlmlib.__version__)'], {
       stdio: 'pipe',
       encoding: 'utf-8',
     }).trim();

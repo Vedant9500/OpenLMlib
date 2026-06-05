@@ -174,9 +174,18 @@ openlmlib setup
 # Configure specific IDEs
 openlmlib mcp-config --ide vscode --ide cursor
 
+# Configure Codex CLI and Claude Code
+openlmlib mcp-config --ide codex_cli --ide claude_code
+
 # List supported IDEs
 openlmlib mcp-config --list-ides
 ```
+
+MCP clients do not discover arbitrary local servers from another app's prompt.
+Each client must have an `openlmlib` server entry in its own MCP config, then
+the client must be restarted or its MCP servers refreshed. System prompts help
+models decide when to use already-loaded tools, but they cannot load a missing
+MCP server.
 
 **Supported clients:**
 - VS Code, Cursor, Claude Desktop

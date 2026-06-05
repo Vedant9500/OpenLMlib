@@ -339,7 +339,7 @@ class SessionManager:
         summary_result = None
         if generate_summary:
             observations = self.storage.get_session_observations(
-                session_id, limit=100
+                session_id, limit=None
             )
             if observations:
                 # Compress observations that don't have summaries yet
@@ -347,7 +347,7 @@ class SessionManager:
                 if compressed_count > 0:
                     # Re-fetch observations after compression
                     observations = self.storage.get_session_observations(
-                        session_id, limit=100
+                        session_id, limit=None
                     )
                     logger.info(
                         f"Compressed {compressed_count} observations for session {session_id}"

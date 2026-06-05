@@ -745,6 +745,7 @@ def read_messages(
                 limit=limit,
                 msg_types=msg_types,
                 from_agent=from_agent,
+                reader_agent=agent_id,
             )
 
             offset_updated = not msg_types and from_agent is None
@@ -838,6 +839,7 @@ def poll_messages(
                 limit=limit,
                 msg_types=msg_types,
                 from_agent=from_agent,
+                reader_agent=agent_id,
             )
             if existing:
                 # Messages already available — return immediately, no blocking
@@ -903,6 +905,7 @@ def poll_messages(
                 limit=limit,
                 msg_types=msg_types,
                 from_agent=from_agent,
+                reader_agent=agent_id,
             )
 
             if messages:
@@ -959,7 +962,7 @@ def tail_messages(
             _require_reader_access(conn, session_id, agent_id)
 
             bus = MessageBus(conn, sessions_dir)
-            messages = bus.tail(session_id, n)
+            messages = bus.tail(session_id, n, reader_agent=agent_id)
             return {
                 "messages": messages,
                 "count": len(messages),
@@ -1003,7 +1006,7 @@ def read_message_range(
         with _collab_connection() as (conn, sessions_dir):
             _require_reader_access(conn, session_id, agent_id)
             bus = MessageBus(conn, sessions_dir)
-            messages = bus.read_range(session_id, start_seq, end_seq)
+            messages = bus.read_range(session_id, start_seq, end_seq, reader_agent=agent_id)
             return {
                 "messages": messages,
                 "count": len(messages),
@@ -1049,7 +1052,7 @@ def grep_messages(
             _require_reader_access(conn, session_id, agent_id)
             bus = MessageBus(conn, sessions_dir)
             try:
-                messages = bus.grep(session_id, pattern, limit, msg_types)
+                messages = bus.grep(session_id, pattern, limit, msg_types, reader_agent=agent_id)
             except sqlite3.OperationalError as fts_err:
                 # FTS5 syntax error from malformed user input
                 return {
@@ -1096,10 +1099,7 @@ def session_context(
 
         with _collab_connection() as (conn, sessions_dir):
             verify_session_exists_and_active(conn, session_id)
-
-            if agent_id is not None and agent_id != "":
-                validate_agent_id(agent_id)
-                verify_agent_in_session(conn, agent_id, session_id)
+            _require_reader_access(conn, session_id, agent_id)
 
             bus = MessageBus(conn, sessions_dir)
             artifact_store = ArtifactStore(conn, sessions_dir)
@@ -1412,6 +1412,7 @@ def terminate_session(
 @collab_mcp.tool()
 def export_to_library(
     session_id: str,
+    agent_id: str = "",
     project: Optional[str] = None,
     confidence: float = 0.8,
     tags: Optional[List[str]] = None,
@@ -1432,6 +1433,7 @@ def export_to_library(
 
     PARAMETERS:
     - session_id: Completed session to export
+    - agent_id: Orchestrator agent ID authorizing the export
     - project: Project name for findings (defaults to session title)
     - confidence: Default confidence 0.0-1.0 (default: 0.8)
     - tags: Additional tags to apply to all findings
@@ -1440,9 +1442,22 @@ def export_to_library(
     """
     try:
         validate_session_id(session_id)
+        if not agent_id:
+            return {"success": False, "error": "agent_id is required", "error_type": "validation_error"}
+        validate_agent_id(agent_id)
         confidence = max(0.0, min(confidence, 1.0))
 
         with _collab_connection() as (conn, sessions_dir):
+            session = collab_db.get_session(conn, session_id)
+            if session is None:
+                return {"success": False, "error": "Session not found", "error_type": "session_not_found"}
+            actor = verify_agent_in_session(conn, agent_id, session_id, require_active=False)
+            if actor.get("role") != "orchestrator":
+                return {
+                    "success": False,
+                    "error": "Only the session orchestrator can export to the main library.",
+                    "error_type": "authorization_error",
+                }
             settings_path = _get_settings_path()
             from .export_bridge import export_session_to_library, export_session_summary_as_finding
 

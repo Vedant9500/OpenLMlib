@@ -154,6 +154,7 @@ class MessageBus:
         limit: int = 50,
         msg_types: Optional[List[str]] = None,
         from_agent: Optional[str] = None,
+        reader_agent: Optional[str] = None,
     ) -> List[Dict]:
         """Read messages since last_seq with optional filters."""
         return db.get_messages_since(
@@ -163,11 +164,12 @@ class MessageBus:
             limit=limit,
             msg_types=msg_types,
             from_agent=from_agent,
+            reader_agent=reader_agent,
         )
 
-    def tail(self, session_id: str, n: int = 20) -> List[Dict]:
+    def tail(self, session_id: str, n: int = 20, reader_agent: Optional[str] = None) -> List[Dict]:
         """Get the last N messages."""
-        return db.get_messages_tail(self.conn, session_id, n)
+        return db.get_messages_tail(self.conn, session_id, n, reader_agent=reader_agent)
 
     def grep(
         self,
@@ -175,10 +177,11 @@ class MessageBus:
         pattern: str,
         limit: int = 50,
         msg_types: Optional[List[str]] = None,
+        reader_agent: Optional[str] = None,
     ) -> List[Dict]:
         """Search messages by keyword using FTS5."""
         return db.grep_messages(
-            self.conn, session_id, pattern, limit, msg_types
+            self.conn, session_id, pattern, limit, msg_types, reader_agent=reader_agent
         )
 
     def read_range(
@@ -186,9 +189,10 @@ class MessageBus:
         session_id: str,
         start_seq: int,
         end_seq: int,
+        reader_agent: Optional[str] = None,
     ) -> List[Dict]:
         """Read messages in a sequence range."""
-        return db.get_message_range(self.conn, session_id, start_seq, end_seq)
+        return db.get_message_range(self.conn, session_id, start_seq, end_seq, reader_agent=reader_agent)
 
     def _append_jsonl(self, session_id: str, entry: Dict) -> None:
         """Append a single JSON line to the shadow log."""

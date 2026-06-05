@@ -139,6 +139,7 @@ class RetrievalEngine:
 
         for item in candidates:
             item.pop("_sort", None)
+        combined_candidate_count = len(candidates)
         timings["retrieval"] = monotonic() - t1
 
         # Step 3: Reranking (optional)
@@ -193,7 +194,8 @@ class RetrievalEngine:
             "meta": {
                 "semantic_candidates": semantic_candidate_count,
                 "lexical_candidates": lexical_candidate_count,
-                "combined_candidates": len(candidates),
+                "combined_candidates": combined_candidate_count,
+                "post_processing_candidates": len(candidates),
                 "final_k": final_k,
                 "phase4": {
                     "expansion": expansion_info,

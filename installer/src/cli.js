@@ -1,4 +1,4 @@
-import { execSync, spawn } from 'child_process';
+import { execFileSync, spawn } from 'child_process';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
@@ -47,7 +47,7 @@ function runPython(args, opts = {}) {
 }
 
 function runPythonSync(args, opts = {}) {
-  return execSync(`${getVenvPython()} ${args.join(' ')}`, {
+  return execFileSync(getVenvPython(), args, {
     stdio: opts.stdio || 'pipe',
     encoding: 'utf-8',
     env: { ...process.env, ...opts.env },

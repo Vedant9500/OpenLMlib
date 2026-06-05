@@ -54,4 +54,4 @@ for label, path in configs:
 
 print("\n" + "=" * 60)
 print("To refresh your MCP config, run: openlmlib setup")
-print("Or: openlmlib mcp-config --client <your-ide>")
+print("Or: openlmlib mcp-config --ide <your-ide>")

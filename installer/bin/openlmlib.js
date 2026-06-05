@@ -39,7 +39,7 @@ if (!fs.existsSync(VENV_PYTHON)) {
 
 const args = process.argv.slice(2);
 
-if (args[0] === 'setup' || args[0] === 'wizard') {
+if ((args[0] === 'setup' || args[0] === 'wizard') && args.length === 1) {
   const installerDir = path.dirname(path.dirname(__filename));
   const runSetup = path.join(installerDir, 'src', 'run-setup.mjs');
   if (fs.existsSync(runSetup)) {

@@ -166,7 +166,13 @@ def cmd_setup(args) -> int:
         print(f"ERROR: {exc}")
         return 1
 
-    if _interactive_terminal():
+    explicit_setup_options = (
+        args.skip_model_warmup
+        or args.skip_mcp_config
+        or bool(args.ide)
+    )
+
+    if _interactive_terminal() and not explicit_setup_options:
         from .tui_setup import run_interactive_setup
         result = run_interactive_setup(settings_path)
         if result.get("status") == "ok":

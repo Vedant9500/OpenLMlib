@@ -495,6 +495,7 @@ def get_messages(
     msg_types: Optional[List[str]] = None,
     from_agent: Optional[str] = None,
     to_agent: Optional[str] = None,
+    reader_agent: Optional[str] = None,
 ) -> List[Dict]:
     """Get messages for a session with optional filters."""
     sql = """
@@ -513,8 +514,11 @@ def get_messages(
         sql += " AND from_agent = ?"
         params.append(from_agent)
     if to_agent:
-        sql += " AND (to_agent = ? OR to_agent IS NULL)"
+        sql += " AND (to_agent = ? OR to_agent = 'any' OR to_agent IS NULL)"
         params.append(to_agent)
+    if reader_agent:
+        sql += " AND (to_agent IS NULL OR to_agent = 'any' OR to_agent = ? OR from_agent = ?)"
+        params.extend([reader_agent, reader_agent])
 
     sql += " ORDER BY seq ASC LIMIT ? OFFSET ?"
     params.extend([limit, offset])
@@ -530,6 +534,7 @@ def get_messages_since(
     limit: int = 50,
     msg_types: Optional[List[str]] = None,
     from_agent: Optional[str] = None,
+    reader_agent: Optional[str] = None,
 ) -> List[Dict]:
     """Get messages with seq > last_seq (offset-based polling)."""
     sql = """
@@ -547,6 +552,9 @@ def get_messages_since(
     if from_agent:
         sql += " AND from_agent = ?"
         params.append(from_agent)
+    if reader_agent:
+        sql += " AND (to_agent IS NULL OR to_agent = 'any' OR to_agent = ? OR from_agent = ?)"
+        params.extend([reader_agent, reader_agent])
 
     sql += " ORDER BY seq ASC LIMIT ?"
     params.append(limit)
@@ -559,19 +567,22 @@ def get_messages_tail(
     conn: sqlite3.Connection,
     session_id: str,
     n: int = 20,
+    reader_agent: Optional[str] = None,
 ) -> List[Dict]:
     """Get the last N messages for a session."""
-    rows = conn.execute(
-        """
+    sql = """
         SELECT msg_id, session_id, seq, from_agent, from_model, msg_type,
                to_agent, content, metadata_json, created_at
         FROM messages
         WHERE session_id = ?
-        ORDER BY seq DESC
-        LIMIT ?
-        """,
-        (session_id, n),
-    ).fetchall()
+    """
+    params: list = [session_id]
+    if reader_agent:
+        sql += " AND (to_agent IS NULL OR to_agent = 'any' OR to_agent = ? OR from_agent = ?)"
+        params.extend([reader_agent, reader_agent])
+    sql += " ORDER BY seq DESC LIMIT ?"
+    params.append(n)
+    rows = conn.execute(sql, params).fetchall()
     return [_row_to_message(r) for r in reversed(rows)]
 
 
@@ -580,18 +591,21 @@ def get_message_range(
     session_id: str,
     start_seq: int,
     end_seq: int,
+    reader_agent: Optional[str] = None,
 ) -> List[Dict]:
     """Get messages in a sequence range [start_seq, end_seq)."""
-    rows = conn.execute(
-        """
+    sql = """
         SELECT msg_id, session_id, seq, from_agent, from_model, msg_type,
                to_agent, content, metadata_json, created_at
         FROM messages
         WHERE session_id = ? AND seq >= ? AND seq < ?
-        ORDER BY seq ASC
-        """,
-        (session_id, start_seq, end_seq),
-    ).fetchall()
+    """
+    params: list = [session_id, start_seq, end_seq]
+    if reader_agent:
+        sql += " AND (to_agent IS NULL OR to_agent = 'any' OR to_agent = ? OR from_agent = ?)"
+        params.extend([reader_agent, reader_agent])
+    sql += " ORDER BY seq ASC"
+    rows = conn.execute(sql, params).fetchall()
     return [_row_to_message(r) for r in rows]
 
 
@@ -601,6 +615,7 @@ def grep_messages(
     pattern: str,
     limit: int = 50,
     msg_types: Optional[List[str]] = None,
+    reader_agent: Optional[str] = None,
 ) -> List[Dict]:
     """Search messages by keyword using FTS5."""
     normalized_pattern = normalize_fts_query(pattern)
@@ -620,6 +635,9 @@ def grep_messages(
         placeholders = ",".join("?" for _ in msg_types)
         sql += f" AND m.msg_type IN ({placeholders})"
         params.extend(msg_types)
+    if reader_agent:
+        sql += " AND (m.to_agent IS NULL OR m.to_agent = 'any' OR m.to_agent = ? OR m.from_agent = ?)"
+        params.extend([reader_agent, reader_agent])
 
     sql += " ORDER BY m.seq ASC LIMIT ?"
     params.append(limit)

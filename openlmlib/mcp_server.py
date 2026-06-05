@@ -13,7 +13,7 @@ from .library import (
     evaluate_dataset,
     get_finding as lib_get_finding,
     health as lib_health,
-    init_library,
+    init_library as lib_init_library,
     list_findings as lib_list_findings,
     retrieve_findings as lib_retrieve_findings,
     retrieve_prompt_context,
@@ -193,7 +193,7 @@ def _register_memory_tools() -> None:
         
         # Build injection context (with caveman compression enabled)
         context_block = context_builder.build_session_start_context(
-            session_id, query, limit
+            session_id, query, limit, user_id=user_id
         )
         
         return {
@@ -430,7 +430,8 @@ def _register_memory_tools() -> None:
     def inject_context(
         session_id: str,
         query: Optional[str] = None,
-        limit: int = 50
+        limit: int = 50,
+        user_id: Optional[str] = None,
     ) -> dict:
         """Auto-inject relevant context from past sessions at any point during work.
 
@@ -448,10 +449,11 @@ def _register_memory_tools() -> None:
         - session_id: Current session ID
         - query: What you want context about (optional - uses session focus if not provided)
         - limit: Max observations to inject (default: 50)
+        - user_id: Optional user/agent identifier used to isolate memory context
         """
         state = _get_memory_state()
         context_builder = state["context_builder"]
-        context = context_builder.build_session_start_context(session_id, query, limit)
+        context = context_builder.build_session_start_context(session_id, query, limit, user_id=user_id)
 
         return {
             "session_id": session_id,
@@ -818,7 +820,7 @@ def init_library() -> dict:
     This creates the SQLite database, vector index, and required directories.
     Safe to call multiple times - will skip if already initialized.
     """
-    return init_library(_settings_path())
+    return lib_init_library(_settings_path())
 
 
 @mcp.tool()

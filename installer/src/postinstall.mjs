@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import path from 'path';
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import os from 'os';
 import fs from 'fs';
@@ -157,7 +157,7 @@ function validateInstalledOpenLMlib(VENV_PYTHON) {
   ].join('\n');
   fs.writeFileSync(scriptPath, checkScript, { encoding: 'utf-8' });
   try {
-    const output = execSync(`"${VENV_PYTHON}" "${scriptPath}"`, { stdio: 'pipe', encoding: 'utf-8' });
+    const output = execFileSync(VENV_PYTHON, [scriptPath], { stdio: 'pipe', encoding: 'utf-8' });
     if (output && output.includes('missing_collab_mcp_tools:')) {
       const warningLine = output.split('\n').find((line) => line.startsWith('missing_collab_mcp_tools:'));
       if (warningLine) {
@@ -175,7 +175,7 @@ function validateInstalledOpenLMlib(VENV_PYTHON) {
 }
 
 function installOpenLMlib(VENV_PYTHON, spinner) {
-  execSync(`"${VENV_PYTHON}" -m pip install --upgrade pip`, { stdio: 'pipe' });
+  execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', '--upgrade', 'pip'], { stdio: 'pipe' });
 
   const candidateSpecs = [];
   
@@ -208,29 +208,37 @@ function installOpenLMlib(VENV_PYTHON, spinner) {
     }
   }
 
-  // Priority 3: GitHub tags and releases
-  if (process.env.npm_package_version) {
-    candidateSpecs.push({
-      kind: 'package',
-      value: `git+https://github.com/Vedant9500/OpenLMlib.git@v${process.env.npm_package_version}`,
-      label: `OpenLMlib GitHub tag v${process.env.npm_package_version}`,
-    });
-  }
-  candidateSpecs.push({ kind: 'package', value: 'git+https://github.com/Vedant9500/OpenLMlib.git', label: 'OpenLMlib from GitHub (main branch)' });
+  // Network fallbacks are opt-in so npm packages cannot silently install stale
+  // Python code from GitHub/PyPI when the bundled source is missing.
+  if (process.env.OPENLMLIB_ALLOW_NETWORK_INSTALL_FALLBACK === '1') {
+    if (process.env.npm_package_version) {
+      candidateSpecs.push({
+        kind: 'package',
+        value: `git+https://github.com/Vedant9500/OpenLMlib.git@v${process.env.npm_package_version}`,
+        label: `OpenLMlib GitHub tag v${process.env.npm_package_version}`,
+      });
+    }
+    candidateSpecs.push({ kind: 'package', value: 'git+https://github.com/Vedant9500/OpenLMlib.git', label: 'OpenLMlib from GitHub (main branch)' });
 
-  if (process.env.npm_package_version) {
-    candidateSpecs.push({ kind: 'package', value: `openlmlib==${process.env.npm_package_version}`, label: `openlmlib==${process.env.npm_package_version}` });
+    if (process.env.npm_package_version) {
+      candidateSpecs.push({ kind: 'package', value: `openlmlib==${process.env.npm_package_version}`, label: `openlmlib==${process.env.npm_package_version}` });
+    }
+    candidateSpecs.push({ kind: 'package', value: 'openlmlib', label: 'openlmlib (latest from PyPI)' });
+  } else if (candidateSpecs.length === 0) {
+    throw new Error(
+      'Bundled OpenLMlib Python source was not found. Reinstall the npm package, '
+      + 'or set OPENLMLIB_ALLOW_NETWORK_INSTALL_FALLBACK=1 to allow GitHub/PyPI fallback.'
+    );
   }
-  candidateSpecs.push({ kind: 'package', value: 'openlmlib', label: 'openlmlib (latest from PyPI)' });
 
   let lastError = null;
   for (const spec of candidateSpecs) {
     try {
       spinner.text = `Installing openlmlib (${spec.label})...`;
       if (spec.kind === 'editable') {
-        execSync(`"${VENV_PYTHON}" -m pip install -e "${spec.value}"`, { stdio: 'pipe' });
+        execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', '-e', spec.value], { stdio: 'pipe' });
       } else {
-        execSync(`"${VENV_PYTHON}" -m pip install "${spec.value}"`, { stdio: 'pipe' });
+        execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', spec.value], { stdio: 'pipe' });
       }
       const validation = validateInstalledOpenLMlib(VENV_PYTHON);
       if (validation?.status === 'warn') {
@@ -316,7 +324,7 @@ async function runNonInteractive() {
     }
 
     try {
-      execSync(`${getActivePythonCmd()} -m venv "${VENV_DIR}"`, { stdio: 'pipe' });
+      execFileSync(getActivePythonCmd(), ['-m', 'venv', VENV_DIR], { stdio: 'pipe' });
       spinner1.succeed('Virtual environment created.');
     } catch (err) {
       if (fs.existsSync(VENV_PYTHON)) {
@@ -350,7 +358,7 @@ print("ok")`;
   fs.writeFileSync(configScriptPath, configScript);
 
   try {
-    execSync(`"${VENV_PYTHON}" "${configScriptPath}"`, { stdio: 'pipe', encoding: 'utf-8' });
+    execFileSync(VENV_PYTHON, [configScriptPath], { stdio: 'pipe', encoding: 'utf-8' });
     spinner4.succeed('MCP clients configured.');
   } catch {
     spinner4.warn('MCP config skipped (run "openlmlib mcp-config" later).');

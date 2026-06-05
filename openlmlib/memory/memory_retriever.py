@@ -213,7 +213,8 @@ class ProgressiveRetriever:
         self,
         session_id: str,
         query: Optional[str] = None,
-        limit: int = 50
+        limit: int = 50,
+        user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Automatic context injection at session start.
@@ -229,13 +230,21 @@ class ProgressiveRetriever:
         Returns:
             Context dict with formatted context block
         """
-        # Get recent or query-relevant observations
+        filters: Dict[str, Any] = {"exclude_session_id": session_id}
+        if user_id:
+            filters["user_id"] = user_id
+
+        # Get recent or query-relevant observations from previous sessions.
         if query:
             observations = self.storage.search_observations(
-                query, limit=limit
+                query, limit=limit, filters=filters
             )
         else:
-            observations = self.storage.get_recent_observations(limit=limit)
+            observations = self.storage.get_recent_observations(
+                limit=limit,
+                user_id=user_id,
+                exclude_session_id=session_id,
+            )
 
         if not observations:
             return {

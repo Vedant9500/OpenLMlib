@@ -34,6 +34,7 @@ class ObservationQueue:
         """
         self.processor = processor
         self.queue = queue.Queue(maxsize=maxsize)
+        self.worker_name = worker_name
         self.worker_thread = threading.Thread(
             target=self._process_loop,
             daemon=True,
@@ -48,6 +49,13 @@ class ObservationQueue:
         if self.running:
             logger.warning("Observation queue already running")
             return
+
+        if self.worker_thread.ident is not None:
+            self.worker_thread = threading.Thread(
+                target=self._process_loop,
+                daemon=True,
+                name=self.worker_name
+            )
 
         self.running = True
         self.worker_thread.start()
@@ -66,13 +74,12 @@ class ObservationQueue:
         if not self.running:
             return True
 
-        self.running = False
-
         # Send sentinel value to stop worker
         try:
             self.queue.put(None, timeout=timeout)
         except queue.Full:
             logger.warning("Queue full, forcing stop")
+            self.running = False
 
         # Wait for worker to finish
         self.worker_thread.join(timeout=timeout)
@@ -121,39 +128,42 @@ class ObservationQueue:
         """Background worker loop."""
         logger.info("Observation worker loop started")
 
-        while self.running:
+        while True:
             try:
                 # Get next observation (with timeout for responsiveness)
                 try:
                     observation = self.queue.get(timeout=1.0)
                 except queue.Empty:
+                    if not self.running:
+                        break
                     continue
 
                 # Check for sentinel (stop signal)
                 if observation is None:
+                    self.queue.task_done()
                     break
 
                 # Process observation
-                if self.processor:
-                    try:
+                try:
+                    if self.processor:
                         self.processor(observation)
                         self.processed_count += 1
                         logger.debug(
                             f"Processed observation "
                             f"(total: {self.processed_count})"
                         )
-                    except Exception as e:
-                        self.error_count += 1
-                        logger.error(
-                            f"Error processing observation: {e}",
-                            exc_info=True
+                    else:
+                        logger.debug(
+                            "No processor registered, skipping observation"
                         )
-                else:
-                    logger.debug(
-                        "No processor registered, skipping observation"
+                except Exception as e:
+                    self.error_count += 1
+                    logger.error(
+                        f"Error processing observation: {e}",
+                        exc_info=True
                     )
-
-                self.queue.task_done()
+                finally:
+                    self.queue.task_done()
 
             except Exception as e:
                 logger.error(
@@ -162,6 +172,7 @@ class ObservationQueue:
                 )
                 self.error_count += 1
 
+        self.running = False
         logger.info("Observation worker loop ended")
 
     def size(self) -> int:

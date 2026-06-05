@@ -13,7 +13,29 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
+from .privacy import sanitize_for_storage
+
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_value(value: Any) -> Any:
+    """Recursively redact sensitive strings while preserving JSON shape."""
+    if isinstance(value, str):
+        return sanitize_for_storage(value)
+    if isinstance(value, list):
+        return [_sanitize_value(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _sanitize_value(item) for key, item in value.items()}
+    return value
+
+
+def _text_for_storage(value: Any) -> str:
+    sanitized = _sanitize_value(value)
+    if sanitized is None:
+        return ""
+    if isinstance(sanitized, str):
+        return sanitized
+    return json.dumps(sanitized)
 
 
 class MemoryStorage:
@@ -221,17 +243,34 @@ class MemoryStorage:
             "timestamp", datetime.now(timezone.utc).isoformat()
         )
         tool_name = observation.get("tool_name")
-        tool_input = observation.get("tool_input")
-        tool_output = observation.get("tool_output")
-        tags = json.dumps(observation.get("tags", []))
+        tool_input = _text_for_storage(observation.get("tool_input"))
+        tool_output = _text_for_storage(observation.get("tool_output"))
+        compressed_summary = _text_for_storage(observation.get("compressed_summary"))
+        facts = _sanitize_value(observation.get("facts") or [])
+        concepts = _sanitize_value(observation.get("concepts") or [])
+        obs_type = observation.get("obs_type")
+        tags = json.dumps(_sanitize_value(observation.get("tags") or []))
 
         cursor.execute(
             """
             INSERT INTO memory_observations
-            (id, session_id, timestamp, tool_name, tool_input, tool_output, tags)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (id, session_id, timestamp, tool_name, tool_input, tool_output,
+             compressed_summary, tags, facts, concepts, obs_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (obs_id, session_id, timestamp, tool_name, tool_input, tool_output, tags)
+            (
+                obs_id,
+                session_id,
+                timestamp,
+                tool_name,
+                tool_input,
+                tool_output,
+                compressed_summary,
+                tags,
+                json.dumps(facts),
+                json.dumps(concepts),
+                obs_type,
+            )
         )
 
         # Update session observation count
@@ -333,7 +372,7 @@ class MemoryStorage:
     def get_session_observations(
         self,
         session_id: str,
-        limit: int = 100,
+        limit: Optional[int] = 100,
         include_compressed: bool = True
     ) -> List[Dict[str, Any]]:
         """
@@ -349,31 +388,29 @@ class MemoryStorage:
         """
         cursor = self.conn.cursor()
 
+        limit_clause = " LIMIT ?" if limit is not None else ""
+
         if include_compressed:
-            cursor.execute(
-                """
+            sql = """
                 SELECT id, session_id, timestamp, tool_name,
                        tool_input, tool_output, compressed_summary,
                        tags, facts, concepts, obs_type
                 FROM memory_observations
                 WHERE session_id = ?
                 ORDER BY timestamp DESC
-                LIMIT ?
-                """,
-                (session_id, limit)
-            )
+            """ + limit_clause
+            params = (session_id, limit) if limit is not None else (session_id,)
+            cursor.execute(sql, params)
         else:
-            cursor.execute(
-                """
+            sql = """
                 SELECT id, session_id, timestamp, tool_name,
                        tool_input, tool_output
                 FROM memory_observations
                 WHERE session_id = ?
                 ORDER BY timestamp DESC
-                LIMIT ?
-                """,
-                (session_id, limit)
-            )
+            """ + limit_clause
+            params = (session_id, limit) if limit is not None else (session_id,)
+            cursor.execute(sql, params)
 
         rows = cursor.fetchall()
         observations = []
@@ -470,6 +507,7 @@ class MemoryStorage:
         """
         cursor = self.conn.cursor()
         created_at = datetime.now(timezone.utc).isoformat()
+        sanitized_summary = _sanitize_value(summary)
 
         # Upsert summary
         cursor.execute(
@@ -480,9 +518,9 @@ class MemoryStorage:
             """,
             (
                 session_id,
-                summary.get("summary", ""),
-                json.dumps(summary.get("key_facts", [])),
-                json.dumps(summary.get("concepts", [])),
+                sanitized_summary.get("summary", ""),
+                json.dumps(sanitized_summary.get("key_facts", [])),
+                json.dumps(sanitized_summary.get("concepts", [])),
                 created_at
             )
         )
@@ -543,11 +581,12 @@ class MemoryStorage:
         """
         cursor = self.conn.cursor()
         created_at = datetime.now(timezone.utc).isoformat()
+        sanitized_knowledge = _sanitize_value(knowledge)
 
         import json
-        files_touched = json.dumps(knowledge.get("files_touched", []))
-        decisions = json.dumps(knowledge.get("decisions_made", []))
-        next_steps = json.dumps(knowledge.get("next_steps", []))
+        files_touched = json.dumps(sanitized_knowledge.get("files_touched", []))
+        decisions = json.dumps(sanitized_knowledge.get("decisions_made", []))
+        next_steps = json.dumps(sanitized_knowledge.get("next_steps", []))
 
         cursor.execute(
             """
@@ -557,8 +596,8 @@ class MemoryStorage:
             """,
             (
                 session_id,
-                json.dumps(knowledge),
-                knowledge.get("summary", ""),
+                json.dumps(sanitized_knowledge),
+                sanitized_knowledge.get("summary", ""),
                 files_touched,
                 decisions,
                 next_steps,
@@ -661,14 +700,20 @@ class MemoryStorage:
 
         if filters:
             if filters.get("tool_name"):
-                where_clauses.append("tool_name = ?")
+                where_clauses.append("o.tool_name = ?")
                 params.append(filters["tool_name"])
             if filters.get("obs_type"):
-                where_clauses.append("obs_type = ?")
+                where_clauses.append("o.obs_type = ?")
                 params.append(filters["obs_type"])
             if filters.get("session_id"):
-                where_clauses.append("session_id = ?")
+                where_clauses.append("o.session_id = ?")
                 params.append(filters["session_id"])
+            if filters.get("exclude_session_id"):
+                where_clauses.append("o.session_id != ?")
+                params.append(filters["exclude_session_id"])
+            if filters.get("user_id"):
+                where_clauses.append("s.user_id = ?")
+                params.append(filters["user_id"])
 
         # Add text search (escape LIKE special characters)
         if query:
@@ -686,10 +731,11 @@ class MemoryStorage:
 
         cursor.execute(
             f"""
-            SELECT id, session_id, timestamp, tool_name,
+            SELECT o.id, o.session_id, timestamp, tool_name,
                    tool_input, tool_output, compressed_summary,
                    tags, facts, concepts, obs_type
-            FROM memory_observations
+            FROM memory_observations AS o
+            JOIN memory_sessions AS s ON s.session_id = o.session_id
             {where_sql}
             ORDER BY timestamp DESC
             LIMIT ?
@@ -720,7 +766,9 @@ class MemoryStorage:
     def get_recent_observations(
         self,
         limit: int = 50,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        exclude_session_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Get most recent observations across all sessions or a specific session.
@@ -734,31 +782,32 @@ class MemoryStorage:
         """
         cursor = self.conn.cursor()
 
+        where_clauses = []
+        params = []
         if session_id:
-            cursor.execute(
-                """
-                SELECT id, session_id, timestamp, tool_name,
-                       tool_input, tool_output, compressed_summary,
-                       tags, facts, concepts, obs_type
-                FROM memory_observations
-                WHERE session_id = ?
-                ORDER BY timestamp DESC
-                LIMIT ?
-                """,
-                (session_id, limit)
-            )
-        else:
-            cursor.execute(
-                """
-                SELECT id, session_id, timestamp, tool_name,
-                       tool_input, tool_output, compressed_summary,
-                       tags, facts, concepts, obs_type
-                FROM memory_observations
-                ORDER BY timestamp DESC
-                LIMIT ?
-                """,
-                (limit,)
-            )
+            where_clauses.append("o.session_id = ?")
+            params.append(session_id)
+        if exclude_session_id:
+            where_clauses.append("o.session_id != ?")
+            params.append(exclude_session_id)
+        if user_id:
+            where_clauses.append("s.user_id = ?")
+            params.append(user_id)
+
+        where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+        cursor.execute(
+            f"""
+            SELECT id, o.session_id, timestamp, tool_name,
+                   tool_input, tool_output, compressed_summary,
+                   tags, facts, concepts, obs_type
+            FROM memory_observations AS o
+            JOIN memory_sessions AS s ON s.session_id = o.session_id
+            {where_sql}
+            ORDER BY timestamp DESC
+            LIMIT ?
+            """,
+            params + [limit]
+        )
 
         rows = cursor.fetchall()
         observations = []

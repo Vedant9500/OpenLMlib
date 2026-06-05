@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import re
 from typing import Dict, Iterable, List, Optional
 
 
@@ -91,6 +92,16 @@ def _format_toml_value(value: object) -> str:
     return json.dumps(str(value))
 
 
+_BARE_TOML_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _format_toml_key(key: str) -> str:
+    """Format a TOML key segment, quoting paths/plugin ids when needed."""
+    if _BARE_TOML_KEY_RE.match(key):
+        return key
+    return json.dumps(key)
+
+
 def _dump_simple_toml(data: Dict[str, object]) -> str:
     """Serialize the simple TOML structures used by MCP client configs."""
     lines: List[str] = []
@@ -102,10 +113,10 @@ def _dump_simple_toml(data: Dict[str, object]) -> str:
         if path:
             if lines and lines[-1] != "":
                 lines.append("")
-            lines.append("[" + ".".join(path) + "]")
+            lines.append("[" + ".".join(_format_toml_key(segment) for segment in path) + "]")
 
         for key, value in scalars:
-            lines.append(f"{key} = {_format_toml_value(value)}")
+            lines.append(f"{_format_toml_key(key)} = {_format_toml_value(value)}")
 
         for key, value in nested:
             emit_table(value, path + [key])
@@ -327,6 +338,7 @@ def install_client_config(
         }
 
     try:
+        target_existed = target_path.exists()
         payload = _load_existing_config(target_path, client_id)
         payload = _prepare_config_root(client, payload)
         root = payload[client.root_key]
@@ -335,7 +347,7 @@ def install_client_config(
         changed = root.get(SERVER_NAME) != new_entry
         root[SERVER_NAME] = new_entry
 
-        if changed or not target_path.exists():
+        if changed or not target_existed:
             target_path.parent.mkdir(parents=True, exist_ok=True)
             
             # Handle TOML serialization for Codex CLI
@@ -358,7 +370,7 @@ def install_client_config(
             "label": client.label,
             "status": "ok",
             "path": str(target_path),
-            "updated": changed or not target_path.exists(),
+            "updated": changed or not target_existed,
         }
     except Exception as exc:
         return {

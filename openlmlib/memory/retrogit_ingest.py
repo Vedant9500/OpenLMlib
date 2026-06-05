@@ -267,6 +267,7 @@ def retroactive_ingest(
         storage = None
     
     # 1. Get modified files
+    modified_files = []
     if include_uncommitted:
         modified_files = get_modified_files(cwd)
         results["files_found"] = modified_files

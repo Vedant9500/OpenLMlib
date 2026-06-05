@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Iterable, List, Tuple
 import json
 import math
-import pickle
 import os
 
 import numpy as np
@@ -71,6 +70,8 @@ class FaissVectorStore(VectorStore):
         if faiss is None:
             raise ImportError("faiss is not installed. Install faiss-cpu or faiss-gpu to use this backend.")
         super().__init__(dim, metric)
+        self._pending_add_vectors: dict[int, np.ndarray] = {}
+        self._pending_delete_ids: set[int] = set()
         if metric == "cosine":
             self._normalize = True
             index = faiss.IndexFlatIP(dim)
@@ -92,6 +93,10 @@ class FaissVectorStore(VectorStore):
         if self._normalize:
             faiss.normalize_L2(vecs)
         self._index.add_with_ids(vecs, id_array)
+        for idx, vec in zip(id_array, vecs):
+            int_id = int(idx)
+            self._pending_add_vectors[int_id] = np.asarray(vec, dtype=np.float32).copy()
+            self._pending_delete_ids.discard(int_id)
 
     def delete(self, ids: Iterable[int]) -> None:
         id_array = np.asarray(list(ids), dtype=np.int64)
@@ -99,6 +104,10 @@ class FaissVectorStore(VectorStore):
             return
         selector = faiss.IDSelectorBatch(id_array.size, faiss.swig_ptr(id_array))
         self._index.remove_ids(selector)
+        for idx in id_array:
+            int_id = int(idx)
+            self._pending_add_vectors.pop(int_id, None)
+            self._pending_delete_ids.add(int_id)
 
     def search(self, query_vector: Iterable[float], k: int) -> List[Tuple[int, float]]:
         query = np.asarray(list(query_vector), dtype=np.float32).reshape(1, -1)
@@ -122,6 +131,10 @@ class FaissVectorStore(VectorStore):
         index_path.parent.mkdir(parents=True, exist_ok=True)
         faiss.write_index(self._index, str(index_path))
 
+    def clear_pending(self) -> None:
+        self._pending_add_vectors.clear()
+        self._pending_delete_ids.clear()
+
     @classmethod
     def load(cls, index_path: Path, metric: str) -> "FaissVectorStore":
         if faiss is None:
@@ -129,6 +142,7 @@ class FaissVectorStore(VectorStore):
         index = faiss.read_index(str(index_path))
         store = cls(index.d, metric)
         store._index = index
+        store.clear_pending()
         return store
 
 
@@ -173,16 +187,30 @@ class NumpyVectorStore(VectorStore):
 
     def save(self, index_path: Path) -> None:
         index_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"dim": self.dim, "metric": self.metric, "vectors": self._vectors}
+        ids = np.asarray(list(self._vectors.keys()), dtype=np.int64)
+        if ids.size:
+            vectors = np.vstack([self._vectors[int(idx)] for idx in ids]).astype(np.float32)
+        else:
+            vectors = np.empty((0, self.dim), dtype=np.float32)
         with index_path.open("wb") as handle:
-            pickle.dump(payload, handle)
+            np.savez(
+                handle,
+                dim=np.asarray([self.dim], dtype=np.int64),
+                ids=ids,
+                vectors=vectors,
+            )
 
     @classmethod
     def load(cls, index_path: Path, metric: str) -> "NumpyVectorStore":
-        with index_path.open("rb") as handle:
-            payload = pickle.load(handle)
-        store = cls(int(payload["dim"]), metric)
-        store._vectors = payload["vectors"]
+        with np.load(index_path, allow_pickle=False) as payload:
+            dim = int(payload["dim"][0])
+            ids = payload["ids"].astype(np.int64)
+            vectors = payload["vectors"].astype(np.float32)
+        store = cls(dim, metric)
+        store._vectors = {
+            int(idx): vectors[pos].copy()
+            for pos, idx in enumerate(ids)
+        }
         store._deleted_ids = set()
         return store
 
@@ -230,7 +258,10 @@ def load_vector_store(index_path: Path, meta_path: Path) -> VectorStore:
                 raise RuntimeError("Vector index uses faiss, but faiss is not installed.")
             return FaissVectorStore.load(resolved_index_path, meta.metric)
         if meta.backend == "numpy":
-            return NumpyVectorStore.load(resolved_index_path, meta.metric)
+            try:
+                return NumpyVectorStore.load(resolved_index_path, meta.metric)
+            except Exception:
+                return NumpyVectorStore(dim=meta.dim, metric=meta.metric)
         raise RuntimeError(f"Unknown vector store backend: {meta.backend}")
 
     return create_vector_store(dim=0, metric="cosine", prefer_faiss=False)
@@ -251,7 +282,20 @@ def save_vector_store(
             try:
                 existing_meta = load_meta(meta_path)
                 if existing_meta.backend == store.backend and existing_meta.metric == store.metric:
-                    if existing_meta.backend == "numpy" and index_path.exists():
+                    if existing_meta.backend == "faiss" and index_path.exists():
+                        try:
+                            existing_store = FaissVectorStore.load(index_path, existing_meta.metric)
+                            pending_deletes = list(getattr(store, "_pending_delete_ids", set()))
+                            pending_adds = dict(getattr(store, "_pending_add_vectors", {}))
+                            if pending_deletes:
+                                existing_store.delete(pending_deletes)
+                            if pending_adds:
+                                existing_store.add(pending_adds.keys(), pending_adds.values())
+                            existing_store.clear_pending()
+                            store = existing_store
+                        except Exception:
+                            pass
+                    elif existing_meta.backend == "numpy" and index_path.exists():
                         try:
                             existing_store = NumpyVectorStore.load(index_path, existing_meta.metric)
                             if getattr(store, "_vectors", None) is not None:
@@ -273,6 +317,10 @@ def save_vector_store(
             index_path=str(index_path),
         )
         save_meta(meta_path, meta)
+        if hasattr(store, "clear_pending"):
+            store.clear_pending()
+        if original_store is not store and hasattr(original_store, "clear_pending"):
+            original_store.clear_pending()
         if hasattr(store, "_deleted_ids"):
             store._deleted_ids.clear()
         if original_store is not store and hasattr(original_store, "_deleted_ids"):

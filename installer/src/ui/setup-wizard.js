@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
 import Spinner from 'ink-spinner';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
@@ -76,7 +76,7 @@ function runPythonScript(script) {
   const tmpPath = path.join(os.tmpdir(), `openlmlib-setup-${Date.now()}-${Math.random().toString(36).slice(2)}.py`);
   fs.writeFileSync(tmpPath, script);
   try {
-    return execSync(`"${python}" "${tmpPath}"`, {
+    return execFileSync(python, [tmpPath], {
       stdio: ['pipe', 'pipe', 'pipe'],
       encoding: 'utf-8',
       timeout: 60000,
@@ -439,7 +439,7 @@ function CompleteScreen({ success }) {
         React.createElement(Box, { flexDirection: 'column', paddingLeft: 2, marginTop: 1 },
           React.createElement(Text, { color: 'gray' }, '  openlmlib add --project myproj --claim "..." --confidence 0.8'),
           React.createElement(Text, { color: 'gray' }, '  openlmlib query "your search query"'),
-          React.createElement(Text, { color: 'gray' }, '  openlmlib mcp'),
+          React.createElement(Text, { color: 'gray' }, '  openlmlib mcp-config'),
           React.createElement(Text, { color: 'gray' }, '  openlmlib doctor'),
         ),
       ),

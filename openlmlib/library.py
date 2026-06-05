@@ -25,7 +25,7 @@ from .schema import (
 )
 from .embeddings import EmbeddingCache, SentenceTransformerEmbedder
 from .embeddings import build_contextual_chunk
-from .retrieval import RetrievalEngine, RetrievalFilters, Phase4Options
+from .retrieval import RetrievalEngine, RetrievalFilters, Phase4Options, _claim_similarity
 from .sanitization import render_untrusted_context
 from .evaluation import evaluate_retrieval, faithfulness_score, relevance_alignment
 from .runtime import get_runtime, mark_dirty, maybe_flush
@@ -310,21 +310,20 @@ def _check_duplicate_warning(similar_findings: Optional[List[Dict[str, Any]]], c
     """Check if similar findings suggest this might be a duplicate.
 
     Returns a warning dict if a very similar finding exists, otherwise None.
-    FTS5 rank: lower is better. rank <= 2.0 indicates very high similarity.
+    FTS5 rank finds candidates; token overlap gates the duplicate warning.
     """
     if not similar_findings:
         return None
 
     for finding in similar_findings[:3]:
-        # Check if the finding has a high similarity score (from FTS rank)
-        rank = finding.get("rank")
-        # FTS5 rank: lower is better, rank <= 2.0 indicates very high similarity
-        if rank is not None and rank <= 2.0:
+        similarity = _claim_similarity(claim, finding.get("claim", ""))
+        if similarity >= DUPLICATE_SIMILARITY_THRESHOLD:
             return {
                 "message": f"A very similar finding already exists (id={finding.get('id')}). "
                           f"Consider updating it instead of creating a duplicate.",
                 "existing_finding_id": finding.get("id"),
-                "similarity_rank": rank,
+                "claim_similarity": similarity,
+                "fts_rank": finding.get("rank"),
                 "claim_preview": finding.get("claim", "")[:150],
             }
 
@@ -506,7 +505,7 @@ def add_finding(
             db.insert_finding(conn, finding)
             store.add([finding.embedding_id], [embedding_vec])
             mark_dirty(runtime, vector=True, cache=True)
-            maybe_flush(runtime)
+            maybe_flush(runtime, force=True)
         t7 = monotonic()
         logger.debug("add_finding: db_insert+store_add+flush=%.1fs", t7 - t6)
         logger.info("add_finding: total=%.1fs (runtime=%.1fs, validate=%.1fs, adjust=%.1fs, encode=%.1fs, persist=%.1fs)",

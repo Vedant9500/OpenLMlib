@@ -7,6 +7,7 @@ joining, leaving, and termination.
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -185,36 +186,58 @@ def join_collab_session(
     Returns:
         Dict with agent_id, session info, and instructions
     """
-    session = db.get_session(conn, session_id)
-    if session is None:
-        raise SessionNotFoundError(f"Session {session_id} not found")
-    if session["status"] != "active":
-        raise SessionNotActiveError(
-            f"Session {session_id} is not active (status: {session['status']})"
-        )
-
-    rules = session.get("rules", {})
-    max_agents = rules.get("max_agents", 10)
-    current_agents = len(db.get_session_agents(conn, session_id))
-    if current_agents >= max_agents:
-        raise SessionFullError(
-            f"Session is full ({current_agents}/{max_agents} agents)"
-        )
-
     joined_at = joined_at or utc_now_iso()
     agent_id = _generate_agent_id(model)
 
     _ensure_session_dirs(sessions_dir, session_id)
 
-    db.insert_agent(
-        conn,
-        agent_id=agent_id,
-        session_id=session_id,
-        model=model,
-        role=role,
-        joined_at=joined_at,
-        capabilities=capabilities,
-    )
+    try:
+        if conn.in_transaction:
+            conn.commit()
+        conn.execute("BEGIN IMMEDIATE")
+        session = db.get_session(conn, session_id)
+        if session is None:
+            raise SessionNotFoundError(f"Session {session_id} not found")
+        if session["status"] != "active":
+            raise SessionNotActiveError(
+                f"Session {session_id} is not active (status: {session['status']})"
+            )
+
+        rules = session.get("rules", {})
+        max_agents = rules.get("max_agents", 10)
+        current_agents = conn.execute(
+            "SELECT COUNT(*) FROM agents WHERE session_id = ? AND status = 'active'",
+            (session_id,),
+        ).fetchone()[0]
+        if current_agents >= max_agents:
+            raise SessionFullError(
+                f"Session is full ({current_agents}/{max_agents} agents)"
+            )
+
+        conn.execute(
+            """
+            INSERT INTO agents (agent_id, session_id, model, role, capabilities_json,
+                                joined_at, status, last_seen)
+            VALUES (?, ?, ?, ?, ?, ?, 'active', ?)
+            """,
+            (
+                agent_id,
+                session_id,
+                model,
+                role,
+                json.dumps(capabilities or []),
+                joined_at,
+                joined_at,
+            ),
+        )
+        conn.execute(
+            "UPDATE sessions SET updated_at = ? WHERE session_id = ?",
+            (joined_at, session_id),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
     bus = MessageBus(conn, sessions_dir)
     bus.send(
@@ -338,15 +361,16 @@ def terminate_collab_session(
         metadata={"summary": summary},
     )
 
-    # Batch update all active agents to inactive status in one query
-    conn.execute(
-        """
-        UPDATE agents
-        SET status = ?, last_seen = ?
-        WHERE session_id = ? AND status = 'active'
-        """,
-        ("inactive", terminated_at, session_id),
-    )
+    # Batch update all active agents to inactive status in one committed query.
+    with conn:
+        conn.execute(
+            """
+            UPDATE agents
+            SET status = ?, last_seen = ?
+            WHERE session_id = ? AND status = 'active'
+            """,
+            ("inactive", terminated_at, session_id),
+        )
 
     return {
         "session_id": session_id,

@@ -131,6 +131,7 @@ def verify_agent_in_session(
     conn: sqlite3.Connection,
     agent_id: str,
     session_id: str,
+    require_active: bool = True,
 ) -> dict:
     """Verify that an agent is a member of the given session.
 
@@ -147,6 +148,10 @@ def verify_agent_in_session(
     if row["session_id"] != session_id:
         raise AgentNotAuthorizedError(
             f"Agent {agent_id} is not a member of session {session_id}"
+        )
+    if require_active and row["status"] != "active":
+        raise AgentNotAuthorizedError(
+            f"Agent {agent_id} is not active in session {session_id} (status: {row['status']})"
         )
     return {
         "agent_id": row["agent_id"],

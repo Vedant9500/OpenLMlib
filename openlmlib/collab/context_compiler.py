@@ -95,7 +95,7 @@ class ContextCompiler:
         if max_messages == 5:
             max_messages = profile["optimal_context_messages"]
 
-        recent_messages = self.message_bus.tail(session_id, max_messages)
+        recent_messages = self.message_bus.tail(session_id, max_messages, reader_agent=agent_id)
         formatted_messages = self._format_messages(recent_messages, agent_id, family)
 
         tasks = db.get_session_tasks(self.conn, session_id)

@@ -6,6 +6,20 @@ import json
 from pathlib import Path
 
 
+def _parse_bool(value: object, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    raise ValueError(f"Expected boolean value, got {value!r}")
+
+
 @dataclass
 class WriteGateSettings:
     min_confidence: float = 0.6
@@ -148,37 +162,37 @@ class Settings:
                 reranking=RerankingSettings(
                     model_name=reranking_data.get("model_name", "cross-encoder/ms-marco-MiniLM-L-6-v2"),
                     top_k=int(reranking_data.get("top_k", 10)),
-                    enabled=bool(reranking_data.get("enabled", True)),
+                    enabled=_parse_bool(reranking_data.get("enabled"), True),
                     batch_size=int(reranking_data.get("batch_size", 32)),
                     alpha=float(reranking_data.get("alpha", 0.7)),
                 ),
                 query_expansion=QueryExpansionSettings(
-                    enabled=bool(expansion_data.get("enabled", False)),
+                    enabled=_parse_bool(expansion_data.get("enabled"), False),
                     max_variants=int(expansion_data.get("max_variants", 3)),
                     strategy=expansion_data.get("strategy", "rule_based"),
                 ),
                 decomposition=DecompositionSettings(
-                    enabled=bool(decomposition_data.get("enabled", True)),
+                    enabled=_parse_bool(decomposition_data.get("enabled"), True),
                     min_relevance_threshold=float(decomposition_data.get("min_relevance_threshold", 0.3)),
-                    include_caveats=bool(decomposition_data.get("include_caveats", True)),
+                    include_caveats=_parse_bool(decomposition_data.get("include_caveats"), True),
                     max_evidence_items=int(decomposition_data.get("max_evidence_items", 3)),
                 ),
                 packing=PackingSettings(
                     max_tokens=int(packing_data.get("max_tokens", 4000)),
-                    enabled=bool(packing_data.get("enabled", True)),
+                    enabled=_parse_bool(packing_data.get("enabled"), True),
                 ),
             ),
             memory=MemoryInjectionSettings(
-                enabled=bool(memory_data.get("enabled", True)),
+                enabled=_parse_bool(memory_data.get("enabled"), True),
                 observations_at_session_start=int(memory_data.get("observations_at_session_start", 50)),
-                auto_log_tool_use=bool(memory_data.get("auto_log_tool_use", True)),
-                progressive_disclosure=bool(memory_data.get("progressive_disclosure", True)),
+                auto_log_tool_use=_parse_bool(memory_data.get("auto_log_tool_use"), True),
+                progressive_disclosure=_parse_bool(memory_data.get("progressive_disclosure"), True),
                 max_context_tokens=int(memory_data.get("max_context_tokens", 4000)),
-                privacy_filtering=bool(memory_data.get("privacy_filtering", True)),
-                compression_enabled=bool(memory_data.get("compression_enabled", True)),
+                privacy_filtering=_parse_bool(memory_data.get("privacy_filtering"), True),
+                compression_enabled=_parse_bool(memory_data.get("compression_enabled"), True),
                 max_observations_per_session=int(memory_data.get("max_observations_per_session", 500)),
                 session_cleanup_days=int(memory_data.get("session_cleanup_days", 30)),
-                caveman_enabled=bool(memory_data.get("caveman_enabled", True)),
+                caveman_enabled=_parse_bool(memory_data.get("caveman_enabled"), True),
                 caveman_intensity=memory_data.get("caveman_intensity", "ultra"),
             ),
         )

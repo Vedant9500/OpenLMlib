@@ -336,13 +336,13 @@ def generate_qwen_code_config(settings_path: Path) -> Dict:
 
 ```bash
 # Install OpenLMlib MCP to all supported CLI tools
-openlmlib mcp install --cli claude_code,gemini_cli,qwen_code,opencode
+openlmlib mcp-config --ide claude_code --ide gemini_cli --ide qwen_code --ide opencode
 
 # Verify installations
-openlmlib mcp verify --cli all
+openlmlib mcp-config --list-ides
 
 # Remove installations
-openlmlib mcp remove --cli all
+Remove the `openlmlib` entry from the target client's MCP config file.
 ```
 
 ### 4. Create Setup Scripts

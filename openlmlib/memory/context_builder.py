@@ -41,7 +41,8 @@ class ContextBuilder:
         self,
         session_id: str,
         query: Optional[str] = None,
-        limit: int = 50
+        limit: int = 50,
+        user_id: Optional[str] = None,
     ) -> str:
         """
         Build context block for session start.
@@ -58,7 +59,7 @@ class ContextBuilder:
         """
         # Get relevant memories
         injection = self.retriever.auto_inject_context(
-            session_id, query, limit
+            session_id, query, limit, user_id=user_id
         )
 
         context_block = injection.get("context_block", "")
