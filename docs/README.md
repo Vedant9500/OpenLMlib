@@ -13,8 +13,6 @@ Complete documentation for OpenLMlib - Local knowledge and research library for 
 - **[Knowledge Base Guide](#knowledge-base)** - Managing findings and retrieval
 - **[Memory System Quickstart](MEMORY_QUICKSTART.md)** - Session persistence and progressive retrieval
 - **[Co-Scientist Scope Policy](CO_SCIENTIST_SCOPE_POLICY.md)** - Phase 0 safety and approval gates
-- **[Co-Scientist Hypothesis Packet](CO_SCIENTIST_HYPOTHESIS_PACKET.md)** - Phase 1 generation-to-verification packet schema
-- **[Co-Scientist Phase Plan](CO_SCIENTIST_PHASE_PLAN.md)** - End-to-end implementation phases and status
 
 ### Collaboration
 - **[CollabSessions Guide](COLLAB_SESSIONS.md)** - Multi-agent collaboration

@@ -30,15 +30,15 @@ def valid_packet():
         ],
         "evidence": [
             {
-                "source": "docs/CO_SCIENTIST_PHASE_PLAN.md",
-                "summary": "The phase plan requires explicit citations and assumptions.",
+                "source": "docs/MCP_TOOLS.md",
+                "summary": "The MCP tools reference documents hypothesis packets and citations.",
                 "supports": "claim",
                 "confidence": 0.86,
                 "label": "support",
                 "quality": "primary_source",
             }
         ],
-        "citations": ["docs/CO_SCIENTIST_PHASE_PLAN.md"],
+        "citations": ["docs/MCP_TOOLS.md"],
         "novelty_score": 0.6,
         "plausibility_score": 0.8,
         "impact_score": 0.7,
