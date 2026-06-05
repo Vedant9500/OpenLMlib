@@ -259,6 +259,11 @@ You are acting as a **worker** agent in this session. Your responsibilities:
 - `start_hypothesis_verification`: Send selected packets to verification without copying the generation transcript
 - `submit_verification`: Persist one verification report for one hypothesis
 - `get_co_scientist_report`: Inspect run progress, selected hypotheses, reports, and synthesis readiness
+- `create_co_scientist_final_report`: Create the final report artifact and compact memory summaries
+- `export_co_scientist_findings`: Export only supported claims into the main library
+- `evaluate_co_scientist_run`: Compute Phase 9 run quality and traceability metrics
+- `get_co_scientist_benchmark_tasks`: Get fixed benchmark tasks for workflow comparison
+- `compare_co_scientist_workflows`: Compare single-agent, one-session multi-agent, and two-session Co-Scientist results
 
 ### Utilities
 - `help_collab`: Get collaboration tool documentation
@@ -293,6 +298,9 @@ When the run-level tools are available:
 - Use `start_hypothesis_verification` to create a compact verification input artifact; do not paste the full generation transcript into verification.
 - Use `submit_verification` once per `hypothesis_id`.
 - Use `get_co_scientist_report` to inspect linked session IDs, selected hypotheses, verification reports, and synthesis readiness.
+- Use `create_co_scientist_final_report` after every selected hypothesis has a verification report.
+- Use `export_co_scientist_findings` only after review, and only for supported or partially supported claims.
+- Use `evaluate_co_scientist_run`, `get_co_scientist_benchmark_tasks`, and `compare_co_scientist_workflows` when deciding whether Co-Scientist is worth the extra latency/cost versus simpler workflows.
 - Use deterministic ranking/proximity/evolution helpers for shortlist work: pairwise comparisons should include compared IDs, winner, criteria, rationale, judge agent, and confidence.
 - Do not ask the MCP server to spawn external agent processes. For real local Codex/Claude/Gemini workers, use the external runner CLI (`openlmlib co-worker-run`) so process lifecycle, logs, heartbeats, timeouts, and cancellation remain outside MCP.
 

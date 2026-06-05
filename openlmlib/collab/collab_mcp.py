@@ -82,6 +82,15 @@ from openlmlib.co_scientist.orchestrator import (
     submit_hypothesis as _submit_hypothesis,
     submit_verification as _submit_verification,
 )
+from openlmlib.co_scientist.reporting import (
+    create_final_report as _create_final_report,
+    export_supported_findings as _export_supported_findings,
+)
+from openlmlib.co_scientist.evaluation import (
+    compare_workflows as _compare_workflows,
+    evaluate_run as _evaluate_co_scientist_run,
+    get_benchmark_tasks as _get_co_scientist_benchmark_tasks,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -309,6 +318,11 @@ __all__ = [
     "list_hypotheses",
     "start_hypothesis_verification",
     "submit_verification",
+    "create_co_scientist_final_report",
+    "export_co_scientist_findings",
+    "evaluate_co_scientist_run",
+    "get_co_scientist_benchmark_tasks",
+    "compare_co_scientist_workflows",
     "get_co_scientist_report",
     "help_collab",
 ]
@@ -2269,6 +2283,154 @@ def get_co_scientist_report(run_id: str) -> Dict:
 
 
 @collab_mcp.tool()
+def create_co_scientist_final_report(
+    run_id: str,
+    created_by: Optional[str] = None,
+    mark_complete: bool = True,
+) -> Dict:
+    """Create the final Co-Scientist report artifact for a verified run.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - All selected hypotheses have verification reports
+    - The user asks for the final Co-Scientist report
+    - You need a durable report artifact before export or memory preservation
+
+    WORKFLOW POSITION: Use after submit_verification has completed for every
+    selected hypothesis. This creates one co_scientist_report artifact and
+    compact session summaries for future recall.
+
+    PARAMETERS:
+    - run_id: Co-Scientist run ID
+    - created_by: Optional report creator identifier
+    - mark_complete: If true, move run phase to complete
+    """
+    try:
+        with _collab_connection() as (conn, sessions_dir):
+            result = _create_final_report(
+                conn=conn,
+                sessions_dir=sessions_dir,
+                run_id=run_id,
+                created_by=created_by,
+                mark_complete=mark_complete,
+            )
+        return {"success": True, **result}
+    except CoScientistRunError as e:
+        return _handle_co_scientist_run_error(e)
+    except Exception as e:
+        return _handle_tool_error("create_co_scientist_final_report", e)
+
+
+@collab_mcp.tool()
+def export_co_scientist_findings(
+    run_id: str,
+    project: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    proposed_by: Optional[str] = None,
+) -> Dict:
+    """Export supported Co-Scientist claims into the main knowledge library.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - A final Co-Scientist report exists and supported claims should become findings
+    - You need to preserve verified claims but skip inconclusive or rejected ones
+    - The user explicitly asks to save verified Co-Scientist results to memory
+
+    WORKFLOW POSITION: Use after final report review. This intentionally skips
+    inconclusive, contradicted, and unsafe/out-of-scope hypotheses.
+
+    PARAMETERS:
+    - run_id: Co-Scientist run ID
+    - project: Optional project name for exported findings
+    - tags: Optional extra tags
+    - proposed_by: Optional proposer identifier
+    """
+    try:
+        with _collab_connection() as (conn, sessions_dir):
+            result = _export_supported_findings(
+                settings_path=_get_settings_path(),
+                conn=conn,
+                sessions_dir=sessions_dir,
+                run_id=run_id,
+                project=project,
+                tags=tags,
+                proposed_by=proposed_by,
+            )
+        return {"success": True, **result}
+    except CoScientistRunError as e:
+        return _handle_co_scientist_run_error(e)
+    except Exception as e:
+        return _handle_tool_error("export_co_scientist_findings", e)
+
+
+@collab_mcp.tool()
+def evaluate_co_scientist_run(
+    run_id: str,
+    token_count: Optional[int] = None,
+    cost_usd: Optional[float] = None,
+    human_edits_needed: Optional[int] = None,
+    expert_accepted: Optional[bool] = None,
+) -> Dict:
+    """Evaluate a completed or in-progress Co-Scientist run.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - Measuring whether a Co-Scientist run improved traceability
+    - Tracking citation coverage, contradiction discovery, or verified hypothesis cost
+    - Comparing the two-session workflow against simpler baselines
+
+    PARAMETERS:
+    - run_id: Co-Scientist run ID
+    - token_count: Optional total token count for the run
+    - cost_usd: Optional total model cost for the run
+    - human_edits_needed: Optional number of final report edits
+    - expert_accepted: Optional user/expert acceptance flag
+    """
+    try:
+        with _collab_connection() as (conn, _sessions_dir):
+            result = _evaluate_co_scientist_run(
+                conn=conn,
+                run_id=run_id,
+                token_count=token_count,
+                cost_usd=cost_usd,
+                human_edits_needed=human_edits_needed,
+                expert_accepted=expert_accepted,
+            )
+        return {"success": True, **result}
+    except CoScientistRunError as e:
+        return _handle_co_scientist_run_error(e)
+    except Exception as e:
+        return _handle_tool_error("evaluate_co_scientist_run", e)
+
+
+@collab_mcp.tool()
+def get_co_scientist_benchmark_tasks() -> Dict:
+    """Get the built-in Phase 9 Co-Scientist benchmark task set.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - Setting up a benchmark for single-agent vs multi-agent vs Co-Scientist runs
+    - You need fixed research tasks for repeatable workflow comparison
+    - Evaluating whether Co-Scientist should be the default for a task class
+    """
+    return _get_co_scientist_benchmark_tasks()
+
+
+@collab_mcp.tool()
+def compare_co_scientist_workflows(results: List[Dict]) -> Dict:
+    """Compare benchmark results across workflow types.
+
+    AUTOMATIC TRIGGERS - Call this when:
+    - You have benchmark results for single_agent, one_session_multi_agent, or two_session_co_scientist
+    - Deciding whether the simpler workflow should remain the default
+    - Comparing quality and traceability across research workflows
+
+    PARAMETERS:
+    - results: List of workflow result dicts or pre-evaluated result dicts
+    """
+    try:
+        return {"success": True, **_compare_workflows(results)}
+    except Exception as e:
+        return _handle_tool_error("compare_co_scientist_workflows", e)
+
+
+@collab_mcp.tool()
 def help_collab(tool_name: Optional[str] = None) -> Dict:
     """Get help about all collab MCP tools or a specific tool.
 
@@ -2657,6 +2819,48 @@ def help_collab(tool_name: Optional[str] = None) -> Dict:
             },
             "returns": "Dict with synthesized run state and readiness for synthesis",
         },
+        "create_co_scientist_final_report": {
+            "description": "Create the final Co-Scientist report artifact and compact run summaries.",
+            "args": {
+                "run_id": "Co-Scientist run ID",
+                "created_by": "Optional report creator identifier",
+                "mark_complete": "Move run phase to complete when true",
+            },
+            "returns": "Dict with final report artifact ID, path, memory summaries, and counts",
+        },
+        "export_co_scientist_findings": {
+            "description": "Export only supported Co-Scientist claims into the main knowledge library.",
+            "args": {
+                "run_id": "Co-Scientist run ID",
+                "project": "Optional project name",
+                "tags": "Optional extra tags",
+                "proposed_by": "Optional proposer identifier",
+            },
+            "returns": "Dict with exported findings, skipped hypotheses, and failures",
+        },
+        "evaluate_co_scientist_run": {
+            "description": "Evaluate a Co-Scientist run for Phase 9 quality and traceability metrics.",
+            "args": {
+                "run_id": "Co-Scientist run ID",
+                "token_count": "Optional total token count",
+                "cost_usd": "Optional total model cost",
+                "human_edits_needed": "Optional number of final report edits",
+                "expert_accepted": "Optional user/expert acceptance flag",
+            },
+            "returns": "Dict with metrics, quality score, and traceability score",
+        },
+        "get_co_scientist_benchmark_tasks": {
+            "description": "Get the built-in Phase 9 Co-Scientist benchmark task set.",
+            "args": {},
+            "returns": "Dict with benchmark tasks and supported workflow types",
+        },
+        "compare_co_scientist_workflows": {
+            "description": "Compare benchmark results across single-agent, one-session multi-agent, and two-session workflows.",
+            "args": {
+                "results": "List of workflow result dicts or pre-evaluated results",
+            },
+            "returns": "Dict with workflow summaries and default-workflow recommendation",
+        },
         "help_collab": {
             "description": "Get help about all collab MCP tools or a specific tool (this tool).",
             "args": {
@@ -2737,6 +2941,11 @@ def help_collab(tool_name: Optional[str] = None) -> Dict:
             "start_hypothesis_verification",
             "submit_verification",
             "get_co_scientist_report",
+            "create_co_scientist_final_report",
+            "export_co_scientist_findings",
+            "evaluate_co_scientist_run",
+            "get_co_scientist_benchmark_tasks",
+            "compare_co_scientist_workflows",
         ],
         "Help": [
             "help_collab",

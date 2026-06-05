@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-Complete reference for all 70 MCP tools available in OpenLMlib.
+Complete reference for all 75 MCP tools available in OpenLMlib.
 
 ## Table of Contents
 
@@ -9,14 +9,14 @@ Complete reference for all 70 MCP tools available in OpenLMlib.
   - [Session Lifecycle (3)](#session-lifecycle)
   - [Progressive Retrieval (4)](#progressive-retrieval)
   - [Context Injection (3)](#context-injection)
-- [Collaboration Session Tools (43)](#collaboration-session-tools)
+- [Collaboration Session Tools (48)](#collaboration-session-tools)
   - [Session Management (7)](#session-management)
   - [Message Operations (7)](#message-operations)
   - [Artifact Management (4)](#artifact-management)
   - [Session Discovery & Analytics (6)](#session-discovery--analytics)
   - [Templates (3)](#templates)
   - [Model Discovery (3)](#model-discovery)
-  - [Co-Scientist (12)](#co-scientist)
+  - [Co-Scientist (17)](#co-scientist)
   - [Utilities (1)](#utilities)
 
 ---
@@ -932,6 +932,64 @@ Inspect linked Co-Scientist run state, hypotheses, selected IDs, and verificatio
 
 ---
 
+#### `create_co_scientist_final_report`
+Create the final Co-Scientist report artifact and compact memory summaries.
+
+**Parameters:**
+- `run_id` (string): Co-Scientist run ID
+- `created_by` (string, optional): Report creator identifier
+- `mark_complete` (boolean, optional): Move run phase to complete
+
+**Returns:** Final report artifact ID, path, memory summary paths, and report counts
+
+---
+
+#### `export_co_scientist_findings`
+Export supported Co-Scientist claims into the main knowledge library.
+
+**Parameters:**
+- `run_id` (string): Co-Scientist run ID
+- `project` (string, optional): Project name for exported findings
+- `tags` (array, optional): Extra tags
+- `proposed_by` (string, optional): Proposer identifier
+
+**Returns:** Exported findings, skipped hypotheses, and failures
+
+---
+
+#### `evaluate_co_scientist_run`
+Evaluate a Co-Scientist run for quality and traceability metrics.
+
+**Parameters:**
+- `run_id` (string): Co-Scientist run ID
+- `token_count` (integer, optional): Total run token count
+- `cost_usd` (number, optional): Total run model cost
+- `human_edits_needed` (integer, optional): Number of final report edits
+- `expert_accepted` (boolean, optional): User or expert acceptance flag
+
+**Returns:** Phase 9 metrics, quality score, and traceability score
+
+---
+
+#### `get_co_scientist_benchmark_tasks`
+Get the built-in Phase 9 benchmark task set.
+
+**Parameters:** None
+
+**Returns:** Benchmark tasks and supported workflow types
+
+---
+
+#### `compare_co_scientist_workflows`
+Compare benchmark results across workflow types.
+
+**Parameters:**
+- `results` (array): Workflow result dictionaries or pre-evaluated results
+
+**Returns:** Workflow summaries and default-workflow recommendation
+
+---
+
 ### Utilities
 
 #### `help_collab`
@@ -987,6 +1045,6 @@ Get help for collaboration tools.
 | Session Discovery | 6 | Find and analyze sessions |
 | Templates | 3 | Predefined session plans |
 | Model Discovery | 3 | OpenRouter model information |
-| Co-Scientist | 12 | Scope screening, packet validation, citation grounding, linked run orchestration, handoff, and reports |
+| Co-Scientist | 17 | Scope screening, packet validation, citation grounding, linked run orchestration, handoff, reports, export, and evaluation |
 | Utilities | 1 | Help and documentation |
-| **Total** | **70** | |
+| **Total** | **75** | |

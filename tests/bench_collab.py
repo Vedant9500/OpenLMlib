@@ -57,6 +57,8 @@ PERFORMANCE_TARGETS = {
     "state_update_ms": 5.0,
     "artifact_save_ms": 10.0,
     "message_tail_ms": 5.0,
+    "co_scientist_evaluate_run_ms": 20.0,
+    "co_scientist_final_report_ms": 100.0,
 }
 
 
@@ -318,6 +320,139 @@ def bench_message_tail(iterations: int) -> Dict[str, Any]:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
+def _co_scientist_packet(run_id: str, title: str, score: float = 0.8) -> Dict[str, Any]:
+    from openlmlib.co_scientist.hypothesis import new_hypothesis_id
+
+    return {
+        "hypothesis_id": new_hypothesis_id(),
+        "run_id": run_id,
+        "title": title,
+        "claim": f"{title} improves Co-Scientist traceability.",
+        "rationale": "The packet is artifact-backed and independently verifiable.",
+        "assumptions": ["The verifier receives the packet artifact."],
+        "evidence": [
+            {
+                "source": "tests/bench_collab.py",
+                "summary": "The benchmark fixture uses deterministic packet evidence.",
+                "supports": "claim",
+                "confidence": score,
+                "label": "support",
+                "quality": "reproducible",
+            }
+        ],
+        "citations": ["https://example.com/openlmlib/bench_collab"],
+        "novelty_score": score,
+        "plausibility_score": score,
+        "impact_score": score,
+        "testability_score": score,
+        "safety_notes": ["Read-only benchmark fixture."],
+        "lineage": {
+            "parent_hypothesis_ids": [],
+            "version": 1,
+            "generated_by": "bench_agent",
+        },
+        "status": "ranked",
+    }
+
+
+def _co_scientist_report(hypothesis_id: str, verdict: str = "supported") -> Dict[str, Any]:
+    return {
+        "hypothesis_id": hypothesis_id,
+        "verdict": verdict,
+        "confidence": 0.84,
+        "supporting_evidence": ["The benchmark fixture persisted a packet and report."],
+        "disconfirming_evidence": ["No fixture contradiction was introduced."],
+        "tests_or_reproduction_plan": "Run tests/bench_collab.py.",
+        "feasibility_notes": "Feasible with existing CollabSessions primitives.",
+        "safety_notes": "No external state change is required.",
+        "citations": ["https://example.com/openlmlib/bench_collab"],
+    }
+
+
+def _create_complete_co_scientist_run(conn, sessions_dir: Path) -> str:
+    from openlmlib.co_scientist.orchestrator import (
+        create_co_scientist_run,
+        start_hypothesis_verification,
+        submit_hypothesis,
+        submit_verification,
+    )
+
+    run = create_co_scientist_run(
+        conn,
+        sessions_dir,
+        topic="Benchmark Co-Scientist run evaluation",
+        top_k=1,
+        created_by="bench",
+    )
+    packet = _co_scientist_packet(run["run_id"], "Benchmark packet")
+    submit_hypothesis(conn, sessions_dir, run["run_id"], packet, created_by="bench")
+    start_hypothesis_verification(
+        conn,
+        sessions_dir,
+        run["run_id"],
+        hypothesis_ids=[packet["hypothesis_id"]],
+        created_by="bench",
+    )
+    submit_verification(
+        conn,
+        sessions_dir,
+        run["run_id"],
+        packet["hypothesis_id"],
+        _co_scientist_report(packet["hypothesis_id"]),
+        created_by="bench",
+    )
+    return run["run_id"]
+
+
+def bench_co_scientist_evaluate_run(iterations: int) -> Dict[str, Any]:
+    """Benchmark Phase 9 run metric evaluation."""
+    conn, sessions_dir, tmpdir = setup_test_db()
+    try:
+        from openlmlib.co_scientist.evaluation import evaluate_run
+        from openlmlib.co_scientist.reporting import create_final_report
+
+        run_id = _create_complete_co_scientist_run(conn, sessions_dir)
+        create_final_report(conn, sessions_dir, run_id, created_by="bench")
+
+        def evaluate():
+            evaluate_run(conn, run_id, token_count=1000, cost_usd=0.5)
+
+        result = benchmark(evaluate, iterations)
+        return {
+            "operation": "co_scientist_evaluate_run",
+            "stats": result,
+            "target_ms": PERFORMANCE_TARGETS["co_scientist_evaluate_run_ms"],
+        }
+    finally:
+        conn.close()
+        import shutil
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def bench_co_scientist_final_report(iterations: int) -> Dict[str, Any]:
+    """Benchmark final report artifact creation on fresh complete runs."""
+    conn, sessions_dir, tmpdir = setup_test_db()
+    try:
+        from openlmlib.co_scientist.reporting import create_final_report
+
+        def create_report():
+            run_id = _create_complete_co_scientist_run(conn, sessions_dir)
+            create_final_report(conn, sessions_dir, run_id, created_by="bench")
+
+        # No warmup here: every run creates durable rows/artifacts, and the
+        # operation under test is the full final-report write path.
+        result = benchmark(create_report, iterations, warmup=0)
+        return {
+            "operation": "co_scientist_final_report",
+            "stats": result,
+            "target_ms": PERFORMANCE_TARGETS["co_scientist_final_report_ms"],
+        }
+    finally:
+        conn.close()
+        import shutil
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
 def bench_concurrent_writes(num_writers: int = 10, messages_per_writer: int = 50) -> Dict[str, Any]:
     """Benchmark concurrent writers using threads."""
     import threading
@@ -390,6 +525,8 @@ BENCHMARKS = {
     "state_update": bench_state_update,
     "artifact_save": bench_artifact_save,
     "message_tail": bench_message_tail,
+    "co_scientist_evaluate_run": bench_co_scientist_evaluate_run,
+    "co_scientist_final_report": bench_co_scientist_final_report,
 }
 
 

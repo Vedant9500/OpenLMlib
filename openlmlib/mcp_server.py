@@ -82,12 +82,17 @@ def _register_collab_tools() -> None:
 
     from .collab.collab_mcp import (
         save_artifact,
+        compare_co_scientist_workflows,
         create_co_scientist_run,
+        create_co_scientist_final_report,
         create_session,
         create_from_template,
+        evaluate_co_scientist_run,
         export_to_library,
+        export_co_scientist_findings,
         sessions_summary,
         get_evidence_quality_rubric,
+        get_co_scientist_benchmark_tasks,
         get_co_scientist_report,
         get_agent_sessions,
         get_artifact,
@@ -168,6 +173,11 @@ def _register_collab_tools() -> None:
     mcp.tool()(start_hypothesis_verification)
     mcp.tool()(submit_verification)
     mcp.tool()(get_co_scientist_report)
+    mcp.tool()(create_co_scientist_final_report)
+    mcp.tool()(export_co_scientist_findings)
+    mcp.tool()(evaluate_co_scientist_run)
+    mcp.tool()(get_co_scientist_benchmark_tasks)
+    mcp.tool()(compare_co_scientist_workflows)
     mcp.tool()(help_collab)
 
     _collab_registered = True
@@ -1679,6 +1689,11 @@ def help_library(tool_name: Optional[str] = None) -> dict:
         "start_hypothesis_verification": "Send selected hypotheses to the verification session.",
         "submit_verification": "Persist a verification report for one hypothesis.",
         "get_co_scientist_report": "Inspect synthesized Co-Scientist run state and reports.",
+        "create_co_scientist_final_report": "Create a final Co-Scientist report artifact and compact run summaries.",
+        "export_co_scientist_findings": "Export supported Co-Scientist claims into the main library.",
+        "evaluate_co_scientist_run": "Evaluate a Co-Scientist run for quality and traceability metrics.",
+        "get_co_scientist_benchmark_tasks": "Get built-in Phase 9 Co-Scientist benchmark tasks.",
+        "compare_co_scientist_workflows": "Compare benchmark results across research workflow types.",
         "help_collab": "Get help about collab MCP tools.",
     }
 
@@ -1732,7 +1747,7 @@ def help_library(tool_name: Optional[str] = None) -> dict:
                 "note": "Use help_library(tool_name='memory_<tool>') for detailed usage",
             },
             "CollabSession Tools": {
-                "description": "Multi-agent collaboration session management (43 tools)",
+                "description": "Multi-agent collaboration session management (48 tools)",
                 "summary": collab_tools_summary,
                 "note": "Use help_collab() for detailed collab tool documentation",
             },

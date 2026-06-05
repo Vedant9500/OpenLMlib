@@ -919,6 +919,75 @@ def cmd_co_worker_cancel(args) -> int:
     return 0
 
 
+def cmd_co_final_report(args) -> int:
+    from openlmlib.co_scientist.reporting import create_final_report
+
+    conn, sessions_dir = _collab_connection(Path(args.settings))
+    try:
+        result = create_final_report(
+            conn,
+            sessions_dir,
+            args.run_id,
+            created_by=args.by,
+            mark_complete=not args.no_mark_complete,
+        )
+        print(json.dumps(result, indent=2))
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_co_export_findings(args) -> int:
+    from openlmlib.co_scientist.reporting import export_supported_findings
+
+    conn, sessions_dir = _collab_connection(Path(args.settings))
+    try:
+        result = export_supported_findings(
+            settings_path=Path(args.settings),
+            conn=conn,
+            sessions_dir=sessions_dir,
+            run_id=args.run_id,
+            project=args.project,
+            tags=args.tags,
+            proposed_by=args.proposed_by,
+        )
+        print(json.dumps(result, indent=2))
+        return 0 if result.get("failed", 0) == 0 else 1
+    finally:
+        conn.close()
+
+
+def cmd_co_evaluate_run(args) -> int:
+    from openlmlib.co_scientist.evaluation import evaluate_run
+
+    conn, _sessions_dir = _collab_connection(Path(args.settings))
+    try:
+        result = evaluate_run(
+            conn,
+            args.run_id,
+            token_count=args.token_count,
+            cost_usd=args.cost_usd,
+            human_edits_needed=args.human_edits_needed,
+            expert_accepted=args.expert_accepted,
+        )
+        print(json.dumps(result, indent=2))
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_co_benchmarks(args) -> int:
+    from openlmlib.co_scientist.evaluation import compare_workflows, get_benchmark_tasks
+
+    if args.results:
+        payload = json.loads(Path(args.results).read_text(encoding="utf-8"))
+        results = payload.get("results", payload) if isinstance(payload, dict) else payload
+        print(json.dumps(compare_workflows(results), indent=2))
+    else:
+        print(json.dumps(get_benchmark_tasks(), indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="OpenLMlib CLI")
     parser.add_argument("--version", action="version", version=f"openlmlib {__version__}")
@@ -1360,6 +1429,44 @@ def build_parser() -> argparse.ArgumentParser:
     co_worker_cancel_p.add_argument("--reason", default="cancelled")
     co_worker_cancel_p.add_argument("--requested-by", default="user")
     co_worker_cancel_p.set_defaults(func=cmd_co_worker_cancel)
+
+    co_report_p = subparsers.add_parser(
+        "co-final-report",
+        help="Create a final Co-Scientist report artifact",
+    )
+    co_report_p.add_argument("--run-id", required=True)
+    co_report_p.add_argument("--by", help="Report creator identifier")
+    co_report_p.add_argument("--no-mark-complete", action="store_true", help="Do not move the run phase to complete")
+    co_report_p.set_defaults(func=cmd_co_final_report)
+
+    co_export_p = subparsers.add_parser(
+        "co-export-findings",
+        help="Export supported Co-Scientist claims to the main library",
+    )
+    co_export_p.add_argument("--run-id", required=True)
+    co_export_p.add_argument("--project", help="Project name for exported findings")
+    co_export_p.add_argument("--tags", action="append", help="Extra tag; repeatable")
+    co_export_p.add_argument("--proposed-by", help="Proposer identifier")
+    co_export_p.set_defaults(func=cmd_co_export_findings)
+
+    co_eval_p = subparsers.add_parser(
+        "co-evaluate-run",
+        help="Evaluate a Co-Scientist run for Phase 9 metrics",
+    )
+    co_eval_p.add_argument("--run-id", required=True)
+    co_eval_p.add_argument("--token-count", type=int)
+    co_eval_p.add_argument("--cost-usd", type=float)
+    co_eval_p.add_argument("--human-edits-needed", type=int)
+    co_eval_p.add_argument("--expert-accepted", dest="expert_accepted", action="store_true", default=None)
+    co_eval_p.add_argument("--expert-rejected", dest="expert_accepted", action="store_false")
+    co_eval_p.set_defaults(func=cmd_co_evaluate_run)
+
+    co_bench_p = subparsers.add_parser(
+        "co-benchmarks",
+        help="List Co-Scientist benchmark tasks or compare benchmark results",
+    )
+    co_bench_p.add_argument("--results", help="JSON file containing workflow benchmark results to compare")
+    co_bench_p.set_defaults(func=cmd_co_benchmarks)
 
     return parser
 

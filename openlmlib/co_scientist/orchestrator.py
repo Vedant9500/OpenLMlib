@@ -135,6 +135,9 @@ def create_co_scientist_run(
         "verification_input_artifact_id": None,
         "verification_reports": {},
         "verification_report_ids": [],
+        "final_report_artifact_id": None,
+        "final_report_created_at": None,
+        "memory_summary_paths": [],
         "verification_policy": dict(DEFAULT_VERIFICATION_POLICY),
         "scope_decision": scope,
         "created_by": created_by,
@@ -414,6 +417,9 @@ def submit_verification(
         "artifact_id": artifact["artifact_id"],
         "verdict": verdict,
         "confidence": float(report["confidence"]),
+        "citation_count": len(report.get("citations", [])),
+        "supporting_evidence_count": len(report.get("supporting_evidence", [])),
+        "disconfirming_evidence_count": len(report.get("disconfirming_evidence", [])),
         "created_by": actor,
         "created_at": created_at,
     }
@@ -502,6 +508,9 @@ def get_co_scientist_report(
         "contradicted_claims": contradicted_claims,
         "plausible_unverified_hypotheses": plausible_unverified,
         "verification_input_artifact_id": run_state.get("verification_input_artifact_id"),
+        "final_report_artifact_id": run_state.get("final_report_artifact_id"),
+        "final_report_created_at": run_state.get("final_report_created_at"),
+        "memory_summary_paths": list(run_state.get("memory_summary_paths", [])),
         "verification_policy": deepcopy(run_state["verification_policy"]),
         "state_locations": [
             {"session_id": record["session_id"], "role": record["role"], "version": record["version"]}

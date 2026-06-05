@@ -324,6 +324,40 @@ class TestCoScientistRunMCP(unittest.TestCase):
             hypothesis_id=packet["hypothesis_id"],
             verification_report=valid_report(packet["hypothesis_id"], verdict="partially_supported"),
         )
+        final_report = self.collab_mcp_module.create_co_scientist_final_report(
+            run_id=created["run_id"],
+            created_by="mcp-orchestrator",
+        )
+        evaluation = self.collab_mcp_module.evaluate_co_scientist_run(
+            run_id=created["run_id"],
+            token_count=500,
+            cost_usd=0.25,
+        )
+        benchmark_tasks = self.collab_mcp_module.get_co_scientist_benchmark_tasks()
+        comparison = self.collab_mcp_module.compare_co_scientist_workflows(
+            [
+                {
+                    "workflow_type": "single_agent",
+                    "total_hypotheses": 1,
+                    "valid_hypotheses": 1,
+                    "verified_hypotheses": 1,
+                    "citations": 1,
+                    "citation_slots": 1,
+                    "artifact_quality": 0.5,
+                    "citation_quality": 1.0,
+                },
+                {
+                    "workflow_type": "two_session_co_scientist",
+                    "total_hypotheses": 1,
+                    "valid_hypotheses": 1,
+                    "verified_hypotheses": 1,
+                    "citations": 1,
+                    "citation_slots": 1,
+                    "artifact_quality": 1.0,
+                    "citation_quality": 1.0,
+                },
+            ]
+        )
         report = self.collab_mcp_module.get_co_scientist_report(created["run_id"])
 
         self.assertTrue(created["success"])
@@ -331,6 +365,11 @@ class TestCoScientistRunMCP(unittest.TestCase):
         self.assertEqual(listed["count"], 1)
         self.assertEqual(handoff["hypothesis_ids"], [packet["hypothesis_id"]])
         self.assertEqual(verification["verdict"], "partially_supported")
+        self.assertTrue(final_report["success"])
+        self.assertEqual(report["final_report_artifact_id"], final_report["final_report_artifact_id"])
+        self.assertTrue(evaluation["success"])
+        self.assertEqual(benchmark_tasks["count"], 3)
+        self.assertTrue(comparison["success"])
         self.assertTrue(report["ready_for_synthesis"])
 
 
