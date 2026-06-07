@@ -86,6 +86,23 @@ encourage OpenLMlib usage there, but Codex or Claude will not see the MCP until
 `openlmlib` is registered in their MCP config and the client is restarted or
 refreshed.
 
+MCP startup is optimized for a fast client handshake. The server registers tools
+first, then starts a delayed runtime/model prewarm in the background so the
+first semantic retrieval is usually warm by the time you need it. To tune or
+disable that behavior, set environment variables in the client's OpenLMlib
+server entry:
+
+```toml
+[mcp_servers.openlmlib.env]
+OPENLMLIB_MCP_PREWARM = "1"              # default: 1
+OPENLMLIB_MCP_PREWARM_DELAY_SEC = "5"    # default: 5
+OPENLMLIB_EMBED_PREWARM = "1"            # default: 1
+```
+
+Set `OPENLMLIB_MCP_PREWARM = "0"` if you want no background model work. The
+main-thread `OPENLMLIB_MCP_PREIMPORT_EMBEDDINGS = "1"` option is still available
+for unusual environments, but it can add 10+ seconds to MCP startup on Windows.
+
 **Supported clients**: VS Code, Cursor, Claude Desktop, Claude Code, Gemini CLI, Aider, Windsurf, Zed, Cline, and more.
 
 For hypothesis-generation workflows, configure the client first, then ask for a

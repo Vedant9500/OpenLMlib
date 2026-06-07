@@ -198,6 +198,23 @@ and a short instruction snippet. Use wording such as "research this and verify
 the hypotheses" or "start a Co-Scientist run" for clients that rely heavily on
 natural-language tool descriptions.
 
+By default the MCP server registers its tools first, then starts a delayed
+runtime/model prewarm in the background. This keeps the MCP initialize handshake
+fast while making the first semantic retrieval more likely to be warm by the
+time you need it. Tune or disable the behavior in the client's OpenLMlib server
+entry:
+
+```toml
+[mcp_servers.openlmlib.env]
+OPENLMLIB_MCP_PREWARM = "1"              # default: 1
+OPENLMLIB_MCP_PREWARM_DELAY_SEC = "5"    # default: 5
+OPENLMLIB_EMBED_PREWARM = "1"            # default: 1
+```
+
+Set `OPENLMLIB_MCP_PREWARM = "0"` to disable background model work. Avoid
+`OPENLMLIB_MCP_PREIMPORT_EMBEDDINGS = "1"` unless you specifically want the
+embedding stack imported on the main startup path.
+
 **Supported clients:**
 - VS Code, Cursor, Claude Desktop
 - Claude Code, Gemini CLI, Qwen Code
@@ -271,6 +288,16 @@ OpenLMlib
 1. Restart your IDE (caching old tool list)
 2. Run `openlmlib doctor` to verify installation
 3. Check tool count in [MCP_TOOLS.md](MCP_TOOLS.md)
+
+### MCP server startup slow or timing out?
+- Keep `OPENLMLIB_MCP_PREIMPORT_EMBEDDINGS` unset or set to `0` in the client's
+  server entry.
+- If startup is still contended on a slow machine, increase
+  `OPENLMLIB_MCP_PREWARM_DELAY_SEC` or set `OPENLMLIB_MCP_PREWARM = "0"`.
+- `sentence_transformers` imports can take 10+ seconds on Windows even when the
+  model is already downloaded; this is separate from model download time.
+- Delayed prewarm should not block the handshake, but it can use CPU and memory
+  shortly after the server starts.
 
 ### Model download slow?
 - First run downloads embedding model (~100-500MB)

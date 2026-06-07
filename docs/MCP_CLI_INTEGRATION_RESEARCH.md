@@ -64,6 +64,28 @@ Expected tool surface:
 - 48 collaboration tools.
 - 76 total MCP tools, including 17 Co-Scientist tools.
 
+### Startup Latency
+
+OpenLMlib starts MCP in fast-handshake mode by default. It registers the tool
+surface before serving, then starts a delayed runtime/model prewarm in a daemon
+thread. This avoids MCP client initialize timeouts while still using the idle
+window before the first semantic retrieval call.
+
+Tune or disable the delayed prewarm from the client server entry:
+
+```toml
+[mcp_servers.openlmlib.env]
+OPENLMLIB_MCP_PREWARM = "1"              # default: 1
+OPENLMLIB_MCP_PREWARM_DELAY_SEC = "5"    # default: 5
+OPENLMLIB_EMBED_PREWARM = "1"            # default: 1
+```
+
+For Codex or other clients with tight startup windows, keep
+`OPENLMLIB_MCP_PREIMPORT_EMBEDDINGS` unset or set to `0`. That main-thread
+preimport option is available for unusual environments, but it can add 10+
+seconds to startup on Windows even when the embedding model is already
+downloaded.
+
 After restarting the client, use this prompt as an in-client smoke test:
 
 ```text
@@ -110,9 +132,14 @@ straightforward Q&A, or unsafe/out-of-scope topics.
   hypothesis", "multi-agent research", or "Co-Scientist run".
 - Do not rely on an Antigravity prompt to configure Codex or Claude. Prompts do
   not install MCP servers into other clients.
-- If a first semantic retrieval call is slow, run `openlmlib setup` once from the
-  target environment so the embedding model and vector index are initialized
-  before the MCP client starts.
+- If MCP startup is slow or times out, check that
+  `OPENLMLIB_MCP_PREIMPORT_EMBEDDINGS` is unset or `0` in that client's server
+  entry. Increase `OPENLMLIB_MCP_PREWARM_DELAY_SEC` or set
+  `OPENLMLIB_MCP_PREWARM=0` if background prewarm still contends with startup on
+  that machine.
+- If only the first semantic retrieval call is slow, run `openlmlib setup` once
+  from the target environment so the embedding model and vector index are
+  initialized before use.
 
 ---
 

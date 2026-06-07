@@ -803,18 +803,40 @@ def _ensure_runtime() -> None:
         pass
 
 
-def _ensure_runtime_background() -> Optional[object]:
-    """Pre-initialize the runtime in a background thread.
+def _mcp_runtime_prewarm_delay() -> float:
+    raw_delay = os.environ.get("OPENLMLIB_MCP_PREWARM_DELAY_SEC", "5")
+    try:
+        return max(0.0, float(raw_delay))
+    except (TypeError, ValueError):
+        return 5.0
 
-    Enabled by default to avoid the 5-10s cold-start penalty on the first 
-    tool call. Can be disabled by setting OPENLMLIB_MCP_PREWARM=0.
+
+def _ensure_runtime_after_delay(delay_sec: float) -> None:
+    if delay_sec > 0:
+        import time
+
+        time.sleep(delay_sec)
+    _ensure_runtime()
+
+
+def _ensure_runtime_background() -> Optional[object]:
+    """Pre-initialize the runtime in a delayed background thread.
+
+    Enabled by default, but delayed so MCP clients can complete their initialize
+    and tool-list handshake before the embedding stack starts loading. Disable
+    with OPENLMLIB_MCP_PREWARM=0, or tune OPENLMLIB_MCP_PREWARM_DELAY_SEC.
     """
     if os.environ.get("OPENLMLIB_MCP_PREWARM", "1") == "0":
         return None
 
     import threading
 
-    t = threading.Thread(target=_ensure_runtime, daemon=True, name="openlmlib-runtime-prewarm")
+    t = threading.Thread(
+        target=_ensure_runtime_after_delay,
+        args=(_mcp_runtime_prewarm_delay(),),
+        daemon=True,
+        name="openlmlib-runtime-prewarm",
+    )
     t.start()
     return t
 
@@ -825,9 +847,10 @@ def _preimport_embedding_dependencies() -> bool:
     On Windows, importing sentence-transformers from a FastMCP tool request can
     hang inside scipy/sklearn extension loading. Importing the dependency stack
     once on the main thread avoids cold-starting those modules from the MCP
-    request path while still keeping full runtime/model initialization lazy.
+    request path, but it can take 10+ seconds and trip client startup timeouts.
+    Keep it opt-in with OPENLMLIB_MCP_PREIMPORT_EMBEDDINGS=1.
     """
-    if os.environ.get("OPENLMLIB_MCP_PREIMPORT_EMBEDDINGS", "1") == "0":
+    if os.environ.get("OPENLMLIB_MCP_PREIMPORT_EMBEDDINGS", "0") != "1":
         return False
 
     try:
@@ -1851,13 +1874,12 @@ def main() -> None:
     # This avoids the heavy collab module import penalty during Python startup.
     _register_collab_tools()
 
-    # Import embedding dependencies on the main thread before MCP starts serving
-    # requests. This prevents the first semantic tool call from cold-importing
-    # scipy/sklearn inside FastMCP's request execution path.
+    # Optional embedding dependency preimport. Disabled by default because the
+    # sentence-transformers import can exceed MCP client startup timeouts.
     _preimport_embedding_dependencies()
 
-    # Start runtime pre-warming in background if explicitly enabled.
-    # This avoids thread-init deadlocks during model load on some setups.
+    # Delayed runtime/model prewarm. The delay lets the MCP initialize/list-tools
+    # handshake complete before the embedding stack starts loading.
     _ensure_runtime_background()
 
     mcp.run()
