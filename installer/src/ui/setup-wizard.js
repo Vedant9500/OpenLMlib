@@ -299,12 +299,15 @@ function InstallScreen({ config, onDone }) {
 
     try {
       updateStep(0, 'running');
+      const settingsPathExpr = process.env.OPENLMLIB_SETTINGS
+        ? `Path(r"${String(process.env.OPENLMLIB_SETTINGS).replace(/\\/g, '\\\\')}")`
+        : 'global_settings_path()';
       const settingsScript = [
         'import json',
         'from pathlib import Path',
-        'from openlmlib.settings import write_default_settings, default_settings_payload',
+        'from openlmlib.settings import default_settings_payload',
         'from openlmlib.mcp_setup import global_settings_path',
-        'settings_path = global_settings_path()',
+        `settings_path = ${settingsPathExpr}`,
         'settings_path.parent.mkdir(parents=True, exist_ok=True)',
         'payload = default_settings_payload()',
         `payload['embedding_model'] = '${config.embeddingModel}'`,
@@ -342,7 +345,8 @@ function InstallScreen({ config, onDone }) {
         'from pathlib import Path',
         'from openlmlib.library import init_library',
         'from openlmlib.mcp_setup import global_settings_path',
-        'result = init_library(global_settings_path())',
+        `settings_path = ${settingsPathExpr}`,
+        'result = init_library(settings_path)',
         "print(result.get('status', 'error'))",
       ].join('\n');
       try {
@@ -369,7 +373,8 @@ function InstallScreen({ config, onDone }) {
           'skipped = [client_id for client_id in clients if client_id not in supported]',
           'if skipped:',
           '    print(json.dumps({"skipped": skipped}))',
-          'result = install_client_configs(filtered, settings_path=global_settings_path())',
+          `settings_path = ${settingsPathExpr}`,
+          'result = install_client_configs(filtered, settings_path=settings_path)',
           "print(result.get('status', 'error'))",
         ].join('\n');
         try {

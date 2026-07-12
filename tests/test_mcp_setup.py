@@ -20,6 +20,25 @@ class TestMcpSetup(unittest.TestCase):
         client_ids = normalize_client_ids(["VS Code, cursor", "code", "kiro", "antigravity"])
         self.assertEqual(client_ids, ["vscode", "cursor", "kiro", "antigravity"])
 
+    def test_install_aider_writes_yaml_not_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            settings_path = home / ".openlmlib" / "config" / "settings.json"
+            result = install_client_config(
+                "aider",
+                settings_path=settings_path,
+                platform="linux",
+                home=home,
+            )
+            self.assertEqual(result["status"], "ok")
+            config_path = home / ".aider.conf.yml"
+            raw = config_path.read_text(encoding="utf-8")
+            self.assertFalse(raw.lstrip().startswith("{"))
+            self.assertIn("mcp_servers:", raw)
+            self.assertIn("openlmlib:", raw)
+            self.assertIn("command:", raw)
+            self.assertIn("-m", raw)
+
     def test_install_vscode_global_config_uses_servers_root(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)

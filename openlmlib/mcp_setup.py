@@ -269,6 +269,59 @@ def client_config_path(
     raise ValueError(f"Unknown client id: {client_id}")
 
 
+def _yaml_scalar(value: object) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    text = str(value)
+    if text == "" or any(ch in text for ch in ":#{}[]&*!|>'\"%@`") or text.strip() != text:
+        escaped = text.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    return text
+
+
+def _dump_simple_yaml(data: object, indent: int = 0) -> str:
+    """Minimal YAML serializer for nested dict/list MCP configs (no PyYAML required)."""
+    pad = "  " * indent
+    if isinstance(data, dict):
+        if not data:
+            return "{}\n" if indent == 0 else "{}"
+        lines: List[str] = []
+        for key, value in data.items():
+            key_text = str(key)
+            if isinstance(value, dict):
+                if not value:
+                    lines.append(f"{pad}{key_text}: {{}}")
+                else:
+                    lines.append(f"{pad}{key_text}:")
+                    lines.append(_dump_simple_yaml(value, indent + 1).rstrip("\n"))
+            elif isinstance(value, list):
+                if not value:
+                    lines.append(f"{pad}{key_text}: []")
+                else:
+                    lines.append(f"{pad}{key_text}:")
+                    lines.append(_dump_simple_yaml(value, indent + 1).rstrip("\n"))
+            else:
+                lines.append(f"{pad}{key_text}: {_yaml_scalar(value)}")
+        return "\n".join(lines) + ("\n" if indent == 0 else "")
+    if isinstance(data, list):
+        if not data:
+            return "[]\n" if indent == 0 else "[]"
+        lines = []
+        for item in data:
+            if isinstance(item, (dict, list)):
+                nested = _dump_simple_yaml(item, indent + 1).rstrip("\n")
+                lines.append(f"{pad}-")
+                lines.append(nested)
+            else:
+                lines.append(f"{pad}- {_yaml_scalar(item)}")
+        return "\n".join(lines) + ("\n" if indent == 0 else "")
+    return f"{pad}{_yaml_scalar(data)}\n"
+
+
 def _load_existing_config(path: Path, client_id: str = "") -> Dict[str, object]:
     if not path.exists():
         return {}
@@ -288,6 +341,26 @@ def _load_existing_config(path: Path, client_id: str = "") -> Dict[str, object]:
         if not isinstance(payload, dict):
             raise ValueError(f"Expected a TOML object in {path}")
         return payload
+
+    # YAML for Aider and other .yml/.yaml configs
+    if client_id == "aider" or path.suffix.lower() in {".yml", ".yaml"}:
+        try:
+            import yaml  # type: ignore
+            payload = yaml.safe_load(raw_text)
+            if payload is None:
+                return {}
+            if not isinstance(payload, dict):
+                raise ValueError(f"Expected a YAML object in {path}")
+            return payload
+        except ImportError:
+            # Prefer JSON when PyYAML is unavailable (handles prior JSON-into-yml installs).
+            try:
+                payload = json.loads(raw_text)
+                if isinstance(payload, dict):
+                    return payload
+            except Exception:
+                return {}
+            return {}
 
     # Default JSON handling
     payload = json.loads(raw_text)
@@ -361,6 +434,15 @@ def install_client_config(
                     target_path.write_text(tomli_w.dumps(payload), encoding="utf-8")
                 else:
                     target_path.write_text(_dump_simple_toml(payload), encoding="utf-8")
+            elif client_id == "aider" or target_path.suffix.lower() in {".yml", ".yaml"}:
+                try:
+                    import yaml  # type: ignore
+                    target_path.write_text(
+                        yaml.safe_dump(payload, sort_keys=False, default_flow_style=False),
+                        encoding="utf-8",
+                    )
+                except ImportError:
+                    target_path.write_text(_dump_simple_yaml(payload), encoding="utf-8")
             else:
                 # Default JSON serialization
                 target_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")

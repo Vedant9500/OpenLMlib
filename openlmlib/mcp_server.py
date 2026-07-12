@@ -1005,6 +1005,10 @@ def save_finding(
             except Exception:
                 pass  # Never let memory logging break the primary tool
 
+        if _session_warning:
+            result = dict(result)
+            result["session_warning"] = _session_warning
+
         _elapsed_ms = (time.monotonic() - _t0) * 1000
         # Log tool call for analytics
         try:
@@ -1867,12 +1871,8 @@ def main() -> None:
 
     sys.argv = [sys.argv[0]] + unknown
 
-    # Register memory tools (lazy-loaded to avoid import penalty)
-    _register_memory_tools()
-
-    # Register collab tools just before the server starts (not at import time).
-    # This avoids the heavy collab module import penalty during Python startup.
-    _register_collab_tools()
+    # Register lazy tool surfaces before serving (also done on list-tools).
+    ensure_tools_registered()
 
     # Optional embedding dependency preimport. Disabled by default because the
     # sentence-transformers import can exceed MCP client startup timeouts.
@@ -1883,6 +1883,50 @@ def main() -> None:
     _ensure_runtime_background()
 
     mcp.run()
+
+
+def ensure_tools_registered() -> None:
+    """Register memory + collab tools if not already registered.
+
+    Safe to call multiple times. Hosts that import this module without main()
+    should call this (or list tools, which triggers the same hook) so the full
+    tool surface is available.
+    """
+    _register_memory_tools()
+    _register_collab_tools()
+
+
+def _install_list_tools_hook() -> None:
+    """Register lazy tools the first time an MCP client lists tools."""
+    list_tools = getattr(mcp, "list_tools", None)
+    if not callable(list_tools) or getattr(list_tools, "_openlmlib_lazy_hook", False):
+        return
+
+    import asyncio
+    import inspect
+
+    if inspect.iscoroutinefunction(list_tools):
+        async def _list_tools_ensured(*args, **kwargs):
+            ensure_tools_registered()
+            return await list_tools(*args, **kwargs)
+        _list_tools_ensured._openlmlib_lazy_hook = True  # type: ignore[attr-defined]
+        mcp.list_tools = _list_tools_ensured  # type: ignore[method-assign]
+        return
+
+    def _list_tools_ensured(*args, **kwargs):
+        ensure_tools_registered()
+        result = list_tools(*args, **kwargs)
+        if asyncio.iscoroutine(result):
+            async def _await_result():
+                return await result
+            return _await_result()
+        return result
+
+    _list_tools_ensured._openlmlib_lazy_hook = True  # type: ignore[attr-defined]
+    mcp.list_tools = _list_tools_ensured  # type: ignore[method-assign]
+
+
+_install_list_tools_hook()
 
 
 if __name__ == "__main__":

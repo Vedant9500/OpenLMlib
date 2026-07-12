@@ -911,10 +911,10 @@ Update **Fix status** as work lands: `Open` → `In progress` → `Fixed` / `Won
 | P4.3 | 4 Runtime/CLI | Consolidation overwrites `content_hash` with marker | Medium | Fixed | Y | leave content_hash; log pointer in failure_log |
 | P4.4 | 4 Runtime/CLI | `log_tool_selection` stores unknown as incorrect (`0`) | Medium | Fixed | Y | store NULL; accuracy uses labeled rows only |
 | P4.5 | 4 Runtime/CLI | `find_stale_findings(status_filter=...)` dead | Low | Fixed | Y | status_filter replaces default active filter |
-| P5.1 | 5 MCP | Aider install writes JSON into `.yml` | High | Open | N | |
-| P5.2 | 5 MCP | `save_finding` session warning never returned | Medium | Open | N | |
-| P5.3 | 5 MCP | Interactive setup ignores `settings_path` | Medium | Open | N | |
-| P5.4 | 5 MCP | Memory/collab tools absent until `main()` | Low | Open | N | footgun |
+| P5.1 | 5 MCP | Aider install writes JSON into `.yml` | High | Fixed | Y | YAML dump for aider / .yml paths |
+| P5.2 | 5 MCP | `save_finding` session warning never returned | Medium | Fixed | Y | attach session_warning on MCP response |
+| P5.3 | 5 MCP | Interactive setup ignores `settings_path` | Medium | Fixed | Y | pass OPENLMLIB_SETTINGS to Node wizard |
+| P5.4 | 5 MCP | Memory/collab tools absent until `main()` | Low | Fixed | Y | ensure_tools_registered + list_tools hook |
 | P6.1 | 6 Memory | Session restart/reuse → `IntegrityError` | High | Open | N | |
 | P6.2 | 6 Memory | `retroactive_ingest` writes to different DB | High | Open | N | |
 | P6.3 | 6 Memory | `MemoryInjectionSettings` entirely dead config | Medium | Open | N | |
@@ -945,7 +945,7 @@ Update **Fix status** as work lands: `Open` → `In progress` → `Fixed` / `Won
 
 | Severity | Total | Open | In progress | Fixed | Won't fix / Deferred |
 |----------|------:|-----:|------------:|------:|---------------------:|
-| High | 15 | 10 | 0 | 5 | 0 |
-| Medium | 24 | 13 | 0 | 11 | 0 |
-| Low | 10 | 6 | 0 | 4 | 0 |
-| **All** | **49** | **29** | **0** | **20** | **0** |
+| High | 15 | 9 | 0 | 6 | 0 |
+| Medium | 24 | 11 | 0 | 13 | 0 |
+| Low | 10 | 5 | 0 | 5 | 0 |
+| **All** | **49** | **25** | **0** | **24** | **0** |

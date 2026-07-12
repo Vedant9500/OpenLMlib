@@ -7,6 +7,35 @@ from openlmlib import mcp_server
 
 
 class TestMcpServerTools(unittest.TestCase):
+    def test_save_finding_includes_session_warning(self):
+        settings_path = Path("config/settings.json")
+        with patch.object(mcp_server, "_settings_path", return_value=settings_path), \
+             patch.object(mcp_server, "search_fts", return_value={"status": "ok", "items": []}), \
+             patch.object(mcp_server, "_check_active_sessions", return_value="No active session"), \
+             patch.object(mcp_server, "add_finding", return_value={"status": "ok", "id": "f-1"}) as add, \
+             patch.object(mcp_server, "get_runtime") as get_runtime:
+            get_runtime.return_value.conn = object()
+            with patch("openlmlib.usage_analytics.log_tool_call"):
+                result = mcp_server.save_finding(
+                    project="demo",
+                    claim="A finding claim",
+                    confidence=0.9,
+                    confirm=True,
+                )
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["session_warning"], "No active session")
+        add.assert_called_once()
+
+    def test_ensure_tools_registered_is_idempotent(self):
+        mcp_server._memory_registered = False
+        mcp_server._collab_registered = False
+        with patch.object(mcp_server, "_register_memory_tools") as mem, \
+             patch.object(mcp_server, "_register_collab_tools") as collab:
+            mcp_server.ensure_tools_registered()
+            mcp_server.ensure_tools_registered()
+        self.assertEqual(mem.call_count, 2)
+        self.assertEqual(collab.call_count, 2)
+
     def test_search_knowledge_uses_hybrid_retriever(self):
         settings_path = Path("config/settings.json")
         hybrid_payload = {

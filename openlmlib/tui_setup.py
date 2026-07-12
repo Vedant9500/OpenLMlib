@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import json
+import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict
 
-from .mcp_setup import available_clients, global_settings_path, install_client_configs
-from .settings import write_default_settings, default_settings_payload
+from .mcp_setup import global_settings_path
 
 
 def run_interactive_setup(settings_path: Path | None = None) -> Dict[str, object]:
@@ -29,10 +28,14 @@ def run_interactive_setup(settings_path: Path | None = None) -> Dict[str, object
             "message": "Setup wizard not found. Reinstall with: npm install -g openlmlib",
         }
 
+    env = os.environ.copy()
+    env["OPENLMLIB_SETTINGS"] = str(Path(settings_path).expanduser().resolve(strict=False))
+
     result = subprocess.run(
         [node, str(run_setup)],
         stdout=sys.stdout,
         stderr=sys.stderr,
+        env=env,
     )
 
     if result.returncode == 0:
