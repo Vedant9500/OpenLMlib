@@ -408,8 +408,14 @@ def add_finding(
     )
 
     t2 = monotonic()
-    # Pre-encode embeddings outside the lock to avoid blocking other operations
-    if embedder is not None:
+    # Pre-encode only when hard field checks can pass (skip empty evidence / short reasoning).
+    can_pre_encode = (
+        embedder is not None
+        and bool(evidence)
+        and len(reasoning.strip()) >= settings.write_gate.min_reasoning_length
+        and confidence >= settings.write_gate.min_confidence
+    )
+    if can_pre_encode:
         gate._encode_claim_evidence(claim, evidence)
 
     with runtime.write_lock:

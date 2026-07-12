@@ -60,6 +60,10 @@ class TestStorage(unittest.TestCase):
 
             db.insert_finding(conn, finding)
             loaded = db.get_finding(conn, "test-001")
+            fts_count = conn.execute(
+                "SELECT COUNT(*) FROM findings_fts WHERE id = ?",
+                (finding.id,),
+            ).fetchone()[0]
             conn.close()
 
             self.assertIsNotNone(loaded)
@@ -67,6 +71,55 @@ class TestStorage(unittest.TestCase):
             self.assertEqual(loaded.claim, finding.claim)
             self.assertEqual(loaded.text.evidence, finding.text.evidence)
             self.assertEqual(loaded.full_text, finding.full_text)
+            self.assertEqual(int(fts_count), 1)
+
+    def test_fts_reindex_does_not_duplicate(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "findings.db"
+            conn = db.connect(db_path)
+            db.init_db(conn)
+
+            text = FindingText(
+                tags=["fts"],
+                evidence=["snippet"],
+                caveats=[],
+                reasoning="Reasoning long enough for FTS upsert regression coverage.",
+            )
+            audit = FindingAudit(
+                proposed_by="tester",
+                evidence_provided=True,
+                reasoning_length=len(text.reasoning),
+                failure_log=[],
+                confidence_history=[{"timestamp": "2026-03-31T00:00:00Z", "confidence": 0.8}],
+            )
+            finding = Finding(
+                id="fts-001",
+                project="openlmlib",
+                claim="FTS should stay single-row on rewrite",
+                confidence=0.8,
+                created_at="2026-03-31T00:00:00Z",
+                embedding_id=999,
+                content_hash="",
+                status="active",
+                text=text,
+                audit=audit,
+            )
+            finding.content_hash = compute_content_hash(finding.to_content_dict(include_hash=False))
+            db.insert_finding(conn, finding)
+
+            # Simulate a reindex path that rewrites FTS for the same id.
+            conn.execute("DELETE FROM findings_fts WHERE id = ?", (finding.id,))
+            conn.execute(
+                "INSERT INTO findings_fts (id, claim, evidence, reasoning) VALUES (?, ?, ?, ?)",
+                (finding.id, finding.claim, " ".join(text.evidence), text.reasoning),
+            )
+            conn.commit()
+            fts_count = conn.execute(
+                "SELECT COUNT(*) FROM findings_fts WHERE id = ?",
+                (finding.id,),
+            ).fetchone()[0]
+            conn.close()
+            self.assertEqual(int(fts_count), 1)
 
     def test_logs_retrieval_usage(self):
         with tempfile.TemporaryDirectory() as tmpdir:

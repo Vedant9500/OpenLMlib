@@ -102,6 +102,18 @@ class WriteGate:
                 )
             )
 
+        # Hard field errors: skip embedding work and return structured issues.
+        if any(issue.severity == "error" and issue.field in {"evidence", "confidence", "reasoning"} for issue in issues):
+            if self.embedder is None:
+                issues.append(
+                    ValidationIssue(
+                        field="embedding",
+                        message="Embedding model not available; similarity checks skipped",
+                        severity="warning",
+                    )
+                )
+            return issues
+
         if self.embedder is None:
             issues.append(
                 ValidationIssue(

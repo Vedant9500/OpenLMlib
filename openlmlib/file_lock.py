@@ -25,9 +25,29 @@ def _lock_owner_pid(lock_path: Path) -> Optional[int]:
 def _pid_is_alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # Process exists but is not signalable by this user.
+        return True
     except OSError:
         return False
     return True
+
+
+def _lock_is_reclaimable(lock_path: Path, stale_after_sec: float = 2.0) -> bool:
+    """True when the lock has no live owner PID (empty, invalid, or dead)."""
+    owner_pid = _lock_owner_pid(lock_path)
+    if owner_pid is not None:
+        return not _pid_is_alive(owner_pid)
+
+    # Empty / unreadable / non-integer contents: reclaim after a short grace period
+    # so a crash between O_CREAT|O_EXCL and PID write does not hang forever.
+    try:
+        age = time.time() - lock_path.stat().st_mtime
+    except OSError:
+        return True
+    return age >= stale_after_sec
 
 
 @contextmanager
@@ -51,8 +71,7 @@ def interprocess_lock(
             os.write(fd, str(os.getpid()).encode("utf-8"))
             break
         except FileExistsError:
-            owner_pid = _lock_owner_pid(lock_path)
-            if owner_pid is not None and not _pid_is_alive(owner_pid):
+            if _lock_is_reclaimable(lock_path):
                 try:
                     lock_path.unlink()
                 except Exception:

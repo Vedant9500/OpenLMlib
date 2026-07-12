@@ -11,6 +11,8 @@ def _parse_bool(value: object, default: bool) -> bool:
         return default
     if isinstance(value, bool):
         return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
     if isinstance(value, str):
         normalized = value.strip().lower()
         if normalized in {"1", "true", "yes", "on"}:

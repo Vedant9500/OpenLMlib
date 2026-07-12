@@ -109,6 +109,31 @@ class TestWriteGate(unittest.TestCase):
         )
         self.assertLess(adjusted, 0.9)
 
+    def test_empty_evidence_skips_encode(self):
+        class CountingEmbedder:
+            def __init__(self):
+                self.calls = 0
+
+            def encode(self, texts):
+                self.calls += 1
+                if texts == [""] or any(t == "" for t in texts):
+                    raise RuntimeError("empty text")
+                return [[1.0, 0.0] for _ in texts]
+
+        embedder = CountingEmbedder()
+        gate = WriteGate(
+            min_confidence=0.6,
+            min_reasoning_length=10,
+            min_claim_evidence_sim=0.7,
+            novelty_similarity_threshold=0.85,
+            novelty_top_k=5,
+            embedder=embedder,
+        )
+        issues = gate.validate("claim", [], "reasoning text long enough", 0.9)
+        self.assertFalse(gate.is_allowed(issues))
+        self.assertTrue(any(i.field == "evidence" for i in issues))
+        self.assertEqual(embedder.calls, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

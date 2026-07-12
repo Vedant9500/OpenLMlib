@@ -239,9 +239,10 @@ def insert_finding(conn: sqlite3.Connection, finding: Finding) -> None:
                 _json_dump(audit.confidence_history),
             ),
         )
+        conn.execute("DELETE FROM findings_fts WHERE id = ?", (finding.id,))
         conn.execute(
             """
-            INSERT OR REPLACE INTO findings_fts (id, claim, evidence, reasoning)
+            INSERT INTO findings_fts (id, claim, evidence, reasoning)
             VALUES (?, ?, ?, ?)
             """,
             (finding.id, finding.claim, " ".join(text.evidence), text.reasoning),
