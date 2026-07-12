@@ -896,11 +896,11 @@ Update **Fix status** as work lands: `Open` → `In progress` → `Fixed` / `Won
 | P1.3 | 1 Foundation | Interprocess lock never recovers empty / non-PID lock files | Medium | Fixed | Y | reclaim empty/invalid PID after 2s grace |
 | P1.4 | 1 Foundation | `_pid_is_alive` treats `PermissionError` as dead | Low | Fixed | Y | PermissionError → alive; ProcessLookupError → dead |
 | P1.5 | 1 Foundation | FTS `INSERT OR REPLACE` does not upsert by `id` | Low | Fixed | Y | DELETE then INSERT into findings_fts |
-| P2.1 | 2 Storage | `rebuild_vector_index` `batch_size` → TypeError | High | Open | N | |
-| P2.2 | 2 Storage | Duplicate guard `KeyError: similarity_rank` | High | Open | N | |
-| P2.3 | 2 Storage | Packing trims after interleave (drops higher scores) | Medium | Open | N | |
-| P2.4 | 2 Storage | Embedding cache multi-process save last-writer-wins | Medium | Open | N | |
-| P2.5 | 2 Storage | `add_finding` except can delete pre-existing same id | Medium | Open | N | edge |
+| P2.1 | 2 Storage | `rebuild_vector_index` `batch_size` → TypeError | High | Fixed | Y | encode() accepts batch_size, forwards to model |
+| P2.2 | 2 Storage | Duplicate guard `KeyError: similarity_rank` | High | Fixed | Y | warning dict includes similarity_rank (+ fts_rank) |
+| P2.3 | 2 Storage | Packing trims after interleave (drops higher scores) | Medium | Fixed | Y | trim by score first, then interleave |
+| P2.4 | 2 Storage | Embedding cache multi-process save last-writer-wins | Medium | Fixed | Y | merge disk under lock before write |
+| P2.5 | 2 Storage | `add_finding` except can delete pre-existing same id | Medium | Fixed | Y | reject existing id; only delete if this call inserted |
 | P3.1 | 3 Retrieval | Lexical hits drop tags/evidence/reasoning/caveats | High | Open | N | |
 | P3.2 | 3 Retrieval | Archived / non-active findings still in retrieval | High | Open | N | |
 | P3.3 | 3 Retrieval | Decomposition hard-caps at 5, ignores `final_k` | Medium | Open | N | |
@@ -945,7 +945,7 @@ Update **Fix status** as work lands: `Open` → `In progress` → `Fixed` / `Won
 
 | Severity | Total | Open | In progress | Fixed | Won't fix / Deferred |
 |----------|------:|-----:|------------:|------:|---------------------:|
-| High | 15 | 15 | 0 | 0 | 0 |
-| Medium | 24 | 21 | 0 | 3 | 0 |
+| High | 15 | 13 | 0 | 2 | 0 |
+| Medium | 24 | 18 | 0 | 6 | 0 |
 | Low | 10 | 8 | 0 | 2 | 0 |
-| **All** | **49** | **44** | **0** | **5** | **0** |
+| **All** | **49** | **39** | **0** | **10** | **0** |

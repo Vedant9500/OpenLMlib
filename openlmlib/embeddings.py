@@ -49,6 +49,16 @@ class EmbeddingCache:
 
         lock_path = self.path.with_suffix(self.path.suffix + ".lock")
         with interprocess_lock(lock_path, timeout_sec=60.0):
+            # Merge disk state so concurrent processes do not drop each other's keys.
+            if self.path.exists():
+                try:
+                    disk_payload = json.loads(self.path.read_text(encoding="utf-8"))
+                    if isinstance(disk_payload, dict):
+                        merged = dict(disk_payload)
+                        merged.update(self._cache)
+                        self._cache = merged
+                except Exception:
+                    pass
             tmp_path = self.path.with_suffix(self.path.suffix + f".{os.getpid()}.tmp")
             payload = {
                 key: np.asarray(value, dtype=np.float32).tolist()
@@ -89,17 +99,19 @@ class SentenceTransformerEmbedder:
         self._normalize = normalize
         self.model_name = model_name
 
-    def encode(self, texts: Iterable[str]) -> np.ndarray:
+    def encode(self, texts: Iterable[str], batch_size: int = 32) -> np.ndarray:
         text_list = list(texts)
         if not text_list:
             return np.empty((0, 0), dtype=np.float32)
 
+        encode_kwargs = {
+            "convert_to_numpy": True,
+            "normalize_embeddings": self._normalize,
+            "batch_size": batch_size,
+        }
+
         if self._cache is None:
-            return self._model.encode(
-                text_list,
-                convert_to_numpy=True,
-                normalize_embeddings=self._normalize,
-            ).astype("float32")
+            return self._model.encode(text_list, **encode_kwargs).astype("float32")
 
         vectors: List[np.ndarray] = [None] * len(text_list)  # type: ignore[list-item]
         missing_texts: List[str] = []
@@ -115,11 +127,7 @@ class SentenceTransformerEmbedder:
                 vectors[idx] = np.asarray(cached, dtype=np.float32)
 
         if missing_texts:
-            encoded = self._model.encode(
-                missing_texts,
-                convert_to_numpy=True,
-                normalize_embeddings=self._normalize,
-            ).astype("float32")
+            encoded = self._model.encode(missing_texts, **encode_kwargs).astype("float32")
             for i, vec in enumerate(encoded):
                 idx = missing_indexes[i]
                 vectors[idx] = vec

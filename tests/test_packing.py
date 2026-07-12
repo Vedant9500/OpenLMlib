@@ -129,6 +129,24 @@ class TestContextPacker(unittest.TestCase):
         # 250 / 100 = 2 items fit
         self.assertEqual(len(result), 2)
 
+    def test_pack_trims_by_score_before_interleave(self):
+        def always_10(item):
+            return 10
+
+        packer = ContextPacker(max_tokens=30, token_estimate_fn=always_10)
+        findings = [
+            {"id": "f1", "final_score": 1.0},
+            {"id": "f2", "final_score": 0.9},
+            {"id": "f3", "final_score": 0.8},
+            {"id": "f4", "final_score": 0.6},
+            {"id": "f5", "final_score": 0.5},
+        ]
+        result = packer.pack(findings)
+        scores = [item["final_score"] for item in result]
+        self.assertEqual(len(result), 3)
+        self.assertEqual(sorted(scores, reverse=True), [1.0, 0.9, 0.8])
+        self.assertNotIn(0.6, scores)
+
 
 if __name__ == "__main__":
     unittest.main()

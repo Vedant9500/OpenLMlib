@@ -44,18 +44,15 @@ class ContextPacker:
         if not findings:
             return []
 
-        # Sort by score descending
+        # Sort by score descending, trim to budget while still score-ordered,
+        # then interleave survivors for lost-in-the-middle placement.
         sorted_findings = sorted(
             findings,
             key=lambda x: x.get(score_field, 0.0),
             reverse=True,
         )
-
-        # Position-aware reordering: most relevant first and last
-        reordered = _interleave_ends(sorted_findings)
-
-        # Trim to fit token budget
-        packed = self._trim_to_budget(reordered)
+        survivors = self._trim_to_budget(sorted_findings)
+        packed = _interleave_ends(survivors)
 
         logger.info(
             "pack: input=%d output=%d tokens=%d/%d",

@@ -323,6 +323,7 @@ def _check_duplicate_warning(similar_findings: Optional[List[Dict[str, Any]]], c
                           f"Consider updating it instead of creating a duplicate.",
                 "existing_finding_id": finding.get("id"),
                 "claim_similarity": similarity,
+                "similarity_rank": finding.get("rank"),
                 "fts_rank": finding.get("rank"),
                 "claim_preview": finding.get("claim", "")[:150],
             }
@@ -380,6 +381,11 @@ def add_finding(
 
     finding_id = finding_id or new_finding_id()
     embedding_id = make_embedding_id(finding_id)
+    if db.get_finding(conn, finding_id) is not None:
+        return {
+            "status": "error",
+            "message": f"finding id already exists: {finding_id}",
+        }
     existing_id = db.get_finding_by_embedding_id(conn, embedding_id)
     if existing_id and existing_id != finding_id:
         return {
@@ -491,6 +497,8 @@ def add_finding(
     finding.content_hash = compute_content_hash(finding.to_content_dict(include_hash=False))
 
     json_path = settings.findings_dir / f"{finding.id}.json"
+    inserted = False
+    vector_added = False
     try:
         embedding_text = build_contextual_chunk(
             claim=finding.claim,
@@ -509,7 +517,9 @@ def add_finding(
         )
         with runtime.write_lock:
             db.insert_finding(conn, finding)
+            inserted = True
             store.add([finding.embedding_id], [embedding_vec])
+            vector_added = True
             mark_dirty(runtime, vector=True, cache=True)
             maybe_flush(runtime, force=True)
         t7 = monotonic()
@@ -517,17 +527,23 @@ def add_finding(
         logger.info("add_finding: total=%.1fs (runtime=%.1fs, validate=%.1fs, adjust=%.1fs, encode=%.1fs, persist=%.1fs)",
                      t7 - t0, t1 - t0, t3 - t2, t4 - t3, t6 - t5, t7 - t6)
     except Exception as exc:
-        with runtime.write_lock:
-            db.delete_finding(conn, finding.id)
-        try:
+        # Only roll back work this call created; never delete a pre-existing row.
+        if inserted:
             with runtime.write_lock:
-                store.delete([finding.embedding_id])
-                mark_dirty(runtime, vector=True)
-                maybe_flush(runtime, force=True)
-        except Exception:
-            pass
+                db.delete_finding(conn, finding.id)
+        if vector_added:
+            try:
+                with runtime.write_lock:
+                    store.delete([finding.embedding_id])
+                    mark_dirty(runtime, vector=True)
+                    maybe_flush(runtime, force=True)
+            except Exception:
+                pass
         if json_path.exists():
-            json_path.unlink()
+            try:
+                json_path.unlink()
+            except Exception:
+                pass
         return {
             "status": "error",
             "message": f"failed to add finding: {exc}",
