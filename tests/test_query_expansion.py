@@ -87,6 +87,13 @@ class TestQueryExpander(unittest.TestCase):
         # Should not have duplicates
         self.assertEqual(len(variants), len(set(v.lower() for v in variants)))
 
+    def test_expand_no_casefold_duplicate_original(self):
+        expander = QueryExpander(max_variants=5, include_original=True)
+        variants = expander.expand("Hello Cache")
+        lowered = [v.lower() for v in variants]
+        self.assertEqual(lowered.count("hello cache"), 1)
+        self.assertEqual(variants[0].lower(), "hello cache")
+
     def test_expand_respects_max_variants(self):
         expander = QueryExpander(max_variants=1, include_original=True)
         variants = expander.expand("API optimization patterns")

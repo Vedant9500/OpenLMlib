@@ -362,6 +362,7 @@ def _append_filters(
     created_after: Optional[str] = None,
     created_before: Optional[str] = None,
     confidence_min: Optional[float] = None,
+    status: Optional[str] = "active",
 ) -> str:
     clauses: List[str] = []
 
@@ -380,6 +381,10 @@ def _append_filters(
     if confidence_min is not None:
         clauses.append("f.confidence >= ?")
         params.append(float(confidence_min))
+
+    if status is not None:
+        clauses.append("f.status = ?")
+        params.append(status)
 
     if tags:
         for tag in tags:
@@ -402,6 +407,7 @@ def search_findings_filtered(
     created_after: Optional[str] = None,
     created_before: Optional[str] = None,
     confidence_min: Optional[float] = None,
+    status: Optional[str] = "active",
 ) -> List[Dict[str, str]]:
     normalized_query = _normalize_fts_query(query)
     if not normalized_query:
@@ -409,7 +415,18 @@ def search_findings_filtered(
 
     params: List = [normalized_query]
     sql = """
-        SELECT f.id, f.project, f.claim, f.confidence, f.created_at, f.status, rank AS lexical_rank
+        SELECT
+            f.id,
+            f.project,
+            f.claim,
+            f.confidence,
+            f.created_at,
+            f.status,
+            rank AS lexical_rank,
+            ft.tags,
+            ft.evidence,
+            ft.reasoning,
+            ft.caveats
         FROM findings_fts AS fts
         JOIN findings AS f ON f.id = fts.id
         JOIN findings_text AS ft ON ft.id = f.id
@@ -423,11 +440,20 @@ def search_findings_filtered(
         created_after=created_after,
         created_before=created_before,
         confidence_min=confidence_min,
+        status=status,
     )
     sql += " ORDER BY rank LIMIT ?"
     params.append(limit)
     rows = conn.execute(sql, tuple(params)).fetchall()
-    return [dict(row) for row in rows]
+    results: List[Dict[str, str]] = []
+    for row in rows:
+        payload = dict(row)
+        payload["tags"] = _json_load(payload.get("tags"), [])
+        payload["evidence"] = _json_load(payload.get("evidence"), [])
+        payload["caveats"] = _json_load(payload.get("caveats"), [])
+        payload["reasoning"] = payload.get("reasoning") or ""
+        results.append(payload)
+    return results
 
 
 def get_findings_by_embedding_ids(

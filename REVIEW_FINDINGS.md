@@ -901,11 +901,11 @@ Update **Fix status** as work lands: `Open` → `In progress` → `Fixed` / `Won
 | P2.3 | 2 Storage | Packing trims after interleave (drops higher scores) | Medium | Fixed | Y | trim by score first, then interleave |
 | P2.4 | 2 Storage | Embedding cache multi-process save last-writer-wins | Medium | Fixed | Y | merge disk under lock before write |
 | P2.5 | 2 Storage | `add_finding` except can delete pre-existing same id | Medium | Fixed | Y | reject existing id; only delete if this call inserted |
-| P3.1 | 3 Retrieval | Lexical hits drop tags/evidence/reasoning/caveats | High | Open | N | |
-| P3.2 | 3 Retrieval | Archived / non-active findings still in retrieval | High | Open | N | |
-| P3.3 | 3 Retrieval | Decomposition hard-caps at 5, ignores `final_k` | Medium | Open | N | |
-| P3.4 | 3 Retrieval | `max_context_tokens` API flag ignored | Medium | Open | N | |
-| P3.5 | 3 Retrieval | Query expansion duplicates original (case-fold) | Low | Open | N | |
+| P3.1 | 3 Retrieval | Lexical hits drop tags/evidence/reasoning/caveats | High | Fixed | Y | SELECT + parse text columns in FTS search |
+| P3.2 | 3 Retrieval | Archived / non-active findings still in retrieval | High | Fixed | Y | default status=active in FTS + _passes_filters |
+| P3.3 | 3 Retrieval | Decomposition hard-caps at 5, ignores `final_k` | Medium | Fixed | Y | pass max_findings from final_k / candidate count |
+| P3.4 | 3 Retrieval | `max_context_tokens` API flag ignored | Medium | Fixed | Y | packer uses options.max_context_tokens |
+| P3.5 | 3 Retrieval | Query expansion duplicates original (case-fold) | Low | Fixed | Y | case-fold include_original against seen |
 | P4.1 | 4 Runtime/CLI | Consolidation only archives; no evidence/tags merge | High | Open | N | |
 | P4.2 | 4 Runtime/CLI | `consolidate_group(keep_id=...)` ignored | Medium | Open | N | |
 | P4.3 | 4 Runtime/CLI | Consolidation overwrites `content_hash` with marker | Medium | Open | N | |
@@ -945,7 +945,7 @@ Update **Fix status** as work lands: `Open` → `In progress` → `Fixed` / `Won
 
 | Severity | Total | Open | In progress | Fixed | Won't fix / Deferred |
 |----------|------:|-----:|------------:|------:|---------------------:|
-| High | 15 | 13 | 0 | 2 | 0 |
-| Medium | 24 | 18 | 0 | 6 | 0 |
-| Low | 10 | 8 | 0 | 2 | 0 |
-| **All** | **49** | **39** | **0** | **10** | **0** |
+| High | 15 | 11 | 0 | 4 | 0 |
+| Medium | 24 | 16 | 0 | 8 | 0 |
+| Low | 10 | 7 | 0 | 3 | 0 |
+| **All** | **49** | **34** | **0** | **15** | **0** |

@@ -62,9 +62,14 @@ class QueryExpander:
                 seen.add(normalized)
                 unique.append(v.strip())
 
-        # Ensure original query is first if requested
-        if self.include_original and query.strip() not in seen:
-            unique.insert(0, query.strip())
+        # Ensure original query is first if requested (case-fold against seen).
+        original = query.strip()
+        if self.include_original and original.lower() not in seen:
+            unique.insert(0, original)
+        elif self.include_original and unique and unique[0].strip().lower() != original.lower():
+            # Original already present under different casing later in the list.
+            unique = [v for v in unique if v.strip().lower() != original.lower()]
+            unique.insert(0, original)
 
         return unique[: self.max_variants + (1 if self.include_original else 0)]
 

@@ -15,6 +15,7 @@ class RetrievalFilters:
     created_after: Optional[str] = None
     created_before: Optional[str] = None
     confidence_min: Optional[float] = None
+    status: Optional[str] = "active"
 
 
 @dataclass
@@ -71,6 +72,7 @@ class RetrievalEngine:
                 "created_after": filters.created_after,
                 "created_before": filters.created_before,
                 "confidence_min": filters.confidence_min,
+                "status": filters.status,
             },
             "items": top,
             "meta": {
@@ -151,10 +153,16 @@ class RetrievalEngine:
         timings["reranking"] = monotonic() - t2
 
         # Step 4: Document decomposition (optional)
+        if final_k is None:
+            final_k = self._settings.retrieval.final_k
         t3 = monotonic()
         decomposition_info: Dict[str, Any] = {}
         if options.decompose and candidates:
-            candidates, decomposition_info = self._decompose(query, candidates)
+            candidates, decomposition_info = self._decompose(
+                query,
+                candidates,
+                max_findings=max(final_k, len(candidates)),
+            )
         timings["decomposition"] = monotonic() - t3
 
         # Step 5: Deduplication (optional)
@@ -165,8 +173,6 @@ class RetrievalEngine:
         timings["deduplication"] = monotonic() - t4
 
         # Step 6: Final trimming
-        if final_k is None:
-            final_k = self._settings.retrieval.final_k
         top = candidates[:final_k]
 
         # Step 7: Reasoning trace (optional)
@@ -176,7 +182,7 @@ class RetrievalEngine:
         # Step 8: Context packing (optional, affects rendering not the items themselves)
         packing_info: Dict[str, Any] = {}
         if options.pack_context and top:
-            top, packing_info = self._pack_context(top)
+            top, packing_info = self._pack_context(top, options=options)
 
         total_time = sum(timings.values())
 
@@ -189,6 +195,7 @@ class RetrievalEngine:
                 "created_after": filters.created_after,
                 "created_before": filters.created_before,
                 "confidence_min": filters.confidence_min,
+                "status": filters.status,
             },
             "items": top,
             "meta": {
@@ -427,6 +434,7 @@ class RetrievalEngine:
         self,
         query: str,
         candidates: List[Dict[str, Any]],
+        max_findings: Optional[int] = None,
     ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """Decompose and recompose candidates to filter low-relevance sections."""
         decomp_settings = self._settings.phase4.decomposition
@@ -444,7 +452,12 @@ class RetrievalEngine:
                 include_caveats=decomp_settings.include_caveats,
                 max_evidence_items=decomp_settings.max_evidence_items,
             )
-            recomposed = decomposer.decompose_and_recompose(candidates, query)
+            cap = max_findings if max_findings is not None else max(5, len(candidates))
+            recomposed = decomposer.decompose_and_recompose(
+                candidates,
+                query,
+                max_findings=cap,
+            )
 
             return recomposed, {
                 "status": "ok",
@@ -462,6 +475,7 @@ class RetrievalEngine:
     def _pack_context(
         self,
         items: List[Dict[str, Any]],
+        options: Optional[Phase4Options] = None,
     ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """Apply position-aware context packing."""
         pack_settings = self._settings.phase4.packing
@@ -474,7 +488,10 @@ class RetrievalEngine:
             return items, {"status": "error", "message": "packing module not available"}
 
         try:
-            packer = ContextPacker(max_tokens=pack_settings.max_tokens)
+            max_tokens = pack_settings.max_tokens
+            if options is not None and options.max_context_tokens:
+                max_tokens = options.max_context_tokens
+            packer = ContextPacker(max_tokens=max_tokens)
             packed = packer.pack(items)
             rendered = packer.render_context(packed)
 
@@ -483,7 +500,7 @@ class RetrievalEngine:
                 "input_count": len(items),
                 "output_count": len(packed),
                 "estimated_tokens": packer._total_tokens(packed),
-                "max_tokens": pack_settings.max_tokens,
+                "max_tokens": max_tokens,
                 "rendered_context": rendered,
             }
         except Exception as exc:
@@ -543,6 +560,7 @@ class RetrievalEngine:
             created_after=filters.created_after,
             created_before=filters.created_before,
             confidence_min=filters.confidence_min,
+            status=filters.status,
         )
 
         items: List[Dict[str, Any]] = []
@@ -658,6 +676,9 @@ def _recency_score(created_at: str) -> float:
 
 
 def _passes_filters(row: Dict[str, Any], filters: RetrievalFilters) -> bool:
+    if filters.status is not None and row.get("status") != filters.status:
+        return False
+
     if filters.project and row.get("project") != filters.project:
         return False
 

@@ -361,6 +361,136 @@ class TestRetrieval(unittest.TestCase):
                 2,
             )
 
+    def test_lexical_hits_include_text_fields(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "findings.db"
+            conn = db.connect(db_path)
+            db.init_db(conn)
+
+            _insert_finding(
+                conn,
+                finding_id="f-lex",
+                embedding_id=301,
+                project="glassbox",
+                claim="Redis cache reduced API latency",
+                tags=["perf", "cache"],
+                confidence=0.9,
+                created_at="2026-03-30T00:00:00Z",
+            )
+
+            # Empty vector store forces pure lexical path.
+            store = NumpyVectorStore(dim=2, metric="cosine")
+            engine = RetrievalEngine(
+                conn=conn,
+                embedder=DummyEmbedder(),
+                vector_store=store,
+                settings=DummySettings(),
+            )
+            result = engine.search("cache latency", final_k=5)
+            conn.close()
+
+            self.assertEqual(len(result["items"]), 1)
+            item = result["items"][0]
+            self.assertEqual(item["evidence"], ["load test evidence"])
+            self.assertEqual(item["tags"], ["perf", "cache"])
+            self.assertTrue(item["reasoning"])
+            self.assertEqual(item["caveats"], [])
+
+    def test_archived_findings_excluded_by_default(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "findings.db"
+            conn = db.connect(db_path)
+            db.init_db(conn)
+
+            _insert_finding(
+                conn,
+                finding_id="f-active",
+                embedding_id=401,
+                project="glassbox",
+                claim="Redis cache reduced API latency",
+                tags=["perf"],
+                confidence=0.9,
+                created_at="2026-03-30T00:00:00Z",
+            )
+            _insert_finding(
+                conn,
+                finding_id="f-archived",
+                embedding_id=402,
+                project="glassbox",
+                claim="Redis cache reduced API latency archived",
+                tags=["perf"],
+                confidence=0.95,
+                created_at="2026-03-30T00:00:00Z",
+            )
+            conn.execute("UPDATE findings SET status='archived' WHERE id='f-archived'")
+            conn.commit()
+
+            store = NumpyVectorStore(dim=2, metric="cosine")
+            store.add([401, 402], [[1.0, 0.0], [1.0, 0.0]])
+            engine = RetrievalEngine(
+                conn=conn,
+                embedder=DummyEmbedder(),
+                vector_store=store,
+                settings=DummySettings(),
+            )
+            result = engine.search("cache latency", final_k=10)
+            conn.close()
+
+            ids = [item["id"] for item in result["items"]]
+            self.assertIn("f-active", ids)
+            self.assertNotIn("f-archived", ids)
+
+    def test_pack_context_uses_max_context_tokens(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "findings.db"
+            conn = db.connect(db_path)
+            db.init_db(conn)
+
+            for i in range(5):
+                _insert_finding(
+                    conn,
+                    finding_id=f"f-pack-{i}",
+                    embedding_id=500 + i,
+                    project="glassbox",
+                    claim=f"Redis cache latency finding {i} " + ("word " * 40),
+                    tags=["perf"],
+                    confidence=0.9,
+                    created_at="2026-03-30T00:00:00Z",
+                )
+
+            store = NumpyVectorStore(dim=2, metric="cosine")
+            store.add(
+                [500 + i for i in range(5)],
+                [[1.0, 0.0] for _ in range(5)],
+            )
+            settings = DummySettings()
+            settings.phase4.packing.enabled = True
+            settings.phase4.packing.max_tokens = 4000
+            engine = RetrievalEngine(
+                conn=conn,
+                embedder=DummyEmbedder(),
+                vector_store=store,
+                settings=settings,
+            )
+            result = engine.search_enhanced(
+                "cache latency",
+                options=Phase4Options(
+                    rerank=False,
+                    decompose=False,
+                    deduplicate=False,
+                    reasoning_trace=False,
+                    pack_context=True,
+                    max_context_tokens=80,
+                ),
+                final_k=5,
+            )
+            conn.close()
+
+            packing = result["meta"]["phase4"]["packing"]
+            self.assertEqual(packing["status"], "ok")
+            self.assertEqual(packing["max_tokens"], 80)
+            self.assertLess(packing["output_count"], 5)
+
 
 if __name__ == "__main__":
     unittest.main()
