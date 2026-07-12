@@ -731,10 +731,10 @@ class TestSessionLifecycle(unittest.TestCase):
             session_id=session_id,
             summary="Research completed successfully",
         )
-        self.assertEqual(term_result["status"], "completed")
+        self.assertEqual(term_result["status"], "terminated")
 
         session = get_session(self.conn, session_id)
-        self.assertEqual(session["status"], "completed")
+        self.assertEqual(session["status"], "terminated")
 
     def test_orchestrator_assignments_use_real_agent_id(self):
         result = create_collab_session(
@@ -821,12 +821,23 @@ class TestRulesEngine(unittest.TestCase):
     def test_validate_message_artifact_required(self):
         engine = self.RulesEngine({"require_artifact_for_results": True})
         ok, warnings = engine.validate_message("result without artifact", "result")
-        self.assertTrue(ok)
+        self.assertFalse(ok)
         self.assertTrue(len(warnings) > 0)
 
         ok, warnings = engine.validate_message("result with artifact", "result", has_artifact_ref=True)
         self.assertTrue(ok)
         self.assertEqual(len(warnings), 0)
+
+    def test_validate_task_assignment_require_assignment(self):
+        engine = self.RulesEngine({"require_assignment": True})
+        ok, err = engine.validate_task_assignment(None, 0)
+        self.assertFalse(ok)
+        self.assertIn("assignment", err.lower())
+        ok, err = engine.validate_task_assignment("any", 0)
+        self.assertFalse(ok)
+        ok, err = engine.validate_task_assignment("agent_worker_abc123", 0)
+        self.assertTrue(ok)
+        self.assertIsNone(err)
 
     def test_should_compact(self):
         engine = self.RulesEngine({"auto_compact_after_messages": 10})
@@ -1237,6 +1248,140 @@ class TestCollabMCP(unittest.TestCase):
         )
         self.assertFalse(denied["success"])
         self.assertEqual(denied["error_type"], "agent_not_authorized")
+
+    def test_model_dots_colons_generate_valid_agent_ids(self):
+        create_resp = self.collab_mcp_module.create_session(
+            title="Model ID Session",
+            task_description="Sanitize model names",
+            created_by="gpt-4.1",
+        )
+        self.assertTrue(create_resp.get("success", True) or "session_id" in create_resp)
+        agent_id = create_resp["your_agent_id"]
+        self.assertNotIn(".", agent_id)
+        self.assertNotIn(":", agent_id)
+        from openlmlib.collab.security import validate_agent_id
+        validate_agent_id(agent_id)
+
+        send_resp = self.collab_mcp_module.send_message(
+            session_id=create_resp["session_id"],
+            msg_type="update",
+            content="hello from dotted model",
+            from_agent=agent_id,
+        )
+        self.assertTrue(send_resp["success"], send_resp)
+
+        join_resp = self.collab_mcp_module.join_session(
+            session_id=create_resp["session_id"],
+            model="qwen2.5-coder:7b",
+        )
+        self.assertNotIn(".", join_resp["agent_id"])
+        self.assertNotIn(":", join_resp["agent_id"])
+        validate_agent_id(join_resp["agent_id"])
+
+    def test_send_message_allows_to_agent_any(self):
+        create_resp = self.collab_mcp_module.create_session(
+            title="Any Target Session",
+            task_description="Open task assignment",
+            created_by="orch-model",
+        )
+        send_resp = self.collab_mcp_module.send_message(
+            session_id=create_resp["session_id"],
+            msg_type="task",
+            content="Open work for anyone",
+            to_agent="any",
+            from_agent=create_resp["your_agent_id"],
+        )
+        self.assertTrue(send_resp["success"], send_resp)
+
+    def test_rules_engine_enforced_on_send_message(self):
+        create_resp = self.collab_mcp_module.create_session(
+            title="Rules Session",
+            task_description="Enforce rules",
+            created_by="orch-model",
+            rules={
+                "require_artifact_for_results": True,
+                "require_assignment": True,
+                "max_pending_tasks": 1,
+            },
+        )
+        denied = self.collab_mcp_module.send_message(
+            session_id=create_resp["session_id"],
+            msg_type="result",
+            content="## Summary\nNo artifact\n## Key Facts\n- none",
+            from_agent=create_resp["your_agent_id"],
+        )
+        self.assertFalse(denied["success"])
+        self.assertEqual(denied["error_type"], "rules_error")
+
+        unassigned = self.collab_mcp_module.send_message(
+            session_id=create_resp["session_id"],
+            msg_type="task",
+            content="Unassigned task",
+            to_agent="any",
+            from_agent=create_resp["your_agent_id"],
+        )
+        self.assertFalse(unassigned["success"])
+        self.assertEqual(unassigned["error_type"], "rules_error")
+
+    def test_terminate_writes_terminated_status(self):
+        create_resp = self.collab_mcp_module.create_session(
+            title="Terminate Session",
+            task_description="End cleanly",
+            created_by="orch-model",
+        )
+        term = self.collab_mcp_module.terminate_session(
+            session_id=create_resp["session_id"],
+            orchestrator_id=create_resp["your_agent_id"],
+            summary="done",
+        )
+        self.assertTrue(term["success"], term)
+        self.assertEqual(term["status"], "terminated")
+
+        listed = self.collab_mcp_module.list_sessions(status="terminated")
+        ids = [s["session_id"] for s in listed.get("sessions", listed if isinstance(listed, list) else [])]
+        if "sessions" in listed:
+            ids = [s["session_id"] for s in listed["sessions"]]
+        self.assertIn(create_resp["session_id"], ids)
+
+    def test_poll_messages_filtered_does_not_advance_stored_offset(self):
+        create_resp = self.collab_mcp_module.create_session(
+            title="Poll Offset Session",
+            task_description="Check filtered polls",
+            created_by="orch-model",
+        )
+        join_resp = self.collab_mcp_module.join_session(
+            session_id=create_resp["session_id"],
+            model="worker-model",
+        )
+        self.collab_mcp_module.send_message(
+            session_id=create_resp["session_id"],
+            msg_type="task",
+            content="Task message for poll",
+            from_agent=create_resp["your_agent_id"],
+        )
+        self.collab_mcp_module.send_message(
+            session_id=create_resp["session_id"],
+            msg_type="result",
+            content="## Summary\nResult for poll\n## Key Facts\n- fact",
+            from_agent=join_resp["agent_id"],
+        )
+        filtered = self.collab_mcp_module.poll_messages(
+            session_id=create_resp["session_id"],
+            agent_id=join_resp["agent_id"],
+            timeout=0,
+            msg_types=["result"],
+        )
+        self.assertTrue(filtered["success"])
+        self.assertFalse(filtered.get("offset_updated", True))
+        self.assertGreater(filtered["count"], 0)
+
+        unfiltered = self.collab_mcp_module.poll_messages(
+            session_id=create_resp["session_id"],
+            agent_id=join_resp["agent_id"],
+            timeout=0,
+        )
+        contents = [msg["content"] for msg in unfiltered["messages"]]
+        self.assertIn("Task message for poll", contents)
 
 
 if __name__ == "__main__":

@@ -308,11 +308,11 @@ class TestSimulatedAgentSession(unittest.TestCase):
             self.conn, self.sessions_dir, session_id,
             summary="Research completed. Two artifacts produced.",
         )
-        self.assertEqual(term_result["status"], "completed")
+        self.assertEqual(term_result["status"], "terminated")
         self.assertTrue(term_result["summary_saved"])
 
         final_session = get_session(self.conn, session_id)
-        self.assertEqual(final_session["status"], "completed")
+        self.assertEqual(final_session["status"], "terminated")
 
     def test_context_attribution_does_not_confuse_agents(self):
         session = create_collab_session(

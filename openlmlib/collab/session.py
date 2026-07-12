@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,6 +23,7 @@ from .message_bus import MessageBus
 from .artifact_store import ArtifactStore
 from .state_manager import StateManager
 from .context_compiler import ContextCompiler
+from .rules_engine import RulesEngine
 from .errors import (
     AgentNotFoundError,
     SessionFullError,
@@ -40,7 +42,8 @@ def _generate_session_id() -> str:
 
 def _generate_agent_id(model: str) -> str:
     short = uuid.uuid4().hex[:6]
-    model_short = model.replace(" ", "-").replace("/", "-")[:20]
+    model_short = re.sub(r"[^a-zA-Z0-9_\-]", "-", str(model or "model"))
+    model_short = re.sub(r"-+", "-", model_short).strip("-")[:20] or "model"
     return f"agent_{model_short}_{short}"
 
 
@@ -115,13 +118,17 @@ def create_collab_session(
     )
 
     if plan:
+        engine = RulesEngine(rules or {})
         # Batch insert all tasks with executemany
         task_rows = []
-        for step in plan:
+        for idx, step in enumerate(plan):
             task_id = f"task_{uuid.uuid4().hex[:6]}"
             assigned_to = step.get("assigned_to")
             if assigned_to == "orchestrator":
                 assigned_to = agent_id
+            ok_task, task_err = engine.validate_task_assignment(assigned_to, idx)
+            if not ok_task:
+                raise ValueError(task_err or "Task rejected by session rules")
             task_rows.append((
                 task_id,
                 session_id,
@@ -203,16 +210,14 @@ def join_collab_session(
                 f"Session {session_id} is not active (status: {session['status']})"
             )
 
-        rules = session.get("rules", {})
-        max_agents = rules.get("max_agents", 10)
+        rules = session.get("rules", {}) or {}
         current_agents = conn.execute(
             "SELECT COUNT(*) FROM agents WHERE session_id = ? AND status = 'active'",
             (session_id,),
         ).fetchone()[0]
-        if current_agents >= max_agents:
-            raise SessionFullError(
-                f"Session is full ({current_agents}/{max_agents} agents)"
-            )
+        ok, err = RulesEngine(rules).validate_join(current_agents)
+        if not ok:
+            raise SessionFullError(err or "Session is full")
 
         conn.execute(
             """
@@ -340,7 +345,7 @@ def terminate_collab_session(
 
     terminated_at = terminated_at or utc_now_iso()
 
-    if not db.update_session_status(conn, session_id, "completed", terminated_at):
+    if not db.update_session_status(conn, session_id, "terminated", terminated_at):
         raise SessionNotActiveError(
             f"Session {session_id} cannot be terminated (status: {session['status']})"
         )
@@ -356,7 +361,7 @@ def terminate_collab_session(
         session_id=session_id,
         from_agent=orchestrator,
         msg_type="system",
-        content=f"Session completed: {session['title']}",
+        content=f"Session terminated: {session['title']}",
         created_at=terminated_at,
         metadata={"summary": summary},
     )
@@ -374,7 +379,7 @@ def terminate_collab_session(
 
     return {
         "session_id": session_id,
-        "status": "completed",
+        "status": "terminated",
         "terminated_at": terminated_at,
         "summary_saved": bool(summary),
     }

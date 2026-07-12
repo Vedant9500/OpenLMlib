@@ -920,11 +920,11 @@ Update **Fix status** as work lands: `Open` → `In progress` → `Fixed` / `Won
 | P6.3 | 6 Memory | `MemoryInjectionSettings` entirely dead config | Medium | Fixed | Y | wire enabled/limits/privacy/caveman into memory state |
 | P6.4 | 6 Memory | Wrong observation counts on session_start/inject | Medium | Fixed | Y | as_dict context returns real observation_count |
 | P6.5 | 6 Memory | Progressive `window` no-op; expansion threshold rare | Low | Fixed | Y | implement window neighbors; lower core confidence gate |
-| P7.1 | 7 Collab core | Generated agent IDs rejected (`.` / `:` in model) | High | Open | N | |
-| P7.2 | 7 Collab core | `to_agent="any"` blocked by MCP validation | High | Open | N | |
-| P7.3 | 7 Collab core | `RulesEngine` never applied on live paths | Medium | Open | N | |
-| P7.4 | 7 Collab core | Terminate writes `completed`, not `terminated` | Medium | Open | N | |
-| P7.5 | 7 Collab core | `poll_messages` advances offset under filters | Medium | Open | N | |
+| P7.1 | 7 Collab core | Generated agent IDs rejected (`.` / `:` in model) | High | Fixed | Y | sanitize model segment to [a-zA-Z0-9_-] |
+| P7.2 | 7 Collab core | `to_agent="any"` blocked by MCP validation | High | Fixed | Y | skip agent-id regex for any/empty/None |
+| P7.3 | 7 Collab core | `RulesEngine` never applied on live paths | Medium | Fixed | Y | wire join/send/task plan validation |
+| P7.4 | 7 Collab core | Terminate writes `completed`, not `terminated` | Medium | Fixed | Y | write status terminated |
+| P7.5 | 7 Collab core | `poll_messages` advances offset under filters | Medium | Fixed | Y | match read_messages offset policy |
 | P8.1 | 8 Collab adv | Export maps rejections as `"Unknown error"` | High | Open | N | |
 | P8.2 | 8 Collab adv | Custom templates resolve `data_root` vs CWD | High | Open | N | |
 | P8.3 | 8 Collab adv | `create_template` path-escaping `template_id` | Medium | Open | N | |
@@ -945,7 +945,7 @@ Update **Fix status** as work lands: `Open` → `In progress` → `Fixed` / `Won
 
 | Severity | Total | Open | In progress | Fixed | Won't fix / Deferred |
 |----------|------:|-----:|------------:|------:|---------------------:|
-| High | 15 | 7 | 0 | 8 | 0 |
-| Medium | 24 | 9 | 0 | 15 | 0 |
+| High | 15 | 5 | 0 | 10 | 0 |
+| Medium | 24 | 6 | 0 | 18 | 0 |
 | Low | 10 | 4 | 0 | 6 | 0 |
-| **All** | **49** | **20** | **0** | **29** | **0** |
+| **All** | **49** | **15** | **0** | **34** | **0** |

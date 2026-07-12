@@ -62,6 +62,7 @@ from .security import (
     verify_orchestrator,
     verify_session_exists_and_active,
 )
+from .rules_engine import RulesEngine
 from .notification import write_notification
 from .notification import wait_for_notification, clear_notification
 from openlmlib.co_scientist import (
@@ -666,7 +667,7 @@ def send_message(
         if not from_agent:
             return {"success": False, "error": "from_agent is required", "error_type": "validation_error"}
         validate_agent_id(from_agent)
-        if to_agent is not None and to_agent != "":
+        if to_agent is not None and to_agent != "" and to_agent != "any":
             validate_agent_id(to_agent)
 
         with _collab_connection() as (conn, sessions_dir):
@@ -674,6 +675,45 @@ def send_message(
 
             if from_agent:
                 verify_agent_in_session(conn, from_agent, session_id)
+
+            session = collab_db.get_session(conn, session_id) or {}
+            rules_engine = RulesEngine(session.get("rules") or {})
+            has_artifact_ref = bool(
+                metadata
+                and (
+                    metadata.get("artifact_refs")
+                    or metadata.get("artifact_id")
+                    or metadata.get("artifact_ref")
+                )
+            )
+            ok, rule_issues = rules_engine.validate_message(
+                safe_content, msg_type, has_artifact_ref=has_artifact_ref
+            )
+            if not ok:
+                return {
+                    "success": False,
+                    "error": rule_issues[0] if rule_issues else "Message rejected by session rules",
+                    "error_type": "rules_error",
+                    "warnings": rule_issues,
+                }
+
+            if msg_type == "task":
+                pending_count = conn.execute(
+                    """
+                    SELECT COUNT(*) FROM tasks
+                    WHERE session_id = ? AND status = 'pending'
+                    """,
+                    (session_id,),
+                ).fetchone()[0]
+                ok_task, task_err = rules_engine.validate_task_assignment(
+                    to_agent, pending_count
+                )
+                if not ok_task:
+                    return {
+                        "success": False,
+                        "error": task_err or "Task rejected by session rules",
+                        "error_type": "rules_error",
+                    }
 
             now = datetime.now(timezone.utc).isoformat()
 
@@ -743,13 +783,16 @@ def send_message(
                     result["msg_id"],
                 )
 
-            return {
+            response = {
                 "success": True,
                 "msg_id": result["msg_id"],
                 "seq": result["seq"],
                 "session_id": session_id,
                 "created_at": now,
             }
+            if rule_issues:
+                response["warnings"] = rule_issues
+            return response
     except Exception as e:
         return _handle_tool_error("send_message", e)
 
@@ -896,16 +939,20 @@ def poll_messages(
                 reader_agent=agent_id,
             )
             if existing:
-                # Messages already available — return immediately, no blocking
+                # Match read_messages: only advance offset on unfiltered polls
+                offset_updated = not msg_types and from_agent is None
                 new_last_seq = existing[-1]["seq"]
-                bus.save_offset(session_id, agent_id, new_last_seq)
+                if offset_updated:
+                    bus.save_offset(session_id, agent_id, new_last_seq)
                 return {
                     "success": True,
                     "messages": existing,
                     "count": len(existing),
                     "waited_seconds": 0.0,
                     "timed_out": False,
-                    "last_seq": new_last_seq,
+                    "last_seq": new_last_seq if offset_updated else stored_last_seq,
+                    "returned_last_seq": new_last_seq,
+                    "offset_updated": offset_updated,
                     "session_status": session_status,
                     "has_more": len(existing) >= limit,
                 }
@@ -962,9 +1009,12 @@ def poll_messages(
                 reader_agent=agent_id,
             )
 
-            if messages:
+            offset_updated = not msg_types and from_agent is None
+            if messages and offset_updated:
                 new_last_seq = messages[-1]["seq"]
                 bus.save_offset(session_id, agent_id, new_last_seq)
+            elif messages:
+                new_last_seq = stored_last_seq
             else:
                 new_last_seq = stored_last_seq
 
@@ -977,6 +1027,8 @@ def poll_messages(
                 "waited_seconds": round(waited, 2),
                 "timed_out": is_timeout,
                 "last_seq": new_last_seq,
+                "returned_last_seq": messages[-1]["seq"] if messages else stored_last_seq,
+                "offset_updated": bool(messages and offset_updated),
                 "session_status": session_status,
                 "has_more": len(messages) >= limit,
                 "notification_from": notify.get("sender") if notify else None,

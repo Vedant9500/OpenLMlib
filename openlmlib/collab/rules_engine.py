@@ -53,9 +53,14 @@ class RulesEngine:
 
         require_artifact = self.rules.get("require_artifact_for_results", False)
         if require_artifact and msg_type == "result" and not has_artifact_ref:
-            warnings.append(
+            return False, [
                 "Session rules require artifacts for result messages. "
                 "Use save_artifact to save your work."
+            ]
+
+        if self.rules.get("require_assignment", False) and msg_type == "task":
+            warnings.append(
+                "Session rules require assignment; address tasks to a specific agent_id."
             )
 
         return True, warnings
@@ -69,6 +74,10 @@ class RulesEngine:
         max_pending = self.rules.get("max_pending_tasks", 20)
         if current_pending_count >= max_pending:
             return False, f"Too many pending tasks ({current_pending_count}/{max_pending})"
+        if self.rules.get("require_assignment", False):
+            target = (assigned_to or "").strip()
+            if not target or target == "any":
+                return False, "Session rules require assignment to a specific agent"
         return True, None
 
     def should_compact(self, message_count: int, last_compact_seq: int) -> bool:
