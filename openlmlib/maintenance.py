@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -80,13 +81,13 @@ class MaintenanceEngine:
             SELECT f.id, f.project, f.claim, f.confidence, f.created_at, f.status
             FROM findings f
             WHERE f.created_at < ?
-            AND f.status = 'active'
         """
         params: list = [cutoff_iso]
 
-        if status_filter:
-            query += " AND f.status = ?"
-            params.append(status_filter)
+        # status_filter overrides the default active-only filter when provided.
+        effective_status = status_filter if status_filter else "active"
+        query += " AND f.status = ?"
+        params.append(effective_status)
 
         query += " ORDER BY f.created_at ASC"
 
@@ -212,40 +213,117 @@ class MaintenanceEngine:
     ) -> Dict[str, Any]:
         """Consolidate a group of similar findings into one.
 
-        Keeps the highest-confidence finding as the representative and
-        merges evidence/tags from others. Archives the rest.
+        Keeps keep_id when provided (and present in the group); otherwise
+        the highest-confidence member. Merges tags/evidence/caveats into the
+        survivor and archives the rest without rewriting content_hash.
         """
         if len(group.member_ids) < 2:
             return {"status": "ok", "message": "No consolidation needed", "merged": 0}
 
-        target_id = keep_id or group.representative_id
-
-        # Get all findings in the group
         placeholders = ",".join("?" for _ in group.member_ids)
         rows = self._conn.execute(
-            f"SELECT id, claim, confidence, project FROM findings WHERE id IN ({placeholders})",
+            f"""
+            SELECT
+                f.id,
+                f.claim,
+                f.confidence,
+                f.project,
+                f.content_hash,
+                ft.tags,
+                ft.evidence,
+                ft.caveats,
+                ft.reasoning
+            FROM findings f
+            LEFT JOIN findings_text ft ON ft.id = f.id
+            WHERE f.id IN ({placeholders})
+            """,
             group.member_ids,
         ).fetchall()
 
         if not rows:
             return {"status": "error", "message": "No findings found in group"}
 
-        # Find the best representative (highest confidence)
-        best = max(rows, key=lambda r: float(r["confidence"] or 0.0))
-        target_id = best["id"]
+        row_ids = {row["id"] for row in rows}
+        if keep_id and keep_id in row_ids:
+            target_id = keep_id
+        else:
+            best = max(rows, key=lambda r: float(r["confidence"] or 0.0))
+            target_id = best["id"]
 
-        # Merge tags and evidence from others into the representative
+        def _load_list(raw: Any) -> List[Any]:
+            if raw is None:
+                return []
+            if isinstance(raw, list):
+                return list(raw)
+            try:
+                loaded = json.loads(raw)
+                return loaded if isinstance(loaded, list) else []
+            except Exception:
+                return []
+
+        target_row = next(row for row in rows if row["id"] == target_id)
+        merged_tags: List[Any] = _load_list(target_row["tags"])
+        merged_evidence: List[Any] = _load_list(target_row["evidence"])
+        merged_caveats: List[Any] = _load_list(target_row["caveats"])
+
+        def _extend_unique(dst: List[Any], values: List[Any]) -> None:
+            for value in values:
+                if value not in dst:
+                    dst.append(value)
+
+        timestamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
         merged_count = 0
+        archived_ids: List[str] = []
+
         for row in rows:
             if row["id"] == target_id:
                 continue
 
-            # Archive the duplicate
+            _extend_unique(merged_tags, _load_list(row["tags"]))
+            _extend_unique(merged_evidence, _load_list(row["evidence"]))
+            _extend_unique(merged_caveats, _load_list(row["caveats"]))
+
+            # Archive sibling; leave content_hash as a content digest.
             self._conn.execute(
-                "UPDATE findings SET status = 'archived', content_hash = ? WHERE id = ?",
-                (f"consolidated_into_{target_id}", row["id"]),
+                "UPDATE findings SET status = 'archived' WHERE id = ?",
+                (row["id"],),
             )
+
+            # Record consolidation pointer on the archived audit log when present.
+            audit_row = self._conn.execute(
+                "SELECT failure_log FROM findings_audit WHERE id = ?",
+                (row["id"],),
+            ).fetchone()
+            if audit_row is not None:
+                failure_log = _load_list(audit_row["failure_log"])
+                failure_log.append(
+                    {
+                        "event": "consolidated",
+                        "into": target_id,
+                        "timestamp": timestamp,
+                    }
+                )
+                self._conn.execute(
+                    "UPDATE findings_audit SET failure_log = ? WHERE id = ?",
+                    (json.dumps(failure_log, separators=(",", ":")), row["id"]),
+                )
+
+            archived_ids.append(row["id"])
             merged_count += 1
+
+        self._conn.execute(
+            """
+            UPDATE findings_text
+            SET tags = ?, evidence = ?, caveats = ?
+            WHERE id = ?
+            """,
+            (
+                json.dumps(merged_tags, separators=(",", ":")),
+                json.dumps(merged_evidence, separators=(",", ":")),
+                json.dumps(merged_caveats, separators=(",", ":")),
+                target_id,
+            ),
+        )
 
         self._conn.commit()
 
@@ -258,7 +336,10 @@ class MaintenanceEngine:
             "status": "ok",
             "target_id": target_id,
             "merged": merged_count,
-            "archived_ids": [r["id"] for r in rows if r["id"] != target_id],
+            "archived_ids": archived_ids,
+            "merged_tags": merged_tags,
+            "merged_evidence": merged_evidence,
+            "merged_caveats": merged_caveats,
         }
 
     def run_consolidation(

@@ -906,11 +906,11 @@ Update **Fix status** as work lands: `Open` → `In progress` → `Fixed` / `Won
 | P3.3 | 3 Retrieval | Decomposition hard-caps at 5, ignores `final_k` | Medium | Fixed | Y | pass max_findings from final_k / candidate count |
 | P3.4 | 3 Retrieval | `max_context_tokens` API flag ignored | Medium | Fixed | Y | packer uses options.max_context_tokens |
 | P3.5 | 3 Retrieval | Query expansion duplicates original (case-fold) | Low | Fixed | Y | case-fold include_original against seen |
-| P4.1 | 4 Runtime/CLI | Consolidation only archives; no evidence/tags merge | High | Open | N | |
-| P4.2 | 4 Runtime/CLI | `consolidate_group(keep_id=...)` ignored | Medium | Open | N | |
-| P4.3 | 4 Runtime/CLI | Consolidation overwrites `content_hash` with marker | Medium | Open | N | |
-| P4.4 | 4 Runtime/CLI | `log_tool_selection` stores unknown as incorrect (`0`) | Medium | Open | N | |
-| P4.5 | 4 Runtime/CLI | `find_stale_findings(status_filter=...)` dead | Low | Open | N | |
+| P4.1 | 4 Runtime/CLI | Consolidation only archives; no evidence/tags merge | High | Fixed | Y | union tags/evidence/caveats into survivor |
+| P4.2 | 4 Runtime/CLI | `consolidate_group(keep_id=...)` ignored | Medium | Fixed | Y | honor keep_id when present in group |
+| P4.3 | 4 Runtime/CLI | Consolidation overwrites `content_hash` with marker | Medium | Fixed | Y | leave content_hash; log pointer in failure_log |
+| P4.4 | 4 Runtime/CLI | `log_tool_selection` stores unknown as incorrect (`0`) | Medium | Fixed | Y | store NULL; accuracy uses labeled rows only |
+| P4.5 | 4 Runtime/CLI | `find_stale_findings(status_filter=...)` dead | Low | Fixed | Y | status_filter replaces default active filter |
 | P5.1 | 5 MCP | Aider install writes JSON into `.yml` | High | Open | N | |
 | P5.2 | 5 MCP | `save_finding` session warning never returned | Medium | Open | N | |
 | P5.3 | 5 MCP | Interactive setup ignores `settings_path` | Medium | Open | N | |
@@ -945,7 +945,7 @@ Update **Fix status** as work lands: `Open` → `In progress` → `Fixed` / `Won
 
 | Severity | Total | Open | In progress | Fixed | Won't fix / Deferred |
 |----------|------:|-----:|------------:|------:|---------------------:|
-| High | 15 | 11 | 0 | 4 | 0 |
-| Medium | 24 | 16 | 0 | 8 | 0 |
-| Low | 10 | 7 | 0 | 3 | 0 |
-| **All** | **49** | **34** | **0** | **15** | **0** |
+| High | 15 | 10 | 0 | 5 | 0 |
+| Medium | 24 | 13 | 0 | 11 | 0 |
+| Low | 10 | 6 | 0 | 4 | 0 |
+| **All** | **49** | **29** | **0** | **20** | **0** |

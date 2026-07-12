@@ -161,6 +161,11 @@ def log_tool_selection(
     if is_correct is None and expected_tool is not None:
         is_correct = selected_tool == expected_tool
 
+    if is_correct is None:
+        is_correct_value = None
+    else:
+        is_correct_value = 1 if is_correct else 0
+
     conn.execute(
         """
         INSERT INTO tool_selections (
@@ -173,7 +178,7 @@ def log_tool_selection(
             query,
             selected_tool,
             expected_tool,
-            1 if is_correct else 0,
+            is_correct_value,
             confidence_score,
             now,
             session_id,
@@ -297,6 +302,7 @@ def get_tool_selection_accuracy(
         """
         SELECT
             COUNT(*) as total,
+            SUM(CASE WHEN is_correct IS NOT NULL THEN 1 ELSE 0 END) as labeled,
             SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) as correct,
             AVG(CASE WHEN is_correct IS NOT NULL THEN CAST(is_correct AS REAL) END) as accuracy
         FROM tool_selections
@@ -306,12 +312,14 @@ def get_tool_selection_accuracy(
     ).fetchone()
 
     total = row["total"] or 0
+    labeled = row["labeled"] or 0
     correct = row["correct"] or 0
 
     return {
         "total_selections": total,
+        "labeled_selections": labeled,
         "correct_selections": correct,
-        "accuracy_rate": correct / total if total > 0 else 0.0,
+        "accuracy_rate": correct / labeled if labeled > 0 else 0.0,
         "period_days": days,
     }
 
