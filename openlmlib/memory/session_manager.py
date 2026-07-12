@@ -39,7 +39,8 @@ class SessionManager:
     def __init__(
         self,
         storage: MemoryStorage,
-        observation_callback: Optional[Callable] = None
+        observation_callback: Optional[Callable] = None,
+        memory_settings: Optional[Any] = None,
     ):
         """
         Initialize session manager.
@@ -47,7 +48,9 @@ class SessionManager:
         Args:
             storage: MemoryStorage instance
             observation_callback: Optional callback for async observation processing
+            memory_settings: Optional MemoryInjectionSettings for caps/privacy toggles
         """
+        self.memory_settings = memory_settings
         self.storage = storage
         self.observation_callback = observation_callback
         self.hooks = HookRegistry()
@@ -125,30 +128,36 @@ class SessionManager:
         Returns:
             Context dict with hook results and session metadata
         """
-        # Check if session already exists
+        # In-process active session: just refresh activity.
         existing = self.active_sessions.get(session_id)
         if existing:
             logger.warning(f"Session {session_id} already active, updating")
             existing["last_activity"] = time.time()
-            return existing.get("context", {})
+            prior = existing.get("context", {}) or {}
+            if "observation_count" not in prior:
+                prior = dict(prior)
+                prior["observation_count"] = existing.get("observation_count", 0)
+            return prior
 
-        # Create session in storage
+        # Create or resume session in storage (handles process restarts).
         session_info = self.storage.create_session(session_id, user_id)
+        observation_count = int(session_info.get("observation_count") or 0)
+        resumed = bool(session_info.get("resumed"))
 
         # Track session
         self.active_sessions[session_id] = {
             "session_id": session_id,
-            "user_id": user_id,
+            "user_id": user_id or session_info.get("user_id"),
             "start_time": time.time(),
             "last_activity": time.time(),
-            "observation_count": 0,
+            "observation_count": observation_count,
             "context": session_info,
         }
 
         # Trigger SessionStart hooks
         context = {
             "session_id": session_id,
-            "user_id": user_id,
+            "user_id": user_id or session_info.get("user_id"),
             "query": query,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
@@ -163,14 +172,17 @@ class SessionManager:
 
         response = {
             "session_id": session_id,
-            "status": "started",
+            "status": "resumed" if resumed else "started",
+            "resumed": resumed,
+            "observation_count": observation_count,
             "context_injected": len(injected_context) > 0,
             "injected_context": injected_context,
             "hook_results": hook_results,
         }
+        self.active_sessions[session_id]["context"] = response
 
         logger.info(
-            f"Session {session_id} started "
+            f"Session {session_id} {'resumed' if resumed else 'started'} "
             f"(context injected: {len(injected_context)} blocks)"
         )
 
@@ -202,9 +214,13 @@ class SessionManager:
             )
             return None
 
-        # Privacy filtering on both input and output
-        tool_input = sanitize_for_storage(tool_input)
-        tool_output = sanitize_for_storage(tool_output)
+        # Privacy filtering on both input and output (toggle via settings).
+        privacy_on = True
+        if self.memory_settings is not None:
+            privacy_on = bool(getattr(self.memory_settings, "privacy_filtering", True))
+        if privacy_on:
+            tool_input = sanitize_for_storage(tool_input)
+            tool_output = sanitize_for_storage(tool_output)
 
         # Create observation
         obs_id = f"obs_{uuid4().hex[:12]}"
@@ -216,6 +232,12 @@ class SessionManager:
             "tool_input": tool_input,
             "tool_output": tool_output,
         }
+        if self.memory_settings is not None:
+            observation["max_observations_per_session"] = getattr(
+                self.memory_settings,
+                "max_observations_per_session",
+                None,
+            )
 
         # Store observation
         try:

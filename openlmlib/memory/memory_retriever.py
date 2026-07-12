@@ -11,12 +11,44 @@ Enables token-efficient memory retrieval by filtering before fetching details.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from .storage import MemoryStorage
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_iso_timestamp(value: str) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        if value.endswith("Z"):
+            return datetime.fromisoformat(value[:-1]).replace(tzinfo=timezone.utc)
+        parsed = datetime.fromisoformat(value)
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _parse_window_seconds(window: str) -> Optional[int]:
+    """Parse window strings like ``5m``, ``1h``, ``30s`` into seconds."""
+    if window is None:
+        return None
+    text = str(window).strip().lower()
+    if not text:
+        return None
+    match = re.fullmatch(r"(\d+)\s*([smhd])?", text)
+    if not match:
+        return None
+    amount = int(match.group(1))
+    unit = match.group(2) or "s"
+    factor = {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
+    return amount * factor
 
 
 @dataclass
@@ -136,7 +168,9 @@ class ProgressiveRetriever:
 
         Args:
             ids: List of observation IDs from layer1
-            window: Time window for context (not yet implemented)
+            window: Optional time window around each hit (e.g. ``5m``, ``1h``).
+                When set, nearby observations from the same session within the
+                window are included. Empty string disables neighbor expansion.
 
         Returns:
             List of MemoryTimeline entries
@@ -144,17 +178,46 @@ class ProgressiveRetriever:
         if not ids:
             return []
 
+        window_seconds = _parse_window_seconds(window)
         observations = self.storage.get_observations_by_ids(ids)
+        if not observations:
+            return []
+
+        # Expand each hit with same-session neighbors inside the time window.
+        expanded_by_id: Dict[str, Dict[str, Any]] = {obs["id"]: obs for obs in observations}
+        if window_seconds is not None and window_seconds > 0:
+            for obs in list(observations):
+                session_id = obs.get("session_id")
+                if not session_id:
+                    continue
+                try:
+                    neighbors = self.storage.get_session_observations(session_id, limit=200)
+                except Exception:
+                    neighbors = []
+                center = _parse_iso_timestamp(obs.get("timestamp") or "")
+                if center is None:
+                    continue
+                for neighbor in neighbors:
+                    nid = neighbor.get("id")
+                    if not nid or nid in expanded_by_id:
+                        continue
+                    nts = _parse_iso_timestamp(neighbor.get("timestamp") or "")
+                    if nts is None:
+                        continue
+                    if abs((nts - center).total_seconds()) <= window_seconds:
+                        expanded_by_id[nid] = neighbor
 
         timelines = []
-        for obs in observations:
+        for obs in expanded_by_id.values():
             compressed_summary = obs.get("compressed_summary") or ""
+            tool_name = obs.get("tool_name") or ""
+            narrative = compressed_summary or tool_name or str(obs.get("tool_output") or "")[:200]
             timeline = MemoryTimeline(
                 id=obs["id"],
                 timestamp=obs["timestamp"],
                 session_id=obs["session_id"],
-                narrative=compressed_summary[:200],
-                related=obs.get("concepts", [])[:5],
+                narrative=narrative[:200],
+                related=obs.get("concepts", [])[:5] if isinstance(obs.get("concepts"), list) else [],
                 token_estimate=200,
             )
             timelines.append(timeline)
@@ -345,20 +408,36 @@ class ProgressiveRetriever:
         """
         Calculate confidence score for an observation.
 
-        Based on recency and completeness.
+        Based on recency, completeness, and content richness so raw
+        (uncompressed) mid-session observations can still expand as core.
         """
-        confidence = 0.5  # Base confidence
+        confidence = 0.55  # Base confidence for any real hit
 
         # Boost for compressed summaries
         if observation.get("compressed_summary"):
-            confidence += 0.2
+            confidence += 0.15
 
         # Boost for complete observations
         if observation.get("facts") and observation.get("concepts"):
-            confidence += 0.2
+            confidence += 0.15
 
         # Boost for certain types
         if observation.get("obs_type") in ["discovery", "decision"]:
             confidence += 0.1
+
+        # Boost for substantial tool output / input even without compression.
+        tool_output = observation.get("tool_output") or ""
+        tool_input = observation.get("tool_input") or ""
+        if len(str(tool_output)) >= 40 or len(str(tool_input)) >= 40:
+            confidence += 0.1
+
+        # Mild recency boost when timestamp is parseable and recent.
+        ts = _parse_iso_timestamp(str(observation.get("timestamp") or ""))
+        if ts is not None:
+            age_days = max(0.0, (datetime.now(timezone.utc) - ts).total_seconds() / 86400.0)
+            if age_days <= 7:
+                confidence += 0.1
+            elif age_days <= 30:
+                confidence += 0.05
 
         return min(confidence, 1.0)

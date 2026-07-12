@@ -43,7 +43,9 @@ class ContextBuilder:
         query: Optional[str] = None,
         limit: int = 50,
         user_id: Optional[str] = None,
-    ) -> str:
+        *,
+        as_dict: bool = False,
+    ):
         """
         Build context block for session start.
 
@@ -53,9 +55,10 @@ class ContextBuilder:
             session_id: Current session ID
             query: Optional initial query to filter relevant memories
             limit: Max observations to include
+            as_dict: When True, return metadata including observation_count
 
         Returns:
-            Formatted context string for LLM
+            Formatted context string for LLM, or dict when as_dict=True
         """
         # Get relevant memories
         injection = self.retriever.auto_inject_context(
@@ -63,9 +66,21 @@ class ContextBuilder:
         )
 
         context_block = injection.get("context_block", "")
+        observation_count = int(injection.get("observation_count") or 0)
+        estimated_tokens = int(
+            injection.get("estimated_tokens")
+            or injection.get("token_estimate")
+            or (observation_count * 75)
+        )
 
         if not context_block:
             logger.info(f"No context injected for session {session_id}")
+            if as_dict:
+                return {
+                    "context_block": "",
+                    "observation_count": 0,
+                    "estimated_tokens": 0,
+                }
             return ""
 
         # Apply caveman compression
@@ -86,7 +101,7 @@ class ContextBuilder:
         context_lines.append("")
         context_lines.append(
             f"The following knowledge has been retrieved from "
-            f"previous sessions ({injection.get('observation_count', 0)} items):"
+            f"previous sessions ({observation_count} items):"
         )
         context_lines.append("")
         context_lines.append(context_block)
@@ -100,10 +115,16 @@ class ContextBuilder:
 
         logger.info(
             f"Built session start context: "
-            f"{injection.get('observation_count', 0)} observations, "
+            f"{observation_count} observations, "
             f"{len(context)} chars"
         )
 
+        if as_dict:
+            return {
+                "context_block": context,
+                "observation_count": observation_count,
+                "estimated_tokens": estimated_tokens,
+            }
         return context
 
     def build_prompt_context(

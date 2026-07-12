@@ -221,6 +221,8 @@ def retroactive_ingest(
     cwd: Optional[str] = None,
     time_window_hours: int = 24,
     include_uncommitted: bool = True,
+    storage: Optional[Any] = None,
+    settings_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """
     Retroactively ingest session activity from git history.
@@ -235,6 +237,8 @@ def retroactive_ingest(
         cwd: Working directory (defaults to current)
         time_window_hours: Hours to look back for commits
         include_uncommitted: Whether to include uncommitted changes
+        storage: Optional MemoryStorage (preferred; MCP must pass shared storage)
+        settings_path: Optional settings path used only when storage is omitted
     
     Returns:
         Dict with observations created, knowledge synthesized, and stats
@@ -250,21 +254,23 @@ def retroactive_ingest(
         "knowledge_created": False,
     }
     
-    # 0. Create session in storage (required for FK constraints)
-    # We need to get the storage instance to create the session
-    # This is a bit awkward — the caller should pass storage or we use runtime
-    try:
-        from openlmlib.runtime import get_runtime
-        runtime = get_runtime(Path("config/settings.json"))
-        storage = MemoryStorage(runtime.conn)
-        # Create session (ignore if already exists)
+    # Prefer caller-provided storage so MCP and ingest share one DB.
+    if storage is None:
+        try:
+            from openlmlib.runtime import get_runtime
+            from openlmlib.settings import resolve_global_settings_path
+            path = Path(settings_path) if settings_path else resolve_global_settings_path()
+            runtime = get_runtime(path)
+            storage = MemoryStorage(runtime.conn)
+        except Exception as e:
+            logger.warning(f"Could not open storage for session {session_id}: {e}")
+            storage = None
+
+    if storage is not None:
         try:
             storage.create_session(session_id, "retroactive_ingest")
-        except Exception:
-            pass  # Session may already exist
-    except Exception as e:
-        logger.warning(f"Could not create session {session_id}: {e}")
-        storage = None
+        except Exception as e:
+            logger.warning(f"Could not create session {session_id}: {e}")
     
     # 1. Get modified files
     modified_files = []

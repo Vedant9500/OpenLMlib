@@ -60,16 +60,22 @@ def _get_memory_state():
 
     # Initialize memory system components
     runtime = get_runtime(_settings_path())
+    memory_settings = getattr(runtime.settings, "memory", None)
     storage = MemoryStorage(runtime.conn)
-    session_mgr = SessionManager(storage)
+    session_mgr = SessionManager(storage, memory_settings=memory_settings)
     retriever = ProgressiveRetriever(storage)
-    context_builder = ContextBuilder(retriever)
+    context_builder = ContextBuilder(
+        retriever,
+        caveman_enabled=bool(getattr(memory_settings, "caveman_enabled", True)),
+        caveman_intensity=str(getattr(memory_settings, "caveman_intensity", "ultra")),
+    )
 
     _memory_state = {
         "session_mgr": session_mgr,
         "retriever": retriever,
         "context_builder": context_builder,
         "storage": storage,
+        "memory_settings": memory_settings,
     }
     return _memory_state
 
@@ -223,18 +229,40 @@ def _register_memory_tools() -> None:
         state = _get_memory_state()
         session_mgr = state["session_mgr"]
         context_builder = state["context_builder"]
+        memory_settings = state.get("memory_settings")
+        if memory_settings is not None and getattr(memory_settings, "enabled", True) is False:
+            return {
+                "session_id": session_id,
+                "context_injected": False,
+                "observation_count": 0,
+                "context_block": "",
+                "message": "Memory injection disabled in settings",
+            }
+        effective_limit = limit
+        if memory_settings is not None:
+            default_limit = int(getattr(memory_settings, "observations_at_session_start", limit) or limit)
+            if limit == 50:
+                effective_limit = default_limit
 
         context = session_mgr.on_session_start(session_id, user_id, query)
         
         # Build injection context (with caveman compression enabled)
-        context_block = context_builder.build_session_start_context(
-            session_id, query, limit, user_id=user_id
+        injection = context_builder.build_session_start_context(
+            session_id, query, effective_limit, user_id=user_id, as_dict=True
+        )
+        context_block = injection.get("context_block", "") if isinstance(injection, dict) else injection
+        observation_count = (
+            int(injection.get("observation_count") or 0)
+            if isinstance(injection, dict)
+            else int(context.get("observation_count") or 0)
         )
         
         return {
             "session_id": session_id,
+            "status": context.get("status", "started"),
+            "resumed": bool(context.get("resumed")),
             "context_injected": bool(context_block),
-            "observation_count": context.get("observation_count", 0),
+            "observation_count": observation_count,
             "context_block": context_block,
             "message": "Session started with memory context loaded"
         }
@@ -432,11 +460,12 @@ def _register_memory_tools() -> None:
                 "estimated_tokens": 15
             }
 
-        # Adaptive Expansion: Expand top hits with high confidence
-        core_ids = [r.id for r in layer1_results[:3] if getattr(r, 'confidence', 0.0) > 0.6]
+        # Adaptive Expansion: Expand top hits with high confidence.
+        # Threshold is 0.55 so uncompressed mid-session hits still expand.
+        core_ids = [r.id for r in layer1_results[:3] if getattr(r, 'confidence', 0.0) >= 0.55]
         periphery_ids = [r.id for r in layer1_results[3:8]]
 
-        # If no high confidence hits, just expand the top 1
+        # If no high confidence hits, expand top 1 as core
         if not core_ids and layer1_results:
             core_ids = [layer1_results[0].id]
 
@@ -488,13 +517,23 @@ def _register_memory_tools() -> None:
         """
         state = _get_memory_state()
         context_builder = state["context_builder"]
-        context = context_builder.build_session_start_context(session_id, query, limit, user_id=user_id)
+        injection = context_builder.build_session_start_context(
+            session_id, query, limit, user_id=user_id, as_dict=True
+        )
+        if isinstance(injection, dict):
+            context = injection.get("context_block", "")
+            observation_count = int(injection.get("observation_count") or 0)
+            estimated_tokens = int(injection.get("estimated_tokens") or (observation_count * 75))
+        else:
+            context = injection
+            observation_count = 0 if not context else limit
+            estimated_tokens = observation_count * 75
 
         return {
             "session_id": session_id,
             "context_block": context,
-            "observation_count": limit,
-            "estimated_tokens": limit * 75
+            "observation_count": observation_count,
+            "estimated_tokens": estimated_tokens,
         }
 
     @mcp.tool()
@@ -764,7 +803,9 @@ def _register_memory_tools() -> None:
         result = retro_ingest_fn(
             session_id=session_id,
             time_window_hours=time_window_hours,
-            include_uncommitted=include_uncommitted
+            include_uncommitted=include_uncommitted,
+            storage=storage,
+            settings_path=_settings_path(),
         )
 
         # Save the synthesized knowledge using the shared storage

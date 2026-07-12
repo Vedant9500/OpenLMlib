@@ -915,11 +915,11 @@ Update **Fix status** as work lands: `Open` → `In progress` → `Fixed` / `Won
 | P5.2 | 5 MCP | `save_finding` session warning never returned | Medium | Fixed | Y | attach session_warning on MCP response |
 | P5.3 | 5 MCP | Interactive setup ignores `settings_path` | Medium | Fixed | Y | pass OPENLMLIB_SETTINGS to Node wizard |
 | P5.4 | 5 MCP | Memory/collab tools absent until `main()` | Low | Fixed | Y | ensure_tools_registered + list_tools hook |
-| P6.1 | 6 Memory | Session restart/reuse → `IntegrityError` | High | Open | N | |
-| P6.2 | 6 Memory | `retroactive_ingest` writes to different DB | High | Open | N | |
-| P6.3 | 6 Memory | `MemoryInjectionSettings` entirely dead config | Medium | Open | N | |
-| P6.4 | 6 Memory | Wrong observation counts on session_start/inject | Medium | Open | N | |
-| P6.5 | 6 Memory | Progressive `window` no-op; expansion threshold rare | Low | Open | N | |
+| P6.1 | 6 Memory | Session restart/reuse → `IntegrityError` | High | Fixed | Y | create_session upserts/resumes; clears ended_at |
+| P6.2 | 6 Memory | `retroactive_ingest` writes to different DB | High | Fixed | Y | accept storage/settings_path; MCP passes shared storage |
+| P6.3 | 6 Memory | `MemoryInjectionSettings` entirely dead config | Medium | Fixed | Y | wire enabled/limits/privacy/caveman into memory state |
+| P6.4 | 6 Memory | Wrong observation counts on session_start/inject | Medium | Fixed | Y | as_dict context returns real observation_count |
+| P6.5 | 6 Memory | Progressive `window` no-op; expansion threshold rare | Low | Fixed | Y | implement window neighbors; lower core confidence gate |
 | P7.1 | 7 Collab core | Generated agent IDs rejected (`.` / `:` in model) | High | Open | N | |
 | P7.2 | 7 Collab core | `to_agent="any"` blocked by MCP validation | High | Open | N | |
 | P7.3 | 7 Collab core | `RulesEngine` never applied on live paths | Medium | Open | N | |
@@ -945,7 +945,7 @@ Update **Fix status** as work lands: `Open` → `In progress` → `Fixed` / `Won
 
 | Severity | Total | Open | In progress | Fixed | Won't fix / Deferred |
 |----------|------:|-----:|------------:|------:|---------------------:|
-| High | 15 | 9 | 0 | 6 | 0 |
-| Medium | 24 | 11 | 0 | 13 | 0 |
-| Low | 10 | 5 | 0 | 5 | 0 |
-| **All** | **49** | **25** | **0** | **24** | **0** |
+| High | 15 | 7 | 0 | 8 | 0 |
+| Medium | 24 | 9 | 0 | 15 | 0 |
+| Low | 10 | 4 | 0 | 6 | 0 |
+| **All** | **49** | **20** | **0** | **29** | **0** |

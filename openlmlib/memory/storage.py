@@ -160,24 +160,61 @@ class MemoryStorage:
         self.close()
         return False
 
+    def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Return session row metadata, or None if missing."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            SELECT session_id, created_at, ended_at, user_id, observation_count
+            FROM memory_sessions
+            WHERE session_id = ?
+            """,
+            (session_id,),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return None
+        return {
+            "session_id": row[0],
+            "created_at": row[1],
+            "ended_at": row[2],
+            "user_id": row[3],
+            "observation_count": int(row[4] or 0),
+            "resumed": False,
+        }
+
     def create_session(
         self,
         session_id: str,
         user_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Create a new session record.
+        Create or resume a session record.
 
-        Args:
-            session_id: Unique session identifier
-            user_id: Optional user/agent identifier
-
-        Returns:
-            Session metadata dict
+        Reusing the same session_id (process restart, agent resume) clears
+        ended_at and returns the existing observation_count instead of failing
+        with UNIQUE constraint errors.
         """
         cursor = self.conn.cursor()
-        created_at = datetime.now(timezone.utc).isoformat()
+        existing = self.get_session(session_id)
+        if existing is not None:
+            cursor.execute(
+                """
+                UPDATE memory_sessions
+                SET ended_at = NULL,
+                    user_id = COALESCE(?, user_id)
+                WHERE session_id = ?
+                """,
+                (user_id, session_id),
+            )
+            self.conn.commit()
+            resumed = self.get_session(session_id) or existing
+            resumed["resumed"] = True
+            if user_id:
+                resumed["user_id"] = user_id
+            return resumed
 
+        created_at = datetime.now(timezone.utc).isoformat()
         cursor.execute(
             """
             INSERT INTO memory_sessions (session_id, created_at, user_id, observation_count)
@@ -185,14 +222,15 @@ class MemoryStorage:
             """,
             (session_id, created_at, user_id)
         )
-
         self.conn.commit()
 
         return {
             "session_id": session_id,
             "created_at": created_at,
+            "ended_at": None,
             "user_id": user_id,
-            "observation_count": 0
+            "observation_count": 0,
+            "resumed": False,
         }
 
     def end_session(self, session_id: str) -> bool:
@@ -250,6 +288,20 @@ class MemoryStorage:
         concepts = _sanitize_value(observation.get("concepts") or [])
         obs_type = observation.get("obs_type")
         tags = json.dumps(_sanitize_value(observation.get("tags") or []))
+
+        max_observations = observation.get("max_observations_per_session")
+        if max_observations is not None:
+            try:
+                cap = int(max_observations)
+            except (TypeError, ValueError):
+                cap = 0
+            if cap > 0:
+                session = self.get_session(session_id)
+                current = int((session or {}).get("observation_count") or 0)
+                if current >= cap:
+                    raise ValueError(
+                        f"Session {session_id} reached max_observations_per_session={cap}"
+                    )
 
         cursor.execute(
             """

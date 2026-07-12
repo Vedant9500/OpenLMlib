@@ -88,6 +88,48 @@ class TestMemoryStorage(unittest.TestCase):
         row = cursor.fetchone()
         self.assertIsNotNone(row[0])
 
+    def test_create_session_resumes_existing(self):
+        """Reusing a session_id resumes instead of IntegrityError."""
+        session_id = "test_session_resume"
+        first = self.storage.create_session(session_id, "user-a")
+        self.assertFalse(first.get("resumed"))
+        self.storage.add_observation({
+            "session_id": session_id,
+            "tool_name": "Read",
+            "tool_output": "hello world content for observation",
+        })
+        self.storage.end_session(session_id)
+
+        second = self.storage.create_session(session_id, "user-b")
+        self.assertTrue(second.get("resumed"))
+        self.assertEqual(second["session_id"], session_id)
+        self.assertEqual(second["observation_count"], 1)
+        self.assertIsNone(second.get("ended_at"))
+        self.assertEqual(second.get("user_id"), "user-b")
+
+        # Manager path after end + re-start must not crash.
+        mgr = SessionManager(self.storage)
+        response = mgr.on_session_start(session_id, "user-b")
+        self.assertEqual(response["status"], "resumed")
+        self.assertEqual(response["observation_count"], 1)
+
+    def test_add_observation_respects_max_cap(self):
+        session_id = "test_session_cap"
+        self.storage.create_session(session_id, "user")
+        self.storage.add_observation({
+            "session_id": session_id,
+            "tool_name": "Read",
+            "tool_output": "one",
+            "max_observations_per_session": 1,
+        })
+        with self.assertRaises(ValueError):
+            self.storage.add_observation({
+                "session_id": session_id,
+                "tool_name": "Read",
+                "tool_output": "two",
+                "max_observations_per_session": 1,
+            })
+
     def test_add_observation(self):
         """Test observation addition."""
         session_id = "test_session_003"
@@ -462,6 +504,41 @@ class TestProgressiveRetriever(unittest.TestCase):
         self.assertEqual(len(timeline), 1)
         self.assertTrue(hasattr(timeline[0], "narrative"))
 
+    def test_layer2_window_includes_neighbors(self):
+        """window expands same-session neighbors near the hit."""
+        from datetime import datetime, timedelta, timezone
+
+        session_id = "test_window"
+        self.storage.create_session(session_id, "user")
+        base = datetime.now(timezone.utc)
+        ids = []
+        for i, delta_min in enumerate([0, 2, 20]):
+            ts = (base + timedelta(minutes=delta_min)).isoformat()
+            obs_id = self.storage.add_observation({
+                "id": f"obs_window_{i}",
+                "session_id": session_id,
+                "timestamp": ts,
+                "tool_name": "Read",
+                "tool_output": f"content {i}",
+                "compressed_summary": f"summary {i}",
+            })
+            ids.append(obs_id)
+
+        # 5m window around first hit should include the +2m neighbor, not +20m.
+        timeline = self.retriever.layer2_timeline([ids[0]], window="5m")
+        timeline_ids = {t.id for t in timeline}
+        self.assertIn(ids[0], timeline_ids)
+        self.assertIn(ids[1], timeline_ids)
+        self.assertNotIn(ids[2], timeline_ids)
+
+    def test_confidence_for_raw_observation(self):
+        """Uncompressed observations still get expandable confidence."""
+        conf = self.retriever._calculate_confidence({
+            "tool_output": "x" * 50,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+        self.assertGreaterEqual(conf, 0.55)
+
     def test_layer3_full_details(self):
         """Test layer 3 full details retrieval."""
         session_id = "test_session"
@@ -531,6 +608,22 @@ class TestContextBuilder(unittest.TestCase):
 
         self.assertIn("<openlmlib-memory-context>", context)
         self.assertIn("Previous Session Context", context)
+
+    def test_build_session_start_context_as_dict(self):
+        session_id = "test_session"
+        self.storage.create_session(session_id, "user")
+        self.storage.add_observation({
+            "session_id": session_id,
+            "tool_name": "Read",
+            "tool_output": "Important knowledge",
+        })
+        payload = self.context_builder.build_session_start_context(
+            "new_session", limit=10, as_dict=True
+        )
+        self.assertIsInstance(payload, dict)
+        self.assertGreater(payload["observation_count"], 0)
+        self.assertIn("context_block", payload)
+        self.assertIn("estimated_tokens", payload)
 
     def test_build_prompt_context(self):
         """Test building prompt-specific context."""
