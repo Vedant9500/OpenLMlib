@@ -67,6 +67,10 @@ class SecurityError(CollabError):
     """Raised when a security validation fails (e.g., path traversal, injection)."""
 
 
+class RulesViolationError(CollabError):
+    """Raised when a message or task violates session rules."""
+
+
 VALID_MESSAGE_TYPES = frozenset({
     "task", "result", "question", "answer", "ack",
     "update", "artifact", "system", "complete", "summary",
@@ -122,6 +126,7 @@ def error_from_exception(exc: Exception) -> dict:
         DatabaseError: "database_error",
         FilesystemError: "filesystem_error",
         SecurityError: "security_error",
+        RulesViolationError: "rules_error",
     }
     error_type = mapping.get(type(exc), "unknown_error")
     return make_error_response(str(exc), error_type)

@@ -68,6 +68,7 @@ def _get_memory_state():
         retriever,
         caveman_enabled=bool(getattr(memory_settings, "caveman_enabled", True)),
         caveman_intensity=str(getattr(memory_settings, "caveman_intensity", "ultra")),
+        memory_settings=memory_settings,
     )
 
     _memory_state = {
@@ -1029,20 +1030,26 @@ def save_finding(
             session_warning=_session_warning,
         )
 
-        # Auto-log observation if a session is active
+        # Auto-log observation if a session is active (honors auto_log_tool_use)
         if result.get("status") == "ok":
             try:
                 state = _get_memory_state()
-                session_mgr = state["session_mgr"]
-                active_sessions = session_mgr.get_active_sessions()
-                if active_sessions:
-                    # Log finding as a 'discovery' observation
-                    session_mgr.on_tool_use(
-                        session_id=active_sessions[0]["session_id"],
-                        tool_name="save_finding",
-                        tool_input=f"Save finding: {claim[:100]}",
-                        tool_output=f"Successfully saved finding to project {project}. ID: {result.get('id')}",
-                    )
+                mem_settings = state.get("memory_settings")
+                if mem_settings is None or bool(
+                    getattr(mem_settings, "auto_log_tool_use", True)
+                ):
+                    session_mgr = state["session_mgr"]
+                    active_sessions = session_mgr.get_active_sessions()
+                    if active_sessions:
+                        session_mgr.on_tool_use(
+                            session_id=active_sessions[0]["session_id"],
+                            tool_name="save_finding",
+                            tool_input=f"Save finding: {claim[:100]}",
+                            tool_output=(
+                                f"Successfully saved finding to project {project}. "
+                                f"ID: {result.get('id')}"
+                            ),
+                        )
             except Exception:
                 pass  # Never let memory logging break the primary tool
 
@@ -1938,33 +1945,37 @@ def ensure_tools_registered() -> None:
 
 
 def _install_list_tools_hook() -> None:
-    """Register lazy tools the first time an MCP client lists tools."""
-    list_tools = getattr(mcp, "list_tools", None)
-    if not callable(list_tools) or getattr(list_tools, "_openlmlib_lazy_hook", False):
-        return
-
+    """Register lazy tools on list_tools and call_tool so hosts that skip listing still work."""
     import asyncio
     import inspect
 
-    if inspect.iscoroutinefunction(list_tools):
-        async def _list_tools_ensured(*args, **kwargs):
+    def _wrap(method_name: str) -> None:
+        original = getattr(mcp, method_name, None)
+        if not callable(original) or getattr(original, "_openlmlib_lazy_hook", False):
+            return
+
+        if inspect.iscoroutinefunction(original):
+            async def _ensured(*args, **kwargs):
+                ensure_tools_registered()
+                return await original(*args, **kwargs)
+            _ensured._openlmlib_lazy_hook = True  # type: ignore[attr-defined]
+            setattr(mcp, method_name, _ensured)
+            return
+
+        def _ensured(*args, **kwargs):
             ensure_tools_registered()
-            return await list_tools(*args, **kwargs)
-        _list_tools_ensured._openlmlib_lazy_hook = True  # type: ignore[attr-defined]
-        mcp.list_tools = _list_tools_ensured  # type: ignore[method-assign]
-        return
+            result = original(*args, **kwargs)
+            if asyncio.iscoroutine(result):
+                async def _await_result():
+                    return await result
+                return _await_result()
+            return result
 
-    def _list_tools_ensured(*args, **kwargs):
-        ensure_tools_registered()
-        result = list_tools(*args, **kwargs)
-        if asyncio.iscoroutine(result):
-            async def _await_result():
-                return await result
-            return _await_result()
-        return result
+        _ensured._openlmlib_lazy_hook = True  # type: ignore[attr-defined]
+        setattr(mcp, method_name, _ensured)
 
-    _list_tools_ensured._openlmlib_lazy_hook = True  # type: ignore[attr-defined]
-    mcp.list_tools = _list_tools_ensured  # type: ignore[method-assign]
+    _wrap("list_tools")
+    _wrap("call_tool")
 
 
 _install_list_tools_hook()

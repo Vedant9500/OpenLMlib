@@ -917,12 +917,12 @@ Update **Fix status** as work lands: `Open` → `In progress` → `Fixed` / `Won
 | P5.4 | 5 MCP | Memory/collab tools absent until `main()` | Low | Fixed | Y | ensure_tools_registered + list_tools hook |
 | P6.1 | 6 Memory | Session restart/reuse → `IntegrityError` | High | Fixed | Y | create_session upserts/resumes; clears ended_at |
 | P6.2 | 6 Memory | `retroactive_ingest` writes to different DB | High | Fixed | Y | accept storage/settings_path; MCP passes shared storage |
-| P6.3 | 6 Memory | `MemoryInjectionSettings` entirely dead config | Medium | Fixed | Y | wire enabled/limits/privacy/caveman into memory state |
+| P6.3 | 6 Memory | `MemoryInjectionSettings` entirely dead config | Medium | Fixed | Y | all knobs: auto_log, cleanup, progressive, max tokens, compression |
 | P6.4 | 6 Memory | Wrong observation counts on session_start/inject | Medium | Fixed | Y | as_dict context returns real observation_count |
 | P6.5 | 6 Memory | Progressive `window` no-op; expansion threshold rare | Low | Fixed | Y | implement window neighbors; lower core confidence gate |
 | P7.1 | 7 Collab core | Generated agent IDs rejected (`.` / `:` in model) | High | Fixed | Y | sanitize model segment to [a-zA-Z0-9_-] |
 | P7.2 | 7 Collab core | `to_agent="any"` blocked by MCP validation | High | Fixed | Y | skip agent-id regex for any/empty/None |
-| P7.3 | 7 Collab core | `RulesEngine` never applied on live paths | Medium | Fixed | Y | wire join/send/task plan validation |
+| P7.3 | 7 Collab core | `RulesEngine` never applied on live paths | Medium | Fixed | Y | MessageBus.send + join/plan; any=valid assignment |
 | P7.4 | 7 Collab core | Terminate writes `completed`, not `terminated` | Medium | Fixed | Y | write status terminated |
 | P7.5 | 7 Collab core | `poll_messages` advances offset under filters | Medium | Fixed | Y | match read_messages offset policy |
 | P8.1 | 8 Collab adv | Export maps rejections as `"Unknown error"` | High | Open | N | |

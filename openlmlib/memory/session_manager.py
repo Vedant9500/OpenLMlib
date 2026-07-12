@@ -205,8 +205,14 @@ class SessionManager:
             tool_output: Tool output
 
         Returns:
-            Observation ID, or None if filtered by privacy
+            Observation ID, or None if filtered by privacy / disabled
         """
+        if self.memory_settings is not None and not bool(
+            getattr(self.memory_settings, "auto_log_tool_use", True)
+        ):
+            logger.debug("auto_log_tool_use disabled; skipping observation")
+            return None
+
         # Check if session is active
         if session_id not in self.active_sessions:
             logger.warning(
@@ -423,6 +429,17 @@ class SessionManager:
         # Remove from active sessions
         del self.active_sessions[session_id]
 
+        cleaned = 0
+        if self.memory_settings is not None:
+            try:
+                cleanup_days = int(
+                    getattr(self.memory_settings, "session_cleanup_days", 30) or 30
+                )
+                if cleanup_days > 0:
+                    cleaned = self.storage.cleanup_old_sessions(cleanup_days)
+            except Exception as e:
+                logger.warning("session cleanup failed: %s", e)
+
         result = {
             "session_id": session_id,
             "status": "ended",
@@ -431,6 +448,7 @@ class SessionManager:
             "observation_count": context["observation_count"],
             "duration_seconds": context["duration"],
             "hook_results": hook_results,
+            "sessions_cleaned": cleaned,
         }
 
         logger.info(

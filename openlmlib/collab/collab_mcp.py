@@ -472,7 +472,8 @@ def list_sessions(
     FOR SESSION DETAILS, use session_context after finding the session_id.
 
     PARAMETERS:
-    - status: Filter by status - "active", "completed", "terminated" (optional)
+    - status: Filter by status - "active", "paused", "terminated" (canonical end),
+      or "completed" (legacy ended sessions)
     - limit: Max sessions to return (default: 20, max: 100)
     """
     try:
@@ -676,47 +677,9 @@ def send_message(
             if from_agent:
                 verify_agent_in_session(conn, from_agent, session_id)
 
-            session = collab_db.get_session(conn, session_id) or {}
-            rules_engine = RulesEngine(session.get("rules") or {})
-            has_artifact_ref = bool(
-                metadata
-                and (
-                    metadata.get("artifact_refs")
-                    or metadata.get("artifact_id")
-                    or metadata.get("artifact_ref")
-                )
-            )
-            ok, rule_issues = rules_engine.validate_message(
-                safe_content, msg_type, has_artifact_ref=has_artifact_ref
-            )
-            if not ok:
-                return {
-                    "success": False,
-                    "error": rule_issues[0] if rule_issues else "Message rejected by session rules",
-                    "error_type": "rules_error",
-                    "warnings": rule_issues,
-                }
-
-            if msg_type == "task":
-                pending_count = conn.execute(
-                    """
-                    SELECT COUNT(*) FROM tasks
-                    WHERE session_id = ? AND status = 'pending'
-                    """,
-                    (session_id,),
-                ).fetchone()[0]
-                ok_task, task_err = rules_engine.validate_task_assignment(
-                    to_agent, pending_count
-                )
-                if not ok_task:
-                    return {
-                        "success": False,
-                        "error": task_err or "Task rejected by session rules",
-                        "error_type": "rules_error",
-                    }
-
             now = datetime.now(timezone.utc).isoformat()
 
+            # Session rules enforced inside MessageBus.send (all callers).
             bus = MessageBus(conn, sessions_dir)
             result = bus.send(
                 session_id=session_id,
@@ -727,6 +690,7 @@ def send_message(
                 metadata=metadata,
                 created_at=now,
             )
+            rule_issues = result.get("warnings") or []
 
             # Performance tracking hook
             if msg_type == "complete" and metadata and "task_id" in metadata:

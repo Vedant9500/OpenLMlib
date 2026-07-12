@@ -344,6 +344,7 @@ def start_hypothesis_verification(
             f"{', '.join(selected_ids)}."
         ),
         created_at=created_at,
+        to_agent="any",
         metadata={
             "run_id": run_id,
             "artifact_id": artifact["artifact_id"],

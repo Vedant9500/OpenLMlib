@@ -426,6 +426,44 @@ class TestMessageBus(unittest.TestCase):
         msgs = self.bus.read_new("sess_001", last_seq=3)
         self.assertEqual(len(msgs), 2)
 
+    def test_send_enforces_session_rules_without_mcp(self):
+        from openlmlib.collab.errors import RulesViolationError
+
+        create_session(
+            self.conn,
+            session_id="sess_rules",
+            title="Rules",
+            created_by="test",
+            created_at="2026-04-05T10:00:00Z",
+            rules={"require_artifact_for_results": True, "require_assignment": True},
+        )
+        with self.assertRaises(RulesViolationError):
+            self.bus.send(
+                session_id="sess_rules",
+                from_agent="agent_001",
+                msg_type="result",
+                content="## Summary\nNo artifact\n## Key Facts\n- x",
+                created_at="2026-04-05T10:01:00Z",
+            )
+        with self.assertRaises(RulesViolationError):
+            self.bus.send(
+                session_id="sess_rules",
+                from_agent="agent_001",
+                msg_type="task",
+                content="No target",
+                created_at="2026-04-05T10:02:00Z",
+                to_agent=None,
+            )
+        ok = self.bus.send(
+            session_id="sess_rules",
+            from_agent="agent_001",
+            msg_type="task",
+            content="Open task",
+            created_at="2026-04-05T10:03:00Z",
+            to_agent="any",
+        )
+        self.assertEqual(ok["to_agent"], "any")
+
     def test_tail_and_grep(self):
         create_session(
             self.conn,
@@ -833,8 +871,10 @@ class TestRulesEngine(unittest.TestCase):
         ok, err = engine.validate_task_assignment(None, 0)
         self.assertFalse(ok)
         self.assertIn("assignment", err.lower())
+        # Open pool "any" is a valid assignment target for claimable work.
         ok, err = engine.validate_task_assignment("any", 0)
-        self.assertFalse(ok)
+        self.assertTrue(ok)
+        self.assertIsNone(err)
         ok, err = engine.validate_task_assignment("agent_worker_abc123", 0)
         self.assertTrue(ok)
         self.assertIsNone(err)
@@ -1317,11 +1357,20 @@ class TestCollabMCP(unittest.TestCase):
             session_id=create_resp["session_id"],
             msg_type="task",
             content="Unassigned task",
-            to_agent="any",
+            to_agent=None,
             from_agent=create_resp["your_agent_id"],
         )
         self.assertFalse(unassigned["success"])
         self.assertEqual(unassigned["error_type"], "rules_error")
+
+        open_pool = self.collab_mcp_module.send_message(
+            session_id=create_resp["session_id"],
+            msg_type="task",
+            content="Open claimable task",
+            to_agent="any",
+            from_agent=create_resp["your_agent_id"],
+        )
+        self.assertTrue(open_pool["success"], open_pool)
 
     def test_terminate_writes_terminated_status(self):
         create_resp = self.collab_mcp_module.create_session(

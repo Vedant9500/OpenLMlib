@@ -59,8 +59,9 @@ class RulesEngine:
             ]
 
         if self.rules.get("require_assignment", False) and msg_type == "task":
+            # Assignment may be a concrete agent_id or the open pool sentinel "any".
             warnings.append(
-                "Session rules require assignment; address tasks to a specific agent_id."
+                "Session rules require assignment; set to_agent to an agent_id or 'any'."
             )
 
         return True, warnings
@@ -70,14 +71,19 @@ class RulesEngine:
         assigned_to: Optional[str],
         current_pending_count: int,
     ) -> Tuple[bool, Optional[str]]:
-        """Validate task assignment."""
+        """Validate task assignment.
+
+        ``require_assignment`` means the task must name a target (agent id or
+        the open pool ``any``). Templates intentionally use ``any`` with this
+        rule so workers can claim open work.
+        """
         max_pending = self.rules.get("max_pending_tasks", 20)
         if current_pending_count >= max_pending:
             return False, f"Too many pending tasks ({current_pending_count}/{max_pending})"
         if self.rules.get("require_assignment", False):
             target = (assigned_to or "").strip()
-            if not target or target == "any":
-                return False, "Session rules require assignment to a specific agent"
+            if not target:
+                return False, "Session rules require assignment (agent_id or 'any')"
         return True, None
 
     def should_compact(self, message_count: int, last_compact_seq: int) -> bool:

@@ -23,7 +23,8 @@ class ContextBuilder:
         self,
         retriever: ProgressiveRetriever,
         caveman_enabled: bool = True,
-        caveman_intensity: str = 'ultra'
+        caveman_intensity: str = 'ultra',
+        memory_settings: Optional[Any] = None,
     ):
         """
         Initialize context builder.
@@ -32,10 +33,39 @@ class ContextBuilder:
             retriever: ProgressiveRetriever instance
             caveman_enabled: Enable ultra linguistic compression
             caveman_intensity: Compression level ('lite', 'full', 'ultra')
+            memory_settings: Optional MemoryInjectionSettings
         """
         self.retriever = retriever
+        self.memory_settings = memory_settings
         self.caveman_enabled = caveman_enabled
         self.caveman_intensity = caveman_intensity
+
+    def _compression_on(self) -> bool:
+        if self.memory_settings is not None and not bool(
+            getattr(self.memory_settings, "compression_enabled", True)
+        ):
+            return False
+        return bool(self.caveman_enabled)
+
+    def _max_context_tokens(self) -> Optional[int]:
+        if self.memory_settings is None:
+            return None
+        try:
+            value = int(getattr(self.memory_settings, "max_context_tokens", 0) or 0)
+        except (TypeError, ValueError):
+            return None
+        return value if value > 0 else None
+
+    def _trim_to_token_budget(self, text: str, estimated_tokens: int) -> tuple[str, int]:
+        max_tokens = self._max_context_tokens()
+        if not max_tokens or estimated_tokens <= max_tokens or not text:
+            return text, estimated_tokens
+        # Rough chars≈tokens*4; keep head of block within budget.
+        max_chars = max(64, max_tokens * 4)
+        if len(text) <= max_chars:
+            return text, min(estimated_tokens, max_tokens)
+        trimmed = text[:max_chars].rstrip() + "\n\n[context truncated to max_context_tokens]"
+        return trimmed, max_tokens
 
     def build_session_start_context(
         self,
@@ -83,8 +113,8 @@ class ContextBuilder:
                 }
             return ""
 
-        # Apply caveman compression
-        if self.caveman_enabled:
+        # Apply caveman compression when enabled by settings
+        if self._compression_on():
             from .caveman_compress import compress_context_block
             context_block, caveman_stats = compress_context_block(
                 context_block,
@@ -112,6 +142,7 @@ class ContextBuilder:
         )
 
         context = "\n".join(context_lines)
+        context, estimated_tokens = self._trim_to_token_budget(context, estimated_tokens)
 
         logger.info(
             f"Built session start context: "
@@ -136,8 +167,8 @@ class ContextBuilder:
         """
         Build context for specific user prompt.
 
-        More targeted than session start context.
-        Uses only layer 1 (index) for efficiency.
+        Progressive disclosure (default): layer-1 index only.
+        When progressive_disclosure is False, inject fuller auto context.
 
         Args:
             session_id: Current session ID
@@ -147,6 +178,26 @@ class ContextBuilder:
         Returns:
             Formatted context string for LLM
         """
+        progressive = True
+        if self.memory_settings is not None:
+            progressive = bool(
+                getattr(self.memory_settings, "progressive_disclosure", True)
+            )
+
+        if not progressive:
+            injection = self.retriever.auto_inject_context(
+                session_id, user_prompt, limit
+            )
+            block = injection.get("context_block", "") or ""
+            tokens = int(injection.get("token_estimate") or (len(block) // 4))
+            if self._compression_on() and block:
+                from .caveman_compress import compress_context_block
+                block, _ = compress_context_block(
+                    block, intensity=self.caveman_intensity
+                )
+            block, _ = self._trim_to_token_budget(block, tokens)
+            return block
+
         # Progressive disclosure: Layer 1 only
         index = self.retriever.layer1_search_index(
             user_prompt, limit=limit
@@ -157,7 +208,7 @@ class ContextBuilder:
             return ""
 
         # Apply caveman compression to index entries
-        if self.caveman_enabled:
+        if self._compression_on():
             from .caveman_compress import caveman_compress
             compressed_items = []
             for item in index:
@@ -191,6 +242,7 @@ class ContextBuilder:
         )
 
         context = "\n".join(context_lines)
+        context, _ = self._trim_to_token_budget(context, len(index) * 75)
 
         logger.debug(
             f"Built prompt context: {len(index)} items, {len(context)} chars"

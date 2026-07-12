@@ -733,5 +733,77 @@ class TestHookRegistry(unittest.TestCase):
         self.assertEqual(execution_order, ["high", "low"])
 
 
+class TestMemorySettingsWiring(unittest.TestCase):
+    """Residual MemoryInjectionSettings knobs."""
+
+    def setUp(self):
+        self.conn = sqlite3.connect(":memory:")
+        self.storage = MemoryStorage(self.conn)
+
+    def tearDown(self):
+        self.conn.close()
+
+    def test_auto_log_tool_use_false_skips_observation(self):
+        class _S:
+            auto_log_tool_use = False
+            privacy_filtering = True
+            max_observations_per_session = 500
+
+        mgr = SessionManager(self.storage, memory_settings=_S())
+        mgr.on_session_start("s1", user_id="u")
+        obs_id = mgr.on_tool_use("s1", "Read", "x", "y")
+        self.assertIsNone(obs_id)
+
+    def test_session_end_runs_cleanup_with_configured_days(self):
+        class _S:
+            auto_log_tool_use = True
+            privacy_filtering = True
+            max_observations_per_session = 500
+            session_cleanup_days = 1
+
+        # Old ended session past cutoff
+        self.storage.create_session("old_sess", "u")
+        self.storage.end_session("old_sess")
+        self.conn.execute(
+            "UPDATE memory_sessions SET created_at = ?, ended_at = ? WHERE session_id = ?",
+            ("2000-01-01T00:00:00+00:00", "2000-01-01T01:00:00+00:00", "old_sess"),
+        )
+        self.conn.commit()
+
+        mgr = SessionManager(self.storage, memory_settings=_S())
+        mgr.on_session_start("new_sess", user_id="u")
+        result = mgr.on_session_end("new_sess", generate_summary=False)
+        self.assertGreaterEqual(result.get("sessions_cleaned", 0), 1)
+        self.assertIsNone(self.storage.get_session("old_sess") if hasattr(self.storage, "get_session") else None)
+        row = self.conn.execute(
+            "SELECT 1 FROM memory_sessions WHERE session_id = ?", ("old_sess",)
+        ).fetchone()
+        self.assertIsNone(row)
+
+    def test_compression_and_token_budget_and_progressive(self):
+        class _S:
+            compression_enabled = False
+            progressive_disclosure = False
+            max_context_tokens = 20
+            caveman_enabled = True
+
+        self.storage.create_session("prev", "u")
+        self.storage.add_observation({
+            "session_id": "prev",
+            "tool_name": "Read",
+            "tool_input": "file",
+            "tool_output": "x" * 500,
+        })
+        retriever = ProgressiveRetriever(self.storage)
+        builder = ContextBuilder(retriever, caveman_enabled=True, memory_settings=_S())
+        out = builder.build_session_start_context("curr", query="x", limit=10, as_dict=True)
+        self.assertIn("context_block", out)
+        # Budget forces truncation marker or short block
+        self.assertLessEqual(out.get("estimated_tokens", 0), 20)
+        prompt = builder.build_prompt_context("curr", "x", limit=5)
+        # progressive_disclosure=False uses auto_inject path (not layer-1 list)
+        self.assertIsInstance(prompt, str)
+
+
 if __name__ == "__main__":
     unittest.main()

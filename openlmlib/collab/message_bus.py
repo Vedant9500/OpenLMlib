@@ -17,7 +17,8 @@ from typing import Dict, List, Optional
 import sqlite3
 
 from . import db
-from .errors import VALID_MESSAGE_TYPES, InvalidMessageTypeError
+from .errors import VALID_MESSAGE_TYPES, InvalidMessageTypeError, RulesViolationError
+from .rules_engine import RulesEngine
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,44 @@ class MessageBus:
         elif not isinstance(content, str):
             content = json.dumps(content, ensure_ascii=False)
 
+        # Enforce session rules for all callers (MCP, library API, TUI).
+        # System messages skip rules so lifecycle events always land.
+        rule_warnings: List[str] = []
+        if from_agent != "system" and msg_type != "system":
+            session = db.get_session(self.conn, session_id) or {}
+            engine = RulesEngine(session.get("rules") or {})
+            has_artifact_ref = bool(
+                metadata
+                and (
+                    metadata.get("artifact_refs")
+                    or metadata.get("artifact_id")
+                    or metadata.get("artifact_ref")
+                )
+            )
+            ok, issues = engine.validate_message(
+                content, msg_type, has_artifact_ref=has_artifact_ref
+            )
+            if not ok:
+                raise RulesViolationError(
+                    issues[0] if issues else "Message rejected by session rules"
+                )
+            rule_warnings = list(issues or [])
+            if msg_type == "task":
+                pending_count = self.conn.execute(
+                    """
+                    SELECT COUNT(*) FROM tasks
+                    WHERE session_id = ? AND status = 'pending'
+                    """,
+                    (session_id,),
+                ).fetchone()[0]
+                ok_task, task_err = engine.validate_task_assignment(
+                    to_agent, pending_count
+                )
+                if not ok_task:
+                    raise RulesViolationError(
+                        task_err or "Task rejected by session rules"
+                    )
+
         msg_id = msg_id or f"msg_{uuid.uuid4().hex[:12]}"
 
         seq = db.insert_message(
@@ -137,7 +176,7 @@ class MessageBus:
             session_id, seq, msg_type, from_agent,
         )
 
-        return {
+        result = {
             "msg_id": msg_id,
             "seq": seq,
             "session_id": session_id,
@@ -146,6 +185,9 @@ class MessageBus:
             "to_agent": to_agent,
             "created_at": created_at,
         }
+        if rule_warnings:
+            result["warnings"] = rule_warnings
+        return result
 
     def read_new(
         self,
