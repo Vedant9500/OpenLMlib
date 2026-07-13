@@ -17,21 +17,18 @@ let cachedPythonCmd = undefined;
 
 function getPythonCmd() {
   if (cachedPythonCmd !== undefined) return cachedPythonCmd;
-  // Try python3 first (Unix), then py (Windows)
-  try {
-    execSync('python3 --version', { stdio: 'ignore' });
-    cachedPythonCmd = 'python3';
-    return cachedPythonCmd;
-  } catch {
+  // Prefer python3 (Unix), then Windows py launcher, then plain python (python.org).
+  for (const cmd of ['python3', 'py', 'python']) {
     try {
-      execSync('py --version', { stdio: 'ignore' });
-      cachedPythonCmd = 'py';
+      execSync(`${cmd} --version`, { stdio: 'ignore' });
+      cachedPythonCmd = cmd;
       return cachedPythonCmd;
     } catch {
-      cachedPythonCmd = null;
-      return null;
+      // try next
     }
   }
+  cachedPythonCmd = null;
+  return null;
 }
 
 function checkPythonVersion() {

@@ -6,4 +6,4 @@ tomli>=2.0.0; python_version<'3.11'
 tomli-w>=1.0.0,<2.0.0
 # Optional: faiss-cpu>=1.7.4 (or faiss-gpu) for vector search
 # Optional: hnswlib as a lightweight ANN alternative
-# Dev: pytest>=7.0, pytest-cov>=4.0
+# Dev: suite uses stdlib unittest (python -m unittest discover -s tests -p "test_*.py")

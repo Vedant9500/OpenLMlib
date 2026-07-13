@@ -340,13 +340,10 @@ export OPENLMLIB_MEMORY_MAX_CONTEXT_TOKENS=4000
 
 ```bash
 # All memory tests
-python -m pytest tests/test_memory_injection.py -v
+python -m unittest tests.test_memory_injection -v
 
-# Specific test class
-python -m pytest tests/test_memory_injection.py::TestSessionManager -v
-
-# With coverage
-python -m pytest tests/test_memory_injection.py --cov=openlmlib.memory
+# Full suite
+python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
 ### Manual Testing

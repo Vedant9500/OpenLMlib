@@ -2,6 +2,7 @@ import { execFileSync, execSync } from 'child_process';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 
 const OPENLMLIB_HOME = process.env.OPENLMLIB_HOME || path.join(os.homedir(), '.openlmlib');
 const VENV_DIR = path.join(OPENLMLIB_HOME, 'venv');
@@ -13,20 +14,18 @@ let cachedPythonCmd = undefined;
 
 function getPythonCmd() {
   if (cachedPythonCmd !== undefined) return cachedPythonCmd;
-  try {
-    execSync('python3 --version', { stdio: 'ignore' });
-    cachedPythonCmd = 'python3';
-    return cachedPythonCmd;
-  } catch {
+  // Prefer python3 (Unix), then Windows py launcher, then plain python (python.org).
+  for (const cmd of ['python3', 'py', 'python']) {
     try {
-      execSync('py --version', { stdio: 'ignore' });
-      cachedPythonCmd = 'py';
+      execSync(`${cmd} --version`, { stdio: 'ignore' });
+      cachedPythonCmd = cmd;
       return cachedPythonCmd;
     } catch {
-      cachedPythonCmd = null;
-      return null;
+      // try next
     }
   }
+  cachedPythonCmd = null;
+  return null;
 }
 
 function getActivePythonCmd() {
@@ -88,13 +87,17 @@ function hasOpenLMlibProject(dirPath) {
 }
 
 function discoverLocalSourceCandidates(seedPath) {
+  // Prefer explicit seed, then npm package root (installer/), then cwd parents.
+  // Published layout: node_modules/openlmlib/{pyproject.toml,openlmlib/,src/}
+  const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const paths = [
     seedPath,
+    packageRoot,
     process.cwd(),
     path.resolve(process.cwd(), '..'),
     path.resolve(process.cwd(), '..', '..'),
   ].filter(Boolean);
-  return [...new Set(paths)];
+  return [...new Set(paths.map((p) => path.resolve(p)))];
 }
 
 function validateInstalledOpenLMlib() {

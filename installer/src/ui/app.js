@@ -96,7 +96,8 @@ function App({ pythonCheck, hasPackageManager, installerDir }) {
 
           const s2 = addStep('Installing openlmlib...');
           updateStep(s2, 'running');
-          installFromLocal(path.resolve(installerDir, '..', '..'), (msg) => updateStep(s2, 'done'));
+          // installerDir is .../openlmlib/src; package root is one level up (bundled pyproject + openlmlib/).
+          installFromLocal(path.resolve(installerDir, '..'), (msg) => updateStep(s2, 'done'));
           updateStep(s2, 'done');
 
           const s4 = addStep('Configuring MCP clients...');

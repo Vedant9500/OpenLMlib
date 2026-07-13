@@ -362,7 +362,7 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e ".[dev,faiss]"
 
 # Run tests
-python -m pytest tests/ -v
+python -m unittest discover -s tests -p "test_*.py" -v
 
 # Run MCP server manually
 python -m openlmlib.mcp_server --settings ./config/settings.json

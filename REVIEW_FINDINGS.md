@@ -936,16 +936,16 @@ Update **Fix status** as work lands: `Open` → `In progress` → `Fixed` / `Won
 | P9.3 | 9 Co-scientist | Start verification completes all gen tasks | Medium | Fixed | Y | complete only handoff/adjudicator marker tasks |
 | P9.4 | 9 Co-scientist | Supported-finding export drops write-gate detail | Medium | Fixed | Y | surface issues/status; claim-prefixed evidence |
 | P9.5 | 9 Co-scientist | URL citations valid with no reachability check | Low | Fixed | Y | opt-in HEAD/GET via OPENLMLIB_CHECK_CITATION_URLS or flag |
-| P10.1 | 10 Installer | TTY npm install never finds bundled Python source | High | Open | N | |
-| P10.2 | 10 Installer | CI `npm ci` fails (lockfile gitignored) | High | Open | N | |
-| P10.3 | 10 Installer | Python discovery never tries `python` | Medium | Open | N | |
-| P10.4 | 10 Installer | Test docs/dev extras disagree with CI (pytest vs unittest) | Low | Open | N | |
+| P10.1 | 10 Installer | TTY npm install never finds bundled Python source | High | Fixed | Y | interactive seed = package root; install.js also probes package root |
+| P10.2 | 10 Installer | CI `npm ci` fails (lockfile gitignored) | High | Fixed | Y | stop ignoring installer/package-lock.json; keep npm ci |
+| P10.3 | 10 Installer | Python discovery never tries `python` | Medium | Fixed | Y | try python3, py, then python |
+| P10.4 | 10 Installer | Test docs/dev extras disagree with CI (pytest vs unittest) | Low | Fixed | Y | README/docs + empty dev extra use unittest |
 
 ### Tracker summary
 
 | Severity | Total | Open | In progress | Fixed | Won't fix / Deferred |
 |----------|------:|-----:|------------:|------:|---------------------:|
-| High | 15 | 2 | 0 | 13 | 0 |
-| Medium | 24 | 1 | 0 | 23 | 0 |
-| Low | 10 | 2 | 0 | 8 | 0 |
-| **All** | **49** | **5** | **0** | **44** | **0** |
+| High | 15 | 0 | 0 | 15 | 0 |
+| Medium | 24 | 0 | 0 | 24 | 0 |
+| Low | 10 | 1 | 0 | 9 | 0 |
+| **All** | **49** | **1** | **0** | **48** | **0** |
