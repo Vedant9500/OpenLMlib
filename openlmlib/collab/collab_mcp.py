@@ -32,6 +32,7 @@ from .message_bus import MessageBus
 from .artifact_store import ArtifactStore
 from .state_manager import StateManager
 from .context_compiler import ContextCompiler
+from .compactor import SessionCompactor
 from . import db as collab_db
 from .errors import (
     AgentNotAuthorizedError,
@@ -261,6 +262,8 @@ def _require_reader_access(
     conn: sqlite3.Connection,
     session_id: str,
     agent_id: str,
+    *,
+    require_active_agent: bool = True,
 ) -> Dict:
     """Authorize a session-scoped read for a session member."""
     if not agent_id:
@@ -271,8 +274,44 @@ def _require_reader_access(
     if session is None:
         raise SessionNotFoundError(f"Session {session_id} not found")
 
-    verify_agent_in_session(conn, agent_id, session_id)
+    verify_agent_in_session(
+        conn,
+        agent_id,
+        session_id,
+        require_active=require_active_agent,
+    )
     return session
+
+
+def _maybe_auto_compact(
+    conn: sqlite3.Connection,
+    sessions_dir: Path,
+    session_id: str,
+) -> Optional[Dict]:
+    """Run SessionCompactor when session rules exceed auto_compact threshold."""
+    session = collab_db.get_session(conn, session_id)
+    if session is None:
+        return None
+    rules = session.get("rules") or {}
+    threshold = rules.get("auto_compact_after_messages")
+    if threshold is None:
+        return None
+    try:
+        threshold_int = int(threshold)
+    except (TypeError, ValueError):
+        return None
+    if threshold_int <= 0:
+        return None
+
+    bus = MessageBus(conn, sessions_dir)
+    artifact_store = ArtifactStore(conn, sessions_dir)
+    state_manager = StateManager(conn)
+    compactor = SessionCompactor(conn, sessions_dir, bus, artifact_store, state_manager)
+    try:
+        return compactor.check_and_compact(session_id, auto_compact_threshold=threshold_int)
+    except Exception:
+        logger.exception("Auto-compaction failed for session %s", session_id)
+        return None
 
 
 collab_mcp = FastMCP("OpenLMlib CollabSessions")
@@ -756,6 +795,10 @@ def send_message(
             }
             if rule_issues:
                 response["warnings"] = rule_issues
+
+            compact_result = _maybe_auto_compact(conn, sessions_dir, session_id)
+            if compact_result:
+                response["compacted"] = compact_result
             return response
     except Exception as e:
         return _handle_tool_error("send_message", e)
@@ -1168,8 +1211,16 @@ def session_context(
         max_messages = max(1, min(max_messages, 200))
 
         with _collab_connection() as (conn, sessions_dir):
-            verify_session_exists_and_active(conn, session_id)
-            _require_reader_access(conn, session_id, agent_id)
+            # Read-only: allow completed/terminated sessions (post-review / export).
+            session = collab_db.get_session(conn, session_id)
+            if session is None:
+                raise SessionNotFoundError(f"Session {session_id} not found")
+            _require_reader_access(
+                conn,
+                session_id,
+                agent_id,
+                require_active_agent=False,
+            )
 
             bus = MessageBus(conn, sessions_dir)
             artifact_store = ArtifactStore(conn, sessions_dir)
@@ -1181,6 +1232,7 @@ def session_context(
             return {
                 "structured_context": context,
                 "formatted_context": formatted,
+                "session_status": session.get("status"),
             }
     except Exception as e:
         return _handle_tool_error("session_context", e)

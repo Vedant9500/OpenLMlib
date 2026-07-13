@@ -1016,6 +1016,52 @@ class TestSessionTemplates(unittest.TestCase):
         tpl = get_template("nonexistent")
         self.assertIsNone(tpl)
 
+    def test_custom_templates_resolve_data_root_against_settings_parent(self):
+        import json
+        import os
+        import openlmlib.collab.templates as templates_mod
+
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            settings_path = Path(tmp.name) / "cfg" / "settings.json"
+            settings_path.parent.mkdir(parents=True)
+            settings_path.write_text(json.dumps({"data_root": "data"}), encoding="utf-8")
+            prev = os.environ.get("OPENLMLIB_SETTINGS")
+            os.environ["OPENLMLIB_SETTINGS"] = str(settings_path)
+            templates_mod._custom_templates_dir = None
+            templates_mod._clear_template_cache()
+
+            tpl_dir = templates_mod._get_custom_templates_dir()
+            expected = (settings_path.parent / "data" / "collab_templates").resolve()
+            self.assertEqual(tpl_dir.resolve(), expected)
+
+            templates_mod.create_template(
+                "unit_custom_tpl",
+                "Unit Custom",
+                "desc",
+                [{"step": 1, "task": "do work", "assigned_to": "any"}],
+            )
+            self.assertTrue((expected / "unit_custom_tpl.json").exists())
+        finally:
+            templates_mod._custom_templates_dir = None
+            templates_mod._clear_template_cache()
+            if prev is None:
+                os.environ.pop("OPENLMLIB_SETTINGS", None)
+            else:
+                os.environ["OPENLMLIB_SETTINGS"] = prev
+            tmp.cleanup()
+
+    def test_create_template_rejects_path_escaping_id(self):
+        from openlmlib.collab.templates import create_template
+
+        with self.assertRaises(ValueError):
+            create_template(
+                "..\\evil",
+                "Evil",
+                "desc",
+                [{"step": 1, "task": "x", "assigned_to": "any"}],
+            )
+
 
 class TestMultiSession(unittest.TestCase):
     """Test multi-session support."""
@@ -1125,7 +1171,10 @@ class TestExportBridge(unittest.TestCase):
             kwargs = add_finding_mock.call_args.kwargs
             self.assertTrue(kwargs["confirm"])
             self.assertNotIn("source", kwargs)
-            self.assertEqual(kwargs["claim"], "Summary")
+            # Short titles are expanded from artifact body so write-gate similarity can pass.
+            self.assertTrue(kwargs["claim"])
+            self.assertIn("Exportable content", kwargs["evidence"][0])
+            self.assertGreaterEqual(len(kwargs["reasoning"]), 50)
         finally:
             if conn is not None:
                 conn.close()
@@ -1158,6 +1207,59 @@ class TestExportBridge(unittest.TestCase):
 
             self.assertEqual(export_result["exported"], 0)
             self.assertEqual(export_result["error_type"], "validation_error")
+        finally:
+            if conn is not None:
+                conn.close()
+            tmp.cleanup()
+
+    def test_export_bridge_surfaces_write_gate_issues(self):
+        from openlmlib.collab.export_bridge import export_session_to_library
+
+        tmp = tempfile.TemporaryDirectory()
+        conn = None
+        try:
+            sessions_dir = Path(tmp.name) / "sessions"
+            sessions_dir.mkdir(parents=True)
+            conn = connect_collab_db(Path(tmp.name) / "test.db")
+            init_collab_db(conn)
+            result = create_collab_session(
+                conn,
+                sessions_dir,
+                title="Export Test",
+                created_by="orch",
+            )
+            store = ArtifactStore(conn, sessions_dir)
+            store.save(
+                session_id=result["session_id"],
+                created_by=result["agent_id"],
+                title="Summary",
+                content="Exportable content",
+                created_at="2026-04-05T10:01:00Z",
+            )
+
+            with patch("openlmlib.collab.export_bridge.add_finding") as add_finding_mock:
+                add_finding_mock.return_value = {
+                    "status": "rejected",
+                    "issues": [
+                        {
+                            "field": "claim_evidence_sim",
+                            "message": "Claim/evidence similarity 0.20 below threshold 0.70",
+                        }
+                    ],
+                }
+                export_result = export_session_to_library(
+                    settings_path=Path(tmp.name) / "settings.json",
+                    session_id=result["session_id"],
+                    collab_conn=conn,
+                    sessions_dir=sessions_dir,
+                )
+
+            self.assertEqual(export_result["exported"], 0)
+            self.assertEqual(export_result["failed"], 1)
+            failure = export_result["failures"][0]
+            self.assertEqual(failure["status"], "rejected")
+            self.assertIn("similarity", failure["reason"].lower())
+            self.assertEqual(failure["issues"][0]["field"], "claim_evidence_sim")
         finally:
             if conn is not None:
                 conn.close()
@@ -1431,6 +1533,49 @@ class TestCollabMCP(unittest.TestCase):
         )
         contents = [msg["content"] for msg in unfiltered["messages"]]
         self.assertIn("Task message for poll", contents)
+
+    def test_session_context_allows_terminated_sessions(self):
+        create_resp = self.collab_mcp_module.create_session(
+            title="Context After Terminate",
+            task_description="Review completed work",
+            created_by="orch-model",
+        )
+        term = self.collab_mcp_module.terminate_session(
+            session_id=create_resp["session_id"],
+            orchestrator_id=create_resp["your_agent_id"],
+            summary="done",
+        )
+        self.assertTrue(term["success"], term)
+
+        ctx = self.collab_mcp_module.session_context(
+            session_id=create_resp["session_id"],
+            agent_id=create_resp["your_agent_id"],
+        )
+        self.assertNotIn("error", ctx)
+        self.assertEqual(ctx.get("session_status"), "terminated")
+        self.assertIn("formatted_context", ctx)
+
+    def test_send_message_auto_compacts_when_threshold_hit(self):
+        create_resp = self.collab_mcp_module.create_session(
+            title="Auto Compact Session",
+            task_description="Trigger compaction",
+            created_by="orch-model",
+            rules={"auto_compact_after_messages": 2, "require_artifact_for_results": False},
+        )
+        session_id = create_resp["session_id"]
+        agent_id = create_resp["your_agent_id"]
+
+        # create_session already inserts a system message (seq=1); next send
+        # reaches threshold 2 and should auto-compact.
+        first = self.collab_mcp_module.send_message(
+            session_id=session_id,
+            msg_type="update",
+            content="First update triggers compact",
+            from_agent=agent_id,
+        )
+        self.assertTrue(first["success"], first)
+        self.assertIn("compacted", first)
+        self.assertIn("compacted_at", first["compacted"])
 
 
 if __name__ == "__main__":

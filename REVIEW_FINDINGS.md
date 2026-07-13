@@ -925,11 +925,11 @@ Update **Fix status** as work lands: `Open` → `In progress` → `Fixed` / `Won
 | P7.3 | 7 Collab core | `RulesEngine` never applied on live paths | Medium | Fixed | Y | MessageBus.send + join/plan; any=valid assignment |
 | P7.4 | 7 Collab core | Terminate writes `completed`, not `terminated` | Medium | Fixed | Y | write status terminated |
 | P7.5 | 7 Collab core | `poll_messages` advances offset under filters | Medium | Fixed | Y | match read_messages offset policy |
-| P8.1 | 8 Collab adv | Export maps rejections as `"Unknown error"` | High | Open | N | |
-| P8.2 | 8 Collab adv | Custom templates resolve `data_root` vs CWD | High | Open | N | |
-| P8.3 | 8 Collab adv | `create_template` path-escaping `template_id` | Medium | Open | N | |
-| P8.4 | 8 Collab adv | Auto-compaction never runs on MCP path | Medium | Open | N | |
-| P8.5 | 8 Collab adv | `session_context` refuses non-active sessions | Medium | Open | N | |
+| P8.1 | 8 Collab adv | Export maps rejections as `"Unknown error"` | High | Fixed | Y | surface issues/status; improve claim/evidence/reasoning for write-gate |
+| P8.2 | 8 Collab adv | Custom templates resolve `data_root` vs CWD | High | Fixed | Y | relative data_root vs settings parent (same as collab MCP) |
+| P8.3 | 8 Collab adv | `create_template` path-escaping `template_id` | Medium | Fixed | Y | reject non-[a-zA-Z0-9_-]; resolve under templates dir |
+| P8.4 | 8 Collab adv | Auto-compaction never runs on MCP path | Medium | Fixed | Y | check_and_compact after send_message using session rules |
+| P8.5 | 8 Collab adv | `session_context` refuses non-active sessions | Medium | Fixed | Y | allow member read on completed/terminated sessions |
 | P8.6 | 8 Collab adv | Multi-session history per ephemeral agent_id | Low | Open | N | |
 | P9.1 | 9 Co-scientist | Run state full-blob replace / dual-session CAS UX | Medium | Open | N | reclassified from High |
 | P9.2 | 9 Co-scientist | Mutations lack agent membership / role checks | High | Open | N | |
@@ -945,7 +945,7 @@ Update **Fix status** as work lands: `Open` → `In progress` → `Fixed` / `Won
 
 | Severity | Total | Open | In progress | Fixed | Won't fix / Deferred |
 |----------|------:|-----:|------------:|------:|---------------------:|
-| High | 15 | 5 | 0 | 10 | 0 |
-| Medium | 24 | 6 | 0 | 18 | 0 |
-| Low | 10 | 4 | 0 | 6 | 0 |
-| **All** | **49** | **15** | **0** | **34** | **0** |
+| High | 15 | 3 | 0 | 12 | 0 |
+| Medium | 24 | 4 | 0 | 20 | 0 |
+| Low | 10 | 3 | 0 | 7 | 0 |
+| **All** | **49** | **10** | **0** | **39** | **0** |

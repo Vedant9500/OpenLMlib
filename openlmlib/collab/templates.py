@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import functools
+import os
+import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -18,6 +20,8 @@ from openlmlib.co_scientist.templates import (
     CO_SCIENTIST_GENERATE_TEMPLATE,
     CO_SCIENTIST_VERIFY_TEMPLATE,
 )
+
+TEMPLATE_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 TEMPLATES: Dict[str, Dict] = {
     "deep_research": {
@@ -116,27 +120,41 @@ TEMPLATES: Dict[str, Dict] = {
 _custom_templates_dir: Optional[Path] = None
 
 
+def _validate_template_id(template_id: str) -> str:
+    """Reject empty or path-escaping template identifiers."""
+    if not isinstance(template_id, str) or not TEMPLATE_ID_RE.fullmatch(template_id):
+        raise ValueError(
+            "template_id must match [a-zA-Z0-9_-]+ (no path separators or dots)"
+        )
+    return template_id
+
+
 def _get_custom_templates_dir() -> Path:
-    """Get the directory for custom template JSON files."""
+    """Get the directory for custom template JSON files.
+
+    Relative data_root is resolved against the settings file parent, matching
+    collab MCP path resolution so templates land next to collab_sessions.db.
+    """
     global _custom_templates_dir
     if _custom_templates_dir is not None:
         return _custom_templates_dir
 
-    import os
     settings_path_str = os.environ.get("OPENLMLIB_SETTINGS")
     if settings_path_str:
         settings_path = Path(settings_path_str)
     else:
-         try:
-             from openlmlib.settings import resolve_global_settings_path
-             settings_path = resolve_global_settings_path()
-         except ImportError:
+        try:
+            from openlmlib.settings import resolve_global_settings_path
+            settings_path = resolve_global_settings_path()
+        except ImportError:
             settings_path = Path("settings.json")
 
     if settings_path.exists():
         with open(settings_path) as f:
             cfg = json.load(f)
         data_root = Path(cfg.get("data_root", "data"))
+        if not data_root.is_absolute():
+            data_root = settings_path.parent / data_root
     else:
         data_root = Path("data")
 
@@ -169,10 +187,22 @@ def _clear_template_cache() -> None:
     _load_custom_templates.cache_clear()
 
 
+def _template_file_path(template_id: str) -> Path:
+    """Resolve a template path and ensure it stays under the templates dir."""
+    safe_id = _validate_template_id(template_id)
+    templates_dir = _get_custom_templates_dir().resolve()
+    fpath = (templates_dir / f"{safe_id}.json").resolve()
+    try:
+        fpath.relative_to(templates_dir)
+    except ValueError as exc:
+        raise ValueError(f"template path escapes templates directory: {template_id}") from exc
+    return fpath
+
+
 def _save_custom_template(template_id: str, data: Dict) -> Path:
     """Save a custom template to disk as JSON."""
-    templates_dir = _get_custom_templates_dir()
-    fpath = templates_dir / f"{template_id}.json"
+    fpath = _template_file_path(template_id)
+    fpath.parent.mkdir(parents=True, exist_ok=True)
     with open(fpath, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     # Clear cache so new template is picked up
@@ -182,8 +212,10 @@ def _save_custom_template(template_id: str, data: Dict) -> Path:
 
 def _delete_custom_template(template_id: str) -> bool:
     """Delete a custom template from disk."""
-    templates_dir = _get_custom_templates_dir()
-    fpath = templates_dir / f"{template_id}.json"
+    try:
+        fpath = _template_file_path(template_id)
+    except ValueError:
+        return False
     if fpath.exists():
         fpath.unlink()
         # Clear cache so deletion is picked up
@@ -255,14 +287,15 @@ def create_template(
         The registered template dict
     """
     from .rules_engine import DEFAULT_RULES
+    safe_id = _validate_template_id(template_id)
     template = {
-        "template_id": template_id,
+        "template_id": safe_id,
         "name": name,
         "description": description,
         "plan": plan,
         "rules": {**DEFAULT_RULES, **(rules or {})},
     }
-    _save_custom_template(template_id, template)
+    _save_custom_template(safe_id, template)
     return template
 
 
