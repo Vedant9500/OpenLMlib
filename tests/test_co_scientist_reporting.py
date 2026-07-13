@@ -245,6 +245,43 @@ class TestCoScientistReporting(unittest.TestCase):
         self.assertIn("similarity", failure["reason"].lower())
         self.assertEqual(failure["issues"][0]["field"], "claim_evidence_sim")
 
+    def test_mcp_export_requires_orchestrator_created_by(self):
+        import os
+        import openlmlib.collab.collab_mcp as collab_mcp_module
+
+        settings_path = self.root / "config" / "settings.json"
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        data_root = self.root / "data"
+        data_root.mkdir(parents=True, exist_ok=True)
+        settings_path.write_text(json.dumps({"data_root": str(data_root)}), encoding="utf-8")
+        prev = os.environ.get("OPENLMLIB_SETTINGS")
+        os.environ["OPENLMLIB_SETTINGS"] = str(settings_path)
+        collab_mcp_module._cached_paths = None
+        collab_mcp_module._cached_paths_mtime = 0.0
+        try:
+            created = collab_mcp_module.create_co_scientist_run(
+                topic="Research export auth for co-scientist findings",
+                created_by="export-orch",
+                top_k=1,
+            )
+            denied = collab_mcp_module.export_co_scientist_findings(
+                run_id=created["run_id"],
+                created_by="agent_not_a_member_zzzz",
+            )
+            self.assertFalse(denied.get("success", True))
+            self.assertEqual(denied.get("error_type"), "authorization_error")
+
+            missing = collab_mcp_module.export_co_scientist_findings(
+                run_id=created["run_id"],
+                created_by="",
+            )
+            self.assertFalse(missing.get("success", True))
+        finally:
+            if prev is None:
+                os.environ.pop("OPENLMLIB_SETTINGS", None)
+            else:
+                os.environ["OPENLMLIB_SETTINGS"] = prev
+
 
 if __name__ == "__main__":
     unittest.main()

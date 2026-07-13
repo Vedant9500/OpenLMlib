@@ -12,26 +12,62 @@ from typing import Dict, List, Optional
 from .db import normalize_fts_query
 
 
-def get_agent_sessions(conn: sqlite3.Connection, agent_id: str, status: Optional[str] = None) -> List[Dict]:
-    """Get all sessions an agent has participated in.
+def get_agent_sessions(
+    conn: sqlite3.Connection,
+    agent_id: str,
+    status: Optional[str] = None,
+    *,
+    match_model: bool = True,
+) -> List[Dict]:
+    """Get sessions an agent has participated in.
 
     Args:
         conn: SQLite connection
-        agent_id: Agent identifier
+        agent_id: Agent identifier and/or model name used at join/create time
         status: Optional status filter (active, completed, terminated)
+        match_model: When True (default), also return sessions for other
+            ephemeral agent_ids that share the same agents.model value, so
+            "what sessions have I been in?" works across create/join ids.
 
     Returns:
         List of session dicts with participation info
     """
-    query = """
-        SELECT s.session_id, s.title, s.status, s.orchestrator,
+    identity = (agent_id or "").strip()
+    if not identity:
+        return []
+
+    models: List[str] = []
+    if match_model:
+        model_rows = conn.execute(
+            """
+            SELECT DISTINCT model FROM agents
+            WHERE agent_id = ? OR model = ?
+            """,
+            (identity, identity),
+        ).fetchall()
+        models = [
+            (row["model"] if isinstance(row, sqlite3.Row) else row[0])
+            for row in model_rows
+            if (row["model"] if isinstance(row, sqlite3.Row) else row[0])
+        ]
+
+    identity_clause = "(a.agent_id = ? OR a.model = ?"
+    params: list = [identity, identity]
+    if models:
+        placeholders = ",".join("?" for _ in models)
+        identity_clause += f" OR a.model IN ({placeholders})"
+        params.extend(models)
+    identity_clause += ")"
+
+    query = f"""
+        SELECT DISTINCT s.session_id, s.title, s.status, s.orchestrator,
                s.created_at, s.updated_at,
+               a.agent_id as matched_agent_id, a.model as agent_model,
                a.role as agent_role, a.joined_at, a.last_seen
         FROM agents a
         JOIN sessions s ON a.session_id = s.session_id
-        WHERE a.agent_id = ?
+        WHERE {identity_clause}
     """
-    params: list = [agent_id]
 
     if status:
         query += " AND s.status = ?"
@@ -41,7 +77,42 @@ def get_agent_sessions(conn: sqlite3.Connection, agent_id: str, status: Optional
 
     cursor = conn.execute(query, params)
     rows = cursor.fetchall()
-    return [dict(row) for row in rows]
+    # Prefer one row per session (latest matched agent membership).
+    by_session: Dict[str, Dict] = {}
+    for row in rows:
+        item = dict(row)
+        sid = item["session_id"]
+        prev = by_session.get(sid)
+        if prev is None or (item.get("last_seen") or "") >= (prev.get("last_seen") or ""):
+            by_session[sid] = item
+    return list(by_session.values())
+
+
+def identities_share_model(conn: sqlite3.Connection, identity_a: str, identity_b: str) -> bool:
+    """True if two identities refer to the same agent_id or the same agents.model."""
+    a = (identity_a or "").strip()
+    b = (identity_b or "").strip()
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    models_a = {
+        (row["model"] if isinstance(row, sqlite3.Row) else row[0])
+        for row in conn.execute(
+            "SELECT DISTINCT model FROM agents WHERE agent_id = ? OR model = ?",
+            (a, a),
+        ).fetchall()
+    }
+    models_b = {
+        (row["model"] if isinstance(row, sqlite3.Row) else row[0])
+        for row in conn.execute(
+            "SELECT DISTINCT model FROM agents WHERE agent_id = ? OR model = ?",
+            (b, b),
+        ).fetchall()
+    }
+    if a in models_b or b in models_a:
+        return True
+    return bool(models_a and models_b and models_a.intersection(models_b))
 
 
 def get_active_sessions_summary(

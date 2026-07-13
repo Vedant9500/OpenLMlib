@@ -1099,6 +1099,32 @@ class TestMultiSession(unittest.TestCase):
         self.assertEqual(len(sessions), 1)
         self.assertEqual(sessions[0]["session_id"], self.r1["session_id"])
 
+    def test_get_agent_sessions_matches_model_across_ephemeral_ids(self):
+        from openlmlib.collab.multi_session import get_agent_sessions, identities_share_model
+        from openlmlib.collab.session import create_collab_session, join_collab_session
+
+        # Same model joins two sessions under different ephemeral agent_ids.
+        r3 = create_collab_session(self.conn, self.sessions_dir, "Research 3", "opus", "Task 3")
+        worker2 = join_collab_session(
+            self.conn,
+            self.sessions_dir,
+            r3["session_id"],
+            "codex",
+            capabilities=["code"],
+        )
+        self.assertNotEqual(self.worker["agent_id"], worker2["agent_id"])
+
+        by_model = get_agent_sessions(self.conn, "codex")
+        session_ids = {s["session_id"] for s in by_model}
+        self.assertIn(self.r1["session_id"], session_ids)
+        self.assertIn(r3["session_id"], session_ids)
+
+        by_other_id = get_agent_sessions(self.conn, worker2["agent_id"])
+        other_ids = {s["session_id"] for s in by_other_id}
+        self.assertIn(self.r1["session_id"], other_ids)
+        self.assertTrue(identities_share_model(self.conn, self.worker["agent_id"], worker2["agent_id"]))
+        self.assertTrue(identities_share_model(self.conn, "codex", self.worker["agent_id"]))
+
     def test_get_session_participants(self):
         from openlmlib.collab.multi_session import get_session_relationships
         result = get_session_relationships(self.conn, self.r1["session_id"])

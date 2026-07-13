@@ -1741,26 +1741,39 @@ def get_agent_sessions(
     - Finding related sessions to continue work
 
     PARAMETERS:
-    - agent_id: Agent identifier
-    - requesting_agent_id: Must match agent_id (agents can only inspect their own sessions)
+    - agent_id: Agent id and/or model name (matches ephemeral ids via agents.model)
+    - requesting_agent_id: Must be same agent id/model identity (own history only)
     - status: Filter by session status - "active", "completed", "terminated" (optional)
     """
     try:
-        validate_agent_id(agent_id)
-        validate_agent_id(requesting_agent_id)
-        if agent_id != requesting_agent_id:
+        identity = (agent_id or "").strip()
+        requester = (requesting_agent_id or "").strip()
+        if not identity or not requester:
             return {
                 "success": False,
-                "error": "Agents can only inspect their own session membership",
-                "error_type": "agent_not_authorized",
+                "error": "agent_id and requesting_agent_id are required",
+                "error_type": "validation_error",
+            }
+        if len(identity) > 200 or len(requester) > 200:
+            return {
+                "success": False,
+                "error": "agent identity too long",
+                "error_type": "validation_error",
             }
         with _collab_connection() as (conn, _):
-            from .multi_session import get_agent_sessions
-            sessions = get_agent_sessions(conn, agent_id, status)
+            from .multi_session import get_agent_sessions, identities_share_model
+            if not identities_share_model(conn, identity, requester):
+                return {
+                    "success": False,
+                    "error": "Agents can only inspect their own session membership",
+                    "error_type": "agent_not_authorized",
+                }
+            sessions = get_agent_sessions(conn, identity, status, match_model=True)
             return {
-                "agent_id": agent_id,
+                "agent_id": identity,
                 "sessions": sessions,
                 "count": len(sessions),
+                "match_mode": "agent_id_or_model",
             }
     except Exception as e:
         return _handle_tool_error("get_agent_sessions", e)
@@ -2401,6 +2414,7 @@ def create_co_scientist_final_report(
 @collab_mcp.tool()
 def export_co_scientist_findings(
     run_id: str,
+    created_by: str,
     project: Optional[str] = None,
     tags: Optional[List[str]] = None,
     proposed_by: Optional[str] = None,
@@ -2417,12 +2431,35 @@ def export_co_scientist_findings(
 
     PARAMETERS:
     - run_id: Co-Scientist run ID
+    - created_by: Session orchestrator agent_id or model (required)
     - project: Optional project name for exported findings
     - tags: Optional extra tags
     - proposed_by: Optional proposer identifier
     """
     try:
+        if not created_by or not str(created_by).strip():
+            return {
+                "success": False,
+                "error": "created_by is required (session orchestrator agent_id or model)",
+                "error_type": "authorization_error",
+            }
         with _collab_connection() as (conn, sessions_dir):
+            from openlmlib.co_scientist.orchestrator import (
+                _load_run_state,
+                _require_run_actor,
+            )
+            run_state, _ = _load_run_state(conn, run_id)
+            actor = _require_run_actor(
+                conn,
+                run_state,
+                created_by,
+                session_key="verification_session_id",
+                default_agent_key="verification_orchestrator_agent_id",
+                action="export_co_scientist_findings",
+                require_orchestrator=True,
+                alternate_session_key="generation_session_id",
+                alternate_default_agent_key="generation_orchestrator_agent_id",
+            )
             result = _export_supported_findings(
                 settings_path=_get_settings_path(),
                 conn=conn,
@@ -2430,9 +2467,9 @@ def export_co_scientist_findings(
                 run_id=run_id,
                 project=project,
                 tags=tags,
-                proposed_by=proposed_by,
+                proposed_by=proposed_by or actor,
             )
-        return {"success": True, **result}
+        return {"success": True, "exported_by": actor, **result}
     except CoScientistRunError as e:
         return _handle_co_scientist_run_error(e)
     except Exception as e:
@@ -2738,10 +2775,10 @@ def help_collab(tool_name: Optional[str] = None) -> Dict:
             "returns": "Dict with session info",
         },
         "get_agent_sessions": {
-            "description": "Get all sessions an agent has participated in.",
+            "description": "Get sessions for an agent id or model (cross-session history).",
             "args": {
-                "agent_id": "Agent identifier",
-                "requesting_agent_id": "Must match agent_id",
+                "agent_id": "Agent id and/or model name",
+                "requesting_agent_id": "Same identity (agent id or model)",
                 "status": "Filter by session status (optional)",
             },
             "returns": "Dict with list of sessions and participation info",
@@ -2910,6 +2947,7 @@ def help_collab(tool_name: Optional[str] = None) -> Dict:
             "description": "Export only supported Co-Scientist claims into the main knowledge library.",
             "args": {
                 "run_id": "Co-Scientist run ID",
+                "created_by": "Required session orchestrator agent_id or model",
                 "project": "Optional project name",
                 "tags": "Optional extra tags",
                 "proposed_by": "Optional proposer identifier",

@@ -930,7 +930,7 @@ Update **Fix status** as work lands: `Open` → `In progress` → `Fixed` / `Won
 | P8.3 | 8 Collab adv | `create_template` path-escaping `template_id` | Medium | Fixed | Y | reject non-[a-zA-Z0-9_-]; resolve under templates dir |
 | P8.4 | 8 Collab adv | Auto-compaction never runs on MCP path | Medium | Fixed | Y | check_and_compact after send_message using session rules |
 | P8.5 | 8 Collab adv | `session_context` refuses non-active sessions | Medium | Fixed | Y | allow member read on completed/terminated sessions |
-| P8.6 | 8 Collab adv | Multi-session history per ephemeral agent_id | Low | Open | N | |
+| P8.6 | 8 Collab adv | Multi-session history per ephemeral agent_id | Low | Fixed | Y | match agent_id or agents.model across sessions |
 | P9.1 | 9 Co-scientist | Run state full-blob replace / dual-session CAS UX | Medium | Fixed | Y | dual-session write in one txn + CAS; state_conflict surfaces reload/retry |
 | P9.2 | 9 Co-scientist | Mutations lack agent membership / role checks | High | Fixed | Y | _require_run_actor on submit/handoff/verify/final report |
 | P9.3 | 9 Co-scientist | Start verification completes all gen tasks | Medium | Fixed | Y | complete only handoff/adjudicator marker tasks |
@@ -947,5 +947,5 @@ Update **Fix status** as work lands: `Open` → `In progress` → `Fixed` / `Won
 |----------|------:|-----:|------------:|------:|---------------------:|
 | High | 15 | 0 | 0 | 15 | 0 |
 | Medium | 24 | 0 | 0 | 24 | 0 |
-| Low | 10 | 1 | 0 | 9 | 0 |
-| **All** | **49** | **1** | **0** | **48** | **0** |
+| Low | 10 | 0 | 0 | 10 | 0 |
+| **All** | **49** | **0** | **0** | **49** | **0** |
