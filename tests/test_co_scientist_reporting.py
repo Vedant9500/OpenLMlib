@@ -118,7 +118,8 @@ class TestCoScientistReporting(unittest.TestCase):
     def test_create_final_report_artifact_and_memory_summary(self):
         run, supported, rejected = self.create_verified_run()
 
-        result = create_final_report(self.conn, self.sessions_dir, run["run_id"], created_by="agent_final")
+        # Omit created_by so the verification orchestrator agent is used.
+        result = create_final_report(self.conn, self.sessions_dir, run["run_id"])
         state = get_co_scientist_report(self.conn, run["run_id"])
         artifacts = collab_db.get_session_artifacts(
             self.conn,
@@ -194,6 +195,37 @@ class TestCoScientistReporting(unittest.TestCase):
         self.assertEqual(result["skipped"][0]["hypothesis_id"], rejected["hypothesis_id"])
         self.assertEqual(add.call_count, 1)
         self.assertIn(supported["claim"], add.call_args.kwargs["claim"])
+
+    def test_export_supported_findings_surfaces_write_gate_issues(self):
+        run, supported, _rejected = self.create_verified_run()
+        settings_path = self.root / "config" / "settings.json"
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings_path.write_text(json.dumps({"data_root": str(self.root / "data")}), encoding="utf-8")
+
+        with patch("openlmlib.co_scientist.reporting.add_finding") as add:
+            add.return_value = {
+                "status": "rejected",
+                "issues": [
+                    {
+                        "field": "claim_evidence_sim",
+                        "message": "Claim/evidence similarity 0.20 below threshold 0.70",
+                    }
+                ],
+            }
+            result = export_supported_findings(
+                settings_path,
+                self.conn,
+                self.sessions_dir,
+                run["run_id"],
+                project="CoScientist Tests",
+            )
+
+        self.assertEqual(result["exported"], 0)
+        self.assertGreaterEqual(result["failed"], 1)
+        failure = next(f for f in result["failures"] if f["hypothesis_id"] == supported["hypothesis_id"])
+        self.assertEqual(failure["status"], "rejected")
+        self.assertIn("similarity", failure["reason"].lower())
+        self.assertEqual(failure["issues"][0]["field"], "claim_evidence_sim")
 
 
 if __name__ == "__main__":

@@ -78,6 +78,22 @@ class TestCoScientistEvidence(unittest.TestCase):
             )
             conn.close()
 
+    def test_verify_citations_can_reject_unreachable_urls(self):
+        from unittest.mock import patch
+
+        with patch(
+            "openlmlib.co_scientist.evidence._probe_url",
+            return_value=(False, "URL not reachable: simulated"),
+        ):
+            result = verify_citations(
+                ["https://example.invalid/missing"],
+                check_url_reachability=True,
+            )
+        self.assertFalse(result["valid"])
+        self.assertEqual(result["citations"][0]["kind"], "external_url")
+        self.assertFalse(result["citations"][0]["resolved"])
+        self.assertIn("not reachable", result["issues"][0]["message"].lower())
+
     def test_verify_citations_rejects_paths_outside_workspace(self):
         with tempfile.TemporaryDirectory() as root_tmp, tempfile.TemporaryDirectory() as outside_tmp:
             outside = Path(outside_tmp) / "outside.md"

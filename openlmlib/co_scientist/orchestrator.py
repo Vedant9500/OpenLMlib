@@ -31,9 +31,24 @@ from .ranking import score_hypothesis
 from .templates import VERIFICATION_VERDICTS
 from openlmlib.collab import db as collab_db
 from openlmlib.collab.artifact_store import ArtifactStore
+from openlmlib.collab.errors import AgentNotAuthorizedError, AgentNotFoundError
 from openlmlib.collab.message_bus import MessageBus
+from openlmlib.collab.security import verify_agent_in_session
 from openlmlib.collab.session import create_collab_session
 from openlmlib.collab.templates import get_template
+
+# Task description markers used to close only phase-boundary work (not whole plans).
+_GENERATION_HANDOFF_MARKERS = (
+    "hypothesis_shortlist",
+    "ranker",
+    "meta-reviewer",
+    "verification handoff",
+)
+_VERIFICATION_SYNTHESIS_MARKERS = (
+    "verification_report",
+    "final adjudicator",
+    "adjudicator",
+)
 
 
 RUN_STATE_KEY = "co_scientist_run"
@@ -205,7 +220,14 @@ def submit_hypothesis(
             error_type="duplicate_hypothesis",
         )
 
-    actor = created_by or run_state["generation_orchestrator_agent_id"]
+    actor = _require_run_actor(
+        conn,
+        run_state,
+        created_by,
+        session_key="generation_session_id",
+        default_agent_key="generation_orchestrator_agent_id",
+        action="submit_hypothesis",
+    )
     store = ArtifactStore(conn, sessions_dir)
     artifact = store.save(
         session_id=run_state["generation_session_id"],
@@ -282,7 +304,18 @@ def start_hypothesis_verification(
     """Create a compact verification handoff artifact for selected hypotheses."""
     run_state, _ = _load_run_state(conn, run_id)
     created_at = created_at or utc_now_iso()
-    actor = created_by or run_state["verification_orchestrator_agent_id"]
+    # Handoff is an orchestration action: allow either session orchestrator.
+    actor = _require_run_actor(
+        conn,
+        run_state,
+        created_by,
+        session_key="generation_session_id",
+        default_agent_key="generation_orchestrator_agent_id",
+        action="start_hypothesis_verification",
+        require_orchestrator=True,
+        alternate_session_key="verification_session_id",
+        alternate_default_agent_key="verification_orchestrator_agent_id",
+    )
     selected_ids = _select_hypothesis_ids(run_state, hypothesis_ids, top_k)
     packets = [_load_hypothesis_packet(conn, sessions_dir, run_state, hypothesis_id) for hypothesis_id in selected_ids]
     grounding_issues = _validate_handoff_grounding(conn, run_state, packets)
@@ -332,6 +365,7 @@ def start_hypothesis_verification(
         conn,
         run_state["generation_session_id"],
         completed_at=created_at,
+        description_markers=_GENERATION_HANDOFF_MARKERS,
     )
 
     MessageBus(conn, sessions_dir).send(
@@ -375,7 +409,14 @@ def submit_verification(
     """Persist one verification report and update run state."""
     run_state, _ = _load_run_state(conn, run_id)
     created_at = created_at or utc_now_iso()
-    actor = created_by or run_state["verification_orchestrator_agent_id"]
+    actor = _require_run_actor(
+        conn,
+        run_state,
+        created_by,
+        session_key="verification_session_id",
+        default_agent_key="verification_orchestrator_agent_id",
+        action="submit_verification",
+    )
 
     if hypothesis_id not in run_state.get("hypotheses", {}):
         raise CoScientistRunError(
@@ -445,6 +486,7 @@ def submit_verification(
             conn,
             run_state["verification_session_id"],
             completed_at=created_at,
+            description_markers=_VERIFICATION_SYNTHESIS_MARKERS,
         )
 
     MessageBus(conn, sessions_dir).send(
@@ -658,6 +700,13 @@ def _write_run_state_to_sessions(
     updated_by: str,
     updated_at: str,
 ) -> None:
+    """Atomically write the same run blob into both linked sessions.
+
+    Uses one transaction and CAS on both session versions so a conflict cannot
+    leave generation updated while verification is stale (or the reverse).
+    Callers that receive state_conflict must reload run state and retry.
+    """
+    targets: List[Tuple[str, str, Dict[str, Any], int]] = []
     for session_id, role in (
         (run_state["generation_session_id"], "generation"),
         (run_state["verification_session_id"], "verification"),
@@ -669,6 +718,7 @@ def _write_run_state_to_sessions(
                 error_type="state_not_found",
             )
         state = dict(row["state"])
+        # Keep non-run session keys; only replace the co_scientist_run blob.
         state[RUN_STATE_KEY] = deepcopy(run_state)
         state["co_scientist_role"] = role
         state["co_scientist_linked_session_id"] = (
@@ -678,18 +728,51 @@ def _write_run_state_to_sessions(
         )
         state["current_phase"] = f"co_scientist:{run_state['phase']}"
         state["last_activity"] = updated_at
-        if not collab_db.update_session_state(
-            conn,
-            session_id=session_id,
-            state=state,
-            updated_by=updated_by,
-            updated_at=updated_at,
-            expected_version=row["version"],
-        ):
-            raise CoScientistRunError(
-                f"Failed to update Co-Scientist state for {session_id}",
-                error_type="state_conflict",
-            )
+        targets.append((session_id, role, state, int(row["version"])))
+
+    try:
+        with conn:
+            for session_id, _role, state, expected_version in targets:
+                cursor = conn.execute(
+                    """
+                    UPDATE session_state
+                    SET state_json = ?, version = version + 1, updated_at = ?, updated_by = ?
+                    WHERE session_id = ? AND version = ?
+                    """,
+                    (
+                        json.dumps(state, ensure_ascii=False),
+                        updated_at,
+                        updated_by,
+                        session_id,
+                        expected_version,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    raise CoScientistRunError(
+                        (
+                            f"Failed to update Co-Scientist state for {session_id} "
+                            f"(version conflict; reload run state and retry)"
+                        ),
+                        error_type="state_conflict",
+                        issues=[
+                            {
+                                "field": "session_state",
+                                "message": (
+                                    f"CAS mismatch for {session_id}; expected version "
+                                    f"{expected_version}"
+                                ),
+                                "severity": "error",
+                            }
+                        ],
+                    )
+                collab_db.touch_session(conn, session_id, updated_at)
+    except CoScientistRunError:
+        raise
+    except Exception as exc:
+        raise CoScientistRunError(
+            f"Failed to update Co-Scientist run state: {exc}",
+            error_type="state_write_error",
+        ) from exc
 
 
 def _load_run_state(
@@ -865,11 +948,21 @@ def _complete_open_session_tasks(
     session_id: str,
     *,
     completed_at: str,
+    description_markers: Optional[Iterable[str]] = None,
 ) -> List[Dict[str, Any]]:
-    """Close template tasks once the Co-Scientist phase has actually advanced."""
+    """Close matching open tasks when a Co-Scientist phase boundary is crossed.
+
+    When description_markers is set, only tasks whose description contains one of
+    the markers (case-insensitive) are completed. This avoids marking scout/critic
+    plan steps done merely because verification handoff ran.
+    """
+    markers = [m.lower() for m in (description_markers or []) if m]
     completed: List[Dict[str, Any]] = []
     for task in collab_db.get_session_tasks(conn, session_id):
         if task.get("status") in {"completed", "cancelled"}:
+            continue
+        description = str(task.get("description") or "").lower()
+        if markers and not any(marker in description for marker in markers):
             continue
         collab_db.update_task_status(
             conn,
@@ -882,6 +975,111 @@ def _complete_open_session_tasks(
         updated["completed_at"] = completed_at
         completed.append(updated)
     return completed
+
+
+def _require_run_actor(
+    conn: sqlite3.Connection,
+    run_state: Dict[str, Any],
+    created_by: Optional[str],
+    *,
+    session_key: str,
+    default_agent_key: str,
+    action: str,
+    require_orchestrator: bool = False,
+    alternate_session_key: Optional[str] = None,
+    alternate_default_agent_key: Optional[str] = None,
+) -> str:
+    """Ensure the acting agent is a real session member (and orchestrator if required).
+
+    Accepts either a session agent_id or a model/name that matches agents.model
+    (MCP often passes the original created_by model string).
+    """
+    requested = (created_by or "").strip()
+    session_ids = [run_state[session_key]]
+    if alternate_session_key:
+        session_ids.append(run_state[alternate_session_key])
+
+    candidates: List[str] = []
+    if requested:
+        candidates.append(requested)
+        # Resolve model/name identifiers to concrete agent_ids in run sessions.
+        for session_id in session_ids:
+            for row in conn.execute(
+                """
+                SELECT agent_id, role, model, status
+                FROM agents
+                WHERE session_id = ? AND status = 'active'
+                  AND (agent_id = ? OR model = ?)
+                ORDER BY CASE role WHEN 'orchestrator' THEN 0 ELSE 1 END
+                """,
+                (session_id, requested, requested),
+            ).fetchall():
+                agent_id = row["agent_id"] if isinstance(row, sqlite3.Row) else row[0]
+                if agent_id not in candidates:
+                    candidates.append(agent_id)
+    else:
+        default_agent = run_state.get(default_agent_key)
+        if default_agent:
+            candidates.append(default_agent)
+        if alternate_default_agent_key and run_state.get(alternate_default_agent_key):
+            candidates.append(run_state[alternate_default_agent_key])
+
+    if not candidates:
+        raise CoScientistRunError(
+            f"{action} requires a session agent id",
+            error_type="authorization_error",
+            issues=[{"field": "created_by", "message": "created_by is required", "severity": "error"}],
+        )
+
+    membership = None
+    actor = candidates[0]
+    last_error: Optional[Exception] = None
+    for candidate in candidates:
+        for session_id in session_ids:
+            try:
+                membership = verify_agent_in_session(
+                    conn, candidate, session_id, require_active=True
+                )
+                actor = candidate
+                break
+            except (AgentNotFoundError, AgentNotAuthorizedError) as exc:
+                last_error = exc
+                continue
+        if membership is not None:
+            break
+
+    if membership is None:
+        raise CoScientistRunError(
+            f"{action} denied: agent is not an active member of the Co-Scientist sessions",
+            error_type="authorization_error",
+            issues=[
+                {
+                    "field": "created_by",
+                    "message": str(last_error) if last_error else f"Agent {requested or actor} is not authorized",
+                    "severity": "error",
+                }
+            ],
+        )
+
+    if require_orchestrator:
+        allowed = {
+            run_state.get(default_agent_key),
+            run_state.get(alternate_default_agent_key) if alternate_default_agent_key else None,
+        }
+        allowed.discard(None)
+        if actor not in allowed and membership.get("role") != "orchestrator":
+            raise CoScientistRunError(
+                f"{action} requires a session orchestrator",
+                error_type="authorization_error",
+                issues=[
+                    {
+                        "field": "created_by",
+                        "message": f"Agent {actor} is not an orchestrator for this run",
+                        "severity": "error",
+                    }
+                ],
+            )
+    return actor
 
 
 def _validate_non_empty_string_list(

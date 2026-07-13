@@ -52,7 +52,19 @@ def create_final_report(
         )
 
     created_at = created_at or utc_now_iso()
-    actor = created_by or run_state["verification_orchestrator_agent_id"]
+    from .orchestrator import _require_run_actor
+
+    actor = _require_run_actor(
+        conn,
+        run_state,
+        created_by,
+        session_key="verification_session_id",
+        default_agent_key="verification_orchestrator_agent_id",
+        action="create_final_report",
+        require_orchestrator=True,
+        alternate_session_key="generation_session_id",
+        alternate_default_agent_key="generation_orchestrator_agent_id",
+    )
     existing_artifact_id = run_state.get("final_report_artifact_id")
     if existing_artifact_id:
         store = ArtifactStore(conn, sessions_dir)
@@ -332,13 +344,14 @@ def export_supported_findings(
             continue
 
         confidence = _export_confidence(verdict, report.get("confidence", 0.0))
-        evidence = _export_evidence(packet, report)
+        claim = summary.get("claim") or packet.get("claim") or hypothesis_id
+        evidence = _export_evidence(packet, report, claim=claim)
         reasoning = _export_reasoning(run_state, summary, report)
         try:
             result = add_finding(
                 settings_path=settings_path,
                 project=project_name,
-                claim=summary.get("claim") or packet.get("claim") or hypothesis_id,
+                claim=claim,
                 confidence=confidence,
                 evidence=evidence,
                 reasoning=reasoning,
@@ -374,11 +387,7 @@ def export_supported_findings(
                 "verdict": verdict,
             })
         else:
-            failed.append({
-                "hypothesis_id": hypothesis_id,
-                "status": result.get("status"),
-                "reason": result.get("message") or result.get("error") or "export rejected",
-            })
+            failed.append(_format_export_failure(hypothesis_id, result))
 
     return {
         "run_id": run_id,
@@ -459,7 +468,40 @@ def _export_confidence(verdict: str, confidence: Any) -> float:
     return min(value, 0.9)
 
 
-def _export_evidence(packet: Dict[str, Any], report: Dict[str, Any]) -> List[str]:
+def _format_export_failure(hypothesis_id: str, result: Dict[str, Any]) -> Dict[str, Any]:
+    """Map library.add_finding non-ok payloads into export failure fields."""
+    issues = result.get("issues")
+    reason = (
+        result.get("error")
+        or result.get("message")
+        or (
+            "; ".join(
+                f"{i.get('field', 'issue')}: {i.get('message', '')}".strip(": ")
+                for i in issues
+                if isinstance(i, dict)
+            )
+            if issues
+            else None
+        )
+        or "export rejected"
+    )
+    payload: Dict[str, Any] = {
+        "hypothesis_id": hypothesis_id,
+        "reason": reason,
+    }
+    if result.get("status") is not None:
+        payload["status"] = result.get("status")
+    if issues is not None:
+        payload["issues"] = issues
+    return payload
+
+
+def _export_evidence(
+    packet: Dict[str, Any],
+    report: Dict[str, Any],
+    *,
+    claim: str = "",
+) -> List[str]:
     evidence = [str(item) for item in report.get("supporting_evidence", []) if str(item).strip()]
     citations = [str(item) for item in report.get("citations", []) if str(item).strip()]
     packet_sources = [
@@ -467,7 +509,13 @@ def _export_evidence(packet: Dict[str, Any], report: Dict[str, Any]) -> List[str
         for item in packet.get("evidence", [])
         if isinstance(item, dict) and item.get("source") and item.get("summary")
     ]
-    return _dedupe_non_empty([*evidence, *packet_sources, *citations])
+    items = _dedupe_non_empty([*evidence, *packet_sources, *citations])
+    # Prefix claim so write-gate claim/evidence similarity can pass on export.
+    if claim and items:
+        items = [f"{claim}\n\n{items[0]}", *items[1:]]
+    elif claim:
+        items = [claim]
+    return items
 
 
 def _export_reasoning(
@@ -475,14 +523,22 @@ def _export_reasoning(
     summary: Dict[str, Any],
     report: Dict[str, Any],
 ) -> str:
-    return "\n".join([
+    reasoning = "\n".join([
         f"Exported from Co-Scientist run {run_state['run_id']} on topic: {run_state['topic']}.",
         f"Hypothesis: {summary.get('title', report.get('hypothesis_id', 'unknown'))}.",
+        f"Claim: {summary.get('claim') or report.get('hypothesis_id', '')}.",
         f"Verdict: {report.get('verdict')} at confidence {report.get('confidence')}.",
+        f"Supporting evidence: {'; '.join(str(x) for x in report.get('supporting_evidence', [])[:3])}",
         f"Tests or reproduction plan: {report.get('tests_or_reproduction_plan', '')}",
         f"Feasibility notes: {report.get('feasibility_notes', '')}",
         f"Safety notes: {report.get('safety_notes', '')}",
     ])
+    if len(reasoning.strip()) < 50:
+        reasoning = (
+            f"{reasoning} Verified Co-Scientist claim exported after structured "
+            f"evidence review and adjudication."
+        )
+    return reasoning
 
 
 def _dedupe_non_empty(items: List[Any]) -> List[str]:

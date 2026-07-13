@@ -931,11 +931,11 @@ Update **Fix status** as work lands: `Open` → `In progress` → `Fixed` / `Won
 | P8.4 | 8 Collab adv | Auto-compaction never runs on MCP path | Medium | Fixed | Y | check_and_compact after send_message using session rules |
 | P8.5 | 8 Collab adv | `session_context` refuses non-active sessions | Medium | Fixed | Y | allow member read on completed/terminated sessions |
 | P8.6 | 8 Collab adv | Multi-session history per ephemeral agent_id | Low | Open | N | |
-| P9.1 | 9 Co-scientist | Run state full-blob replace / dual-session CAS UX | Medium | Open | N | reclassified from High |
-| P9.2 | 9 Co-scientist | Mutations lack agent membership / role checks | High | Open | N | |
-| P9.3 | 9 Co-scientist | Start verification completes all gen tasks | Medium | Open | N | |
-| P9.4 | 9 Co-scientist | Supported-finding export drops write-gate detail | Medium | Open | N | |
-| P9.5 | 9 Co-scientist | URL citations valid with no reachability check | Low | Open | N | quality gap |
+| P9.1 | 9 Co-scientist | Run state full-blob replace / dual-session CAS UX | Medium | Fixed | Y | dual-session write in one txn + CAS; state_conflict surfaces reload/retry |
+| P9.2 | 9 Co-scientist | Mutations lack agent membership / role checks | High | Fixed | Y | _require_run_actor on submit/handoff/verify/final report |
+| P9.3 | 9 Co-scientist | Start verification completes all gen tasks | Medium | Fixed | Y | complete only handoff/adjudicator marker tasks |
+| P9.4 | 9 Co-scientist | Supported-finding export drops write-gate detail | Medium | Fixed | Y | surface issues/status; claim-prefixed evidence |
+| P9.5 | 9 Co-scientist | URL citations valid with no reachability check | Low | Fixed | Y | opt-in HEAD/GET via OPENLMLIB_CHECK_CITATION_URLS or flag |
 | P10.1 | 10 Installer | TTY npm install never finds bundled Python source | High | Open | N | |
 | P10.2 | 10 Installer | CI `npm ci` fails (lockfile gitignored) | High | Open | N | |
 | P10.3 | 10 Installer | Python discovery never tries `python` | Medium | Open | N | |
@@ -945,7 +945,7 @@ Update **Fix status** as work lands: `Open` → `In progress` → `Fixed` / `Won
 
 | Severity | Total | Open | In progress | Fixed | Won't fix / Deferred |
 |----------|------:|-----:|------------:|------:|---------------------:|
-| High | 15 | 3 | 0 | 12 | 0 |
-| Medium | 24 | 4 | 0 | 20 | 0 |
-| Low | 10 | 3 | 0 | 7 | 0 |
-| **All** | **49** | **10** | **0** | **39** | **0** |
+| High | 15 | 2 | 0 | 13 | 0 |
+| Medium | 24 | 1 | 0 | 23 | 0 |
+| Low | 10 | 2 | 0 | 8 | 0 |
+| **All** | **49** | **5** | **0** | **44** | **0** |

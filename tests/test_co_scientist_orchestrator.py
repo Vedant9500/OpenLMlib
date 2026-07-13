@@ -141,13 +141,11 @@ class TestCoScientistRunOrchestrator(unittest.TestCase):
 
         self.assertEqual(listed["count"], 2)
         self.assertEqual(handoff["hypothesis_ids"], [high["hypothesis_id"]])
-        self.assertEqual(len(handoff["completed_generation_task_ids"]), 6)
-        self.assertTrue(
-            all(
-                task["status"] == "completed"
-                for task in collab_db.get_session_tasks(self.conn, run["generation_session_id"])
-            )
-        )
+        # Only handoff/shortlist tasks complete; earlier plan steps stay open.
+        self.assertGreaterEqual(len(handoff["completed_generation_task_ids"]), 1)
+        gen_tasks = collab_db.get_session_tasks(self.conn, run["generation_session_id"])
+        self.assertTrue(any(task["status"] == "completed" for task in gen_tasks))
+        self.assertTrue(any(task["status"] != "completed" for task in gen_tasks))
         self.assertEqual(payload["hypothesis_ids"], [high["hypothesis_id"]])
         self.assertEqual(payload["hypothesis_packets"][0]["claim"], high["claim"])
         self.assertNotIn("Lower ranked packet", content)
@@ -181,17 +179,31 @@ class TestCoScientistRunOrchestrator(unittest.TestCase):
         self.assertTrue(report["ready_for_synthesis"])
         self.assertEqual(report["verification_report_count"], 1)
         self.assertEqual(report["hypotheses"][0]["status"], "verified")
-        self.assertEqual(len(result["completed_verification_task_ids"]), 5)
-        self.assertTrue(
-            all(
-                task["status"] == "completed"
-                for task in collab_db.get_session_tasks(self.conn, run["verification_session_id"])
-            )
-        )
+        # Only adjudicator/report tasks complete; earlier verify steps may remain open.
+        self.assertGreaterEqual(len(result["completed_verification_task_ids"]), 1)
+        verify_tasks = collab_db.get_session_tasks(self.conn, run["verification_session_id"])
+        self.assertTrue(any(task["status"] == "completed" for task in verify_tasks))
         self.assertEqual(
             report["verification_reports"][0]["hypothesis_id"],
             packet["hypothesis_id"],
         )
+
+    def test_submit_hypothesis_rejects_non_member_actor(self):
+        run = create_co_scientist_run(
+            self.conn,
+            self.sessions_dir,
+            topic="Research membership checks on mutations",
+        )
+        packet = valid_packet(run["run_id"], "Unauthorized packet")
+        with self.assertRaises(CoScientistRunError) as raised:
+            submit_hypothesis(
+                self.conn,
+                self.sessions_dir,
+                run["run_id"],
+                packet,
+                created_by="agent_not_a_member_zzzz",
+            )
+        self.assertEqual(raised.exception.error_type, "authorization_error")
 
     def test_invalid_verification_report_is_rejected(self):
         run = create_co_scientist_run(

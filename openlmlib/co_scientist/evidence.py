@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+import os
+import socket
 import sqlite3
+import ssl
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 from openlmlib.schema import ValidationIssue
+
+# Opt-in network reachability for http(s) citations (off by default for offline/tests).
+_CHECK_URL_ENV = "OPENLMLIB_CHECK_CITATION_URLS"
+_URL_TIMEOUT_SEC = 3.0
 
 
 EVIDENCE_LABELS = frozenset({"support", "refute", "neutral"})
@@ -108,11 +117,13 @@ def verify_citations(
     conn: Optional[sqlite3.Connection] = None,
     session_ids: Optional[Sequence[str]] = None,
     workspace_root: Optional[Path] = None,
+    check_url_reachability: Optional[bool] = None,
 ) -> Dict[str, object]:
     """Verify that citations refer to a URL, local file, or known artifact.
 
-    External URLs are accepted when they are syntactically valid. Local paths and
-    artifact IDs are checked deterministically against the filesystem/database.
+    External URLs require valid syntax. When check_url_reachability is true
+    (or OPENLMLIB_CHECK_CITATION_URLS=1), a short HEAD/GET probe is performed.
+    Local paths and artifact IDs are checked against the filesystem/database.
     """
     issues: List[ValidationIssue] = []
     results: List[Dict[str, object]] = []
@@ -133,10 +144,12 @@ def verify_citations(
             conn=conn,
             session_ids=session_ids,
             workspace_root=workspace_root,
+            check_url_reachability=check_url_reachability,
         )
         results.append(result)
         if not result["resolved"]:
-            issues.append(ValidationIssue(field, f"Citation could not be resolved: {citation.strip()}"))
+            detail = result.get("detail") or f"Citation could not be resolved: {citation.strip()}"
+            issues.append(ValidationIssue(field, str(detail)))
 
     return {
         "valid": not issues,
@@ -151,15 +164,34 @@ def resolve_citation(
     conn: Optional[sqlite3.Connection] = None,
     session_ids: Optional[Sequence[str]] = None,
     workspace_root: Optional[Path] = None,
+    check_url_reachability: Optional[bool] = None,
 ) -> Dict[str, object]:
     """Resolve one citation to a URL, local file, or artifact record."""
     parsed = urlparse(citation)
     if parsed.scheme in {"http", "https"} and parsed.netloc:
+        do_check = (
+            check_url_reachability
+            if check_url_reachability is not None
+            else _env_check_url_reachability()
+        )
+        if not do_check:
+            return {
+                "citation": citation,
+                "resolved": True,
+                "kind": "external_url",
+                "reachable": None,
+                "detail": (
+                    "URL syntax is valid; reachability not checked "
+                    f"(set {_CHECK_URL_ENV}=1 to probe)."
+                ),
+            }
+        reachable, detail = _probe_url(citation)
         return {
             "citation": citation,
-            "resolved": True,
+            "resolved": reachable,
             "kind": "external_url",
-            "detail": "URL syntax is valid; network reachability is not checked by the deterministic verifier.",
+            "reachable": reachable,
+            "detail": detail,
         }
 
     artifact = _resolve_artifact(citation, conn=conn, session_ids=session_ids)
@@ -270,6 +302,35 @@ def _resolve_path(citation: str, workspace_root: Optional[Path]) -> Optional[Pat
         if resolved.exists() and resolved.is_file():
             return resolved
     return None
+
+
+def _env_check_url_reachability() -> bool:
+    raw = os.environ.get(_CHECK_URL_ENV, "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _probe_url(url: str, timeout: float = _URL_TIMEOUT_SEC) -> tuple:
+    """Best-effort HEAD then GET; returns (reachable, detail)."""
+    headers = {"User-Agent": "OpenLMlib-citation-check/1.0"}
+    ctx = ssl.create_default_context()
+    for method in ("HEAD", "GET"):
+        try:
+            req = Request(url, method=method, headers=headers)
+            with urlopen(req, timeout=timeout, context=ctx) as resp:
+                code = getattr(resp, "status", None) or resp.getcode()
+                if code is not None and int(code) >= 400:
+                    return False, f"URL returned HTTP {code}"
+                return True, f"URL reachable via {method} (HTTP {code})"
+        except HTTPError as exc:
+            # Some hosts reject HEAD; try GET. 4xx/5xx on GET is unreachable.
+            if method == "HEAD" and exc.code in {403, 405, 501}:
+                continue
+            return False, f"URL returned HTTP {exc.code}"
+        except (URLError, socket.timeout, TimeoutError, ssl.SSLError, ValueError, OSError) as exc:
+            if method == "HEAD":
+                continue
+            return False, f"URL not reachable: {exc}"
+    return False, "URL not reachable"
 
 
 def _issues_to_dicts(issues: Iterable[ValidationIssue]) -> List[Dict[str, str]]:
