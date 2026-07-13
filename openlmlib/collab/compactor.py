@@ -10,6 +10,7 @@ Inspired by Google ADK's context compaction pattern.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Dict, List, Optional
 
 import sqlite3
@@ -19,6 +20,8 @@ from . import db
 from .message_bus import MessageBus
 from .artifact_store import ArtifactStore
 from .state_manager import StateManager
+
+logger = logging.getLogger(__name__)
 
 
 class SessionCompactor:
@@ -171,15 +174,11 @@ class SessionCompactor:
 
         # Get actual current max seq from DB instead of undefined 'messages'
         current_max_seq = db.get_max_seq(self.conn, session_id)
-
-        state_row = self.state_manager.get_state(session_id)
-        if state_row:
-            state = state_row["state"]
-            state["last_compact_seq"] = current_max_seq
-            state["last_compacted_at"] = compacted_at
-            self.state_manager.update_state(
-                session_id, state, "system", compacted_at, state_row.get("version")
-            )
+        state_persisted = self._persist_compact_markers(
+            session_id,
+            last_compact_seq=current_max_seq,
+            last_compacted_at=compacted_at,
+        )
 
         return {
             "session_id": session_id,
@@ -188,6 +187,7 @@ class SessionCompactor:
             "file_path": file_path,
             "compacted_at": compacted_at,
             "summary_length": len(summary),
+            "state_persisted": state_persisted,
         }
 
     def check_and_compact(
@@ -201,6 +201,10 @@ class SessionCompactor:
             return None
 
         state = state_row["state"]
+        # Avoid contending with Co-Scientist dual-session CAS writers.
+        if isinstance(state.get("co_scientist_run"), dict):
+            return None
+
         last_compact_seq = state.get("last_compact_seq", 0)
 
         # Use actual max_seq from DB instead of message_count counter
@@ -211,6 +215,37 @@ class SessionCompactor:
             return self.compact_session(session_id, last_compact_seq)
 
         return None
+
+    def _persist_compact_markers(
+        self,
+        session_id: str,
+        *,
+        last_compact_seq: int,
+        last_compacted_at: str,
+        attempts: int = 3,
+    ) -> bool:
+        """CAS-merge only compact markers so concurrent run-state writers are not clobbered."""
+        for _ in range(max(1, attempts)):
+            state_row = self.state_manager.get_state(session_id)
+            if not state_row:
+                return False
+            state = dict(state_row["state"] or {})
+            state["last_compact_seq"] = last_compact_seq
+            state["last_compacted_at"] = last_compacted_at
+            if self.state_manager.update_state(
+                session_id,
+                state,
+                "system",
+                last_compacted_at,
+                state_row.get("version"),
+            ):
+                return True
+        logger.warning(
+            "compact marker CAS failed for session %s after %s attempts",
+            session_id,
+            attempts,
+        )
+        return False
 
     def _summarize_messages(self, messages: List[Dict]) -> str:
         """Generate a concise summary of message activity."""

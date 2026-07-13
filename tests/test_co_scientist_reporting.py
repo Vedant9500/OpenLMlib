@@ -91,13 +91,16 @@ class TestCoScientistReporting(unittest.TestCase):
         )
         supported = packet(run["run_id"], "Supported packet", score=0.9)
         rejected = packet(run["run_id"], "Rejected packet", score=0.7)
-        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], supported)
-        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], rejected)
+        gen = run["generation_agent_id"]
+        ver = run["verification_agent_id"]
+        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], supported, created_by=gen)
+        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], rejected, created_by=gen)
         start_hypothesis_verification(
             self.conn,
             self.sessions_dir,
             run["run_id"],
             hypothesis_ids=[supported["hypothesis_id"], rejected["hypothesis_id"]],
+            created_by=gen,
         )
         submit_verification(
             self.conn,
@@ -105,6 +108,7 @@ class TestCoScientistReporting(unittest.TestCase):
             run["run_id"],
             supported["hypothesis_id"],
             report(supported["hypothesis_id"], "supported", 0.86),
+            created_by=ver,
         )
         submit_verification(
             self.conn,
@@ -112,14 +116,19 @@ class TestCoScientistReporting(unittest.TestCase):
             run["run_id"],
             rejected["hypothesis_id"],
             report(rejected["hypothesis_id"], "contradicted", 0.78),
+            created_by=ver,
         )
         return run, supported, rejected
 
     def test_create_final_report_artifact_and_memory_summary(self):
         run, supported, rejected = self.create_verified_run()
 
-        # Omit created_by so the verification orchestrator agent is used.
-        result = create_final_report(self.conn, self.sessions_dir, run["run_id"])
+        result = create_final_report(
+            self.conn,
+            self.sessions_dir,
+            run["run_id"],
+            created_by=run["verification_agent_id"],
+        )
         state = get_co_scientist_report(self.conn, run["run_id"])
         artifacts = collab_db.get_session_artifacts(
             self.conn,
@@ -139,9 +148,10 @@ class TestCoScientistReporting(unittest.TestCase):
 
     def test_final_report_creation_is_idempotent(self):
         run, _supported, _rejected = self.create_verified_run()
+        ver = run["verification_agent_id"]
 
-        first = create_final_report(self.conn, self.sessions_dir, run["run_id"])
-        second = create_final_report(self.conn, self.sessions_dir, run["run_id"])
+        first = create_final_report(self.conn, self.sessions_dir, run["run_id"], created_by=ver)
+        second = create_final_report(self.conn, self.sessions_dir, run["run_id"], created_by=ver)
         artifacts = collab_db.get_session_artifacts(
             self.conn,
             run["verification_session_id"],
@@ -160,16 +170,24 @@ class TestCoScientistReporting(unittest.TestCase):
             top_k=1,
         )
         item = packet(run["run_id"], "Unverified packet")
-        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], item)
+        gen = run["generation_agent_id"]
+        ver = run["verification_agent_id"]
+        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], item, created_by=gen)
         start_hypothesis_verification(
             self.conn,
             self.sessions_dir,
             run["run_id"],
             hypothesis_ids=[item["hypothesis_id"]],
+            created_by=gen,
         )
 
         with self.assertRaises(CoScientistRunError) as raised:
-            create_final_report(self.conn, self.sessions_dir, run["run_id"])
+            create_final_report(
+                self.conn,
+                self.sessions_dir,
+                run["run_id"],
+                created_by=ver,
+            )
 
         self.assertEqual(raised.exception.error_type, "run_not_ready")
 

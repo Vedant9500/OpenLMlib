@@ -126,10 +126,13 @@ class TestCoScientistRunOrchestrator(unittest.TestCase):
         low = valid_packet(run["run_id"], "Lower ranked packet", score=0.4)
         high = valid_packet(run["run_id"], "Higher ranked packet", score=0.9)
 
-        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], low)
-        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], high)
+        gen = run["generation_agent_id"]
+        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], low, created_by=gen)
+        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], high, created_by=gen)
         listed = list_hypotheses(self.conn, run["run_id"])
-        handoff = start_hypothesis_verification(self.conn, self.sessions_dir, run["run_id"])
+        handoff = start_hypothesis_verification(
+            self.conn, self.sessions_dir, run["run_id"], created_by=gen
+        )
 
         verification_artifacts = collab_db.get_session_artifacts(
             self.conn,
@@ -158,12 +161,15 @@ class TestCoScientistRunOrchestrator(unittest.TestCase):
             top_k=1,
         )
         packet = valid_packet(run["run_id"], "Report packet", score=0.8)
-        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], packet)
+        gen = run["generation_agent_id"]
+        ver = run["verification_agent_id"]
+        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], packet, created_by=gen)
         start_hypothesis_verification(
             self.conn,
             self.sessions_dir,
             run["run_id"],
             hypothesis_ids=[packet["hypothesis_id"]],
+            created_by=gen,
         )
 
         result = submit_verification(
@@ -172,6 +178,7 @@ class TestCoScientistRunOrchestrator(unittest.TestCase):
             run["run_id"],
             packet["hypothesis_id"],
             valid_report(packet["hypothesis_id"]),
+            created_by=ver,
         )
         report = get_co_scientist_report(self.conn, run["run_id"])
 
@@ -205,6 +212,18 @@ class TestCoScientistRunOrchestrator(unittest.TestCase):
             )
         self.assertEqual(raised.exception.error_type, "authorization_error")
 
+    def test_submit_hypothesis_rejects_missing_created_by(self):
+        run = create_co_scientist_run(
+            self.conn,
+            self.sessions_dir,
+            topic="Research required created_by on mutations",
+        )
+        packet = valid_packet(run["run_id"], "Missing actor packet")
+        with self.assertRaises(CoScientistRunError) as raised:
+            submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], packet)
+        self.assertEqual(raised.exception.error_type, "authorization_error")
+        self.assertTrue(any(issue["field"] == "created_by" for issue in raised.exception.issues))
+
     def test_invalid_verification_report_is_rejected(self):
         run = create_co_scientist_run(
             self.conn,
@@ -212,7 +231,9 @@ class TestCoScientistRunOrchestrator(unittest.TestCase):
             topic="Research invalid verification report handling",
         )
         packet = valid_packet(run["run_id"], "Invalid report packet")
-        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], packet)
+        gen = run["generation_agent_id"]
+        ver = run["verification_agent_id"]
+        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], packet, created_by=gen)
 
         with self.assertRaises(CoScientistRunError) as raised:
             submit_verification(
@@ -221,6 +242,7 @@ class TestCoScientistRunOrchestrator(unittest.TestCase):
                 run["run_id"],
                 packet["hypothesis_id"],
                 {**valid_report(packet["hypothesis_id"]), "verdict": "maybe"},
+                created_by=ver,
             )
 
         self.assertEqual(raised.exception.error_type, "validation_error")
@@ -234,7 +256,8 @@ class TestCoScientistRunOrchestrator(unittest.TestCase):
         )
         packet = valid_packet(run["run_id"], "Unresolved citation packet")
         packet["citations"] = ["docs/does-not-exist.md"]
-        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], packet)
+        gen = run["generation_agent_id"]
+        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], packet, created_by=gen)
 
         with self.assertRaises(CoScientistRunError) as raised:
             start_hypothesis_verification(
@@ -242,6 +265,7 @@ class TestCoScientistRunOrchestrator(unittest.TestCase):
                 self.sessions_dir,
                 run["run_id"],
                 hypothesis_ids=[packet["hypothesis_id"]],
+                created_by=gen,
             )
 
         self.assertEqual(raised.exception.error_type, "grounding_error")
@@ -255,7 +279,8 @@ class TestCoScientistRunOrchestrator(unittest.TestCase):
         )
         packet = valid_packet(run["run_id"], "Missing label packet")
         del packet["evidence"][0]["label"]
-        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], packet)
+        gen = run["generation_agent_id"]
+        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], packet, created_by=gen)
 
         with self.assertRaises(CoScientistRunError) as raised:
             start_hypothesis_verification(
@@ -263,6 +288,7 @@ class TestCoScientistRunOrchestrator(unittest.TestCase):
                 self.sessions_dir,
                 run["run_id"],
                 hypothesis_ids=[packet["hypothesis_id"]],
+                created_by=gen,
             )
 
         self.assertEqual(raised.exception.error_type, "grounding_error")
@@ -276,12 +302,15 @@ class TestCoScientistRunOrchestrator(unittest.TestCase):
             top_k=1,
         )
         packet = valid_packet(run["run_id"], "Report citation packet")
-        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], packet)
+        gen = run["generation_agent_id"]
+        ver = run["verification_agent_id"]
+        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], packet, created_by=gen)
         start_hypothesis_verification(
             self.conn,
             self.sessions_dir,
             run["run_id"],
             hypothesis_ids=[packet["hypothesis_id"]],
+            created_by=gen,
         )
         report = valid_report(packet["hypothesis_id"])
         report["citations"] = ["docs/does-not-exist.md"]
@@ -293,6 +322,7 @@ class TestCoScientistRunOrchestrator(unittest.TestCase):
                 run["run_id"],
                 packet["hypothesis_id"],
                 report,
+                created_by=ver,
             )
 
         self.assertEqual(raised.exception.error_type, "validation_error")
@@ -341,15 +371,18 @@ class TestCoScientistRunMCP(unittest.TestCase):
         submitted = self.collab_mcp_module.submit_hypothesis(
             run_id=created["run_id"],
             hypothesis_packet=packet,
+            created_by="mcp-orchestrator",
         )
         listed = self.collab_mcp_module.list_hypotheses(created["run_id"])
         handoff = self.collab_mcp_module.start_hypothesis_verification(
-            run_id=created["run_id"]
+            run_id=created["run_id"],
+            created_by="mcp-orchestrator",
         )
         verification = self.collab_mcp_module.submit_verification(
             run_id=created["run_id"],
             hypothesis_id=packet["hypothesis_id"],
             verification_report=valid_report(packet["hypothesis_id"], verdict="partially_supported"),
+            created_by="mcp-orchestrator",
         )
         final_report = self.collab_mcp_module.create_co_scientist_final_report(
             run_id=created["run_id"],

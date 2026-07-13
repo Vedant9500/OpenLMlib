@@ -999,37 +999,35 @@ def _require_run_actor(
     if alternate_session_key:
         session_ids.append(run_state[alternate_session_key])
 
-    candidates: List[str] = []
-    if requested:
-        candidates.append(requested)
-        # Resolve model/name identifiers to concrete agent_ids in run sessions.
-        for session_id in session_ids:
-            for row in conn.execute(
-                """
-                SELECT agent_id, role, model, status
-                FROM agents
-                WHERE session_id = ? AND status = 'active'
-                  AND (agent_id = ? OR model = ?)
-                ORDER BY CASE role WHEN 'orchestrator' THEN 0 ELSE 1 END
-                """,
-                (session_id, requested, requested),
-            ).fetchall():
-                agent_id = row["agent_id"] if isinstance(row, sqlite3.Row) else row[0]
-                if agent_id not in candidates:
-                    candidates.append(agent_id)
-    else:
-        default_agent = run_state.get(default_agent_key)
-        if default_agent:
-            candidates.append(default_agent)
-        if alternate_default_agent_key and run_state.get(alternate_default_agent_key):
-            candidates.append(run_state[alternate_default_agent_key])
-
-    if not candidates:
+    if not requested:
         raise CoScientistRunError(
-            f"{action} requires a session agent id",
+            f"{action} requires created_by (session agent_id or model name)",
             error_type="authorization_error",
-            issues=[{"field": "created_by", "message": "created_by is required", "severity": "error"}],
+            issues=[
+                {
+                    "field": "created_by",
+                    "message": "created_by is required; do not omit (no orchestrator default)",
+                    "severity": "error",
+                }
+            ],
         )
+
+    candidates: List[str] = [requested]
+    # Resolve model/name identifiers to concrete agent_ids in run sessions.
+    for session_id in session_ids:
+        for row in conn.execute(
+            """
+            SELECT agent_id, role, model, status
+            FROM agents
+            WHERE session_id = ? AND status = 'active'
+              AND (agent_id = ? OR model = ?)
+            ORDER BY CASE role WHEN 'orchestrator' THEN 0 ELSE 1 END
+            """,
+            (session_id, requested, requested),
+        ).fetchall():
+            agent_id = row["agent_id"] if isinstance(row, sqlite3.Row) else row[0]
+            if agent_id not in candidates:
+                candidates.append(agent_id)
 
     membership = None
     actor = candidates[0]

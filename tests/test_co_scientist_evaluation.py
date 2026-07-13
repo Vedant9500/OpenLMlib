@@ -47,12 +47,15 @@ class TestCoScientistEvaluation(unittest.TestCase):
             top_k=1,
         )
         item = packet(run["run_id"], "Evaluation packet")
-        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], item)
+        gen = run["generation_agent_id"]
+        ver = run["verification_agent_id"]
+        submit_hypothesis(self.conn, self.sessions_dir, run["run_id"], item, created_by=gen)
         start_hypothesis_verification(
             self.conn,
             self.sessions_dir,
             run["run_id"],
             hypothesis_ids=[item["hypothesis_id"]],
+            created_by=gen,
         )
         submit_verification(
             self.conn,
@@ -60,8 +63,9 @@ class TestCoScientistEvaluation(unittest.TestCase):
             run["run_id"],
             item["hypothesis_id"],
             report(item["hypothesis_id"], "supported", 0.88),
+            created_by=ver,
         )
-        create_final_report(self.conn, self.sessions_dir, run["run_id"])
+        create_final_report(self.conn, self.sessions_dir, run["run_id"], created_by=ver)
 
         result = evaluate_run(
             self.conn,
