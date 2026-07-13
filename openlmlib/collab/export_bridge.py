@@ -162,6 +162,7 @@ def export_session_to_library(
                 tags=art_tags,
                 proposed_by=artifact["created_by"],
                 confirm=True,
+                trusted_export=True,
             )
             if result.get("status") == "ok":
                 exported.append({
@@ -238,6 +239,7 @@ def export_session_summary_as_finding(
             tags=["collab_session", f"session:{session_id}", "summary"],
             proposed_by=session.get("orchestrator", "unknown"),
             confirm=True,
+            trusted_export=True,
         )
         if result.get("status") == "ok":
             return {

@@ -144,11 +144,15 @@ class TestCoScientistRunOrchestrator(unittest.TestCase):
 
         self.assertEqual(listed["count"], 2)
         self.assertEqual(handoff["hypothesis_ids"], [high["hypothesis_id"]])
-        # Only handoff/shortlist tasks complete; earlier plan steps stay open.
+        # Only max step_num tasks complete; earlier plan steps stay open.
         self.assertGreaterEqual(len(handoff["completed_generation_task_ids"]), 1)
         gen_tasks = collab_db.get_session_tasks(self.conn, run["generation_session_id"])
-        self.assertTrue(any(task["status"] == "completed" for task in gen_tasks))
-        self.assertTrue(any(task["status"] != "completed" for task in gen_tasks))
+        max_step = max(int(t["step_num"]) for t in gen_tasks)
+        for task in gen_tasks:
+            if int(task["step_num"]) == max_step:
+                self.assertEqual(task["status"], "completed")
+            else:
+                self.assertNotEqual(task["status"], "completed")
         self.assertEqual(payload["hypothesis_ids"], [high["hypothesis_id"]])
         self.assertEqual(payload["hypothesis_packets"][0]["claim"], high["claim"])
         self.assertNotIn("Lower ranked packet", content)

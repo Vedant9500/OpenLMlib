@@ -353,6 +353,9 @@ def add_finding(
     # Read-before-write: similar findings check (safety net)
     similar_findings: Optional[List[Dict[str, Any]]] = None,
     session_warning: Optional[str] = None,  # Deprecated, kept for backward compat
+    # Trusted export path (collab / co-scientist): still require hard fields,
+    # but skip claim/evidence embedding similarity rejection.
+    trusted_export: bool = False,
 ) -> Dict[str, Any]:
     if not confirm:
         return {
@@ -402,21 +405,29 @@ def add_finding(
     embedder = runtime.embedder
     store = runtime.store
 
+    # Trusted exports still enforce confidence/reasoning/evidence presence, but
+    # do not fail on embedding claim/evidence similarity (source already reviewed).
+    sim_threshold = 0.0 if trusted_export else settings.write_gate.min_claim_evidence_sim
     gate = WriteGate(
         min_confidence=settings.write_gate.min_confidence,
         min_reasoning_length=settings.write_gate.min_reasoning_length,
-        min_claim_evidence_sim=settings.write_gate.min_claim_evidence_sim,
+        min_claim_evidence_sim=sim_threshold,
         novelty_similarity_threshold=settings.novelty.similarity_threshold,
         novelty_top_k=settings.novelty.top_k,
-        embedder=embedder,
-        vector_store=store,
-        finding_lookup=lambda embedding_id: db.get_findings_by_embedding_ids(conn, [embedding_id]).get(embedding_id),
+        embedder=None if trusted_export else embedder,
+        vector_store=None if trusted_export else store,
+        finding_lookup=(
+            None
+            if trusted_export
+            else (lambda embedding_id: db.get_findings_by_embedding_ids(conn, [embedding_id]).get(embedding_id))
+        ),
     )
 
     t2 = monotonic()
     # Pre-encode only when hard field checks can pass (skip empty evidence / short reasoning).
     can_pre_encode = (
-        embedder is not None
+        not trusted_export
+        and embedder is not None
         and bool(evidence)
         and len(reasoning.strip()) >= settings.write_gate.min_reasoning_length
         and confidence >= settings.write_gate.min_confidence
@@ -429,12 +440,15 @@ def add_finding(
     t3 = monotonic()
     logger.debug("add_finding: gate.validate=%.1fs", t3 - t2)
 
-    adjusted_confidence = gate.adjust_confidence(
-        claim=claim,
-        evidence=evidence,
-        proposed_confidence=confidence,
-        issues=issues,
-    )
+    if trusted_export:
+        adjusted_confidence = float(confidence)
+    else:
+        adjusted_confidence = gate.adjust_confidence(
+            claim=claim,
+            evidence=evidence,
+            proposed_confidence=confidence,
+            issues=issues,
+        )
     t4 = monotonic()
     logger.debug("add_finding: gate.adjust_confidence=%.1fs", t4 - t3)
 
@@ -446,6 +460,14 @@ def add_finding(
                     "Validator-adjusted confidence "
                     f"{adjusted_confidence:.2f} below threshold {settings.write_gate.min_confidence:.2f}"
                 ),
+            )
+        )
+    if trusted_export:
+        issues.append(
+            ValidationIssue(
+                field="export",
+                message="trusted_export: claim/evidence similarity checks skipped",
+                severity="warning",
             )
         )
     issues_payload = _serialize_issues(issues)

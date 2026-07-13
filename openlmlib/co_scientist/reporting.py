@@ -374,6 +374,7 @@ def export_supported_findings(
                 ),
                 proposed_by=proposed_by or report.get("created_by") or run_state.get("created_by", "co_scientist"),
                 confirm=True,
+                trusted_export=True,
             )
         except Exception as exc:
             failed.append({"hypothesis_id": hypothesis_id, "reason": str(exc)})

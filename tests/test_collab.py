@@ -1196,6 +1196,7 @@ class TestExportBridge(unittest.TestCase):
             add_finding_mock.assert_called_once()
             kwargs = add_finding_mock.call_args.kwargs
             self.assertTrue(kwargs["confirm"])
+            self.assertTrue(kwargs.get("trusted_export"))
             self.assertNotIn("source", kwargs)
             # Short titles are expanded from artifact body so write-gate similarity can pass.
             self.assertTrue(kwargs["claim"])

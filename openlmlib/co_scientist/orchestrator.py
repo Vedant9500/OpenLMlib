@@ -37,20 +37,6 @@ from openlmlib.collab.security import verify_agent_in_session
 from openlmlib.collab.session import create_collab_session
 from openlmlib.collab.templates import get_template
 
-# Task description markers used to close only phase-boundary work (not whole plans).
-_GENERATION_HANDOFF_MARKERS = (
-    "hypothesis_shortlist",
-    "ranker",
-    "meta-reviewer",
-    "verification handoff",
-)
-_VERIFICATION_SYNTHESIS_MARKERS = (
-    "verification_report",
-    "final adjudicator",
-    "adjudicator",
-)
-
-
 RUN_STATE_KEY = "co_scientist_run"
 
 DEFAULT_VERIFICATION_POLICY = {
@@ -365,7 +351,7 @@ def start_hypothesis_verification(
         conn,
         run_state["generation_session_id"],
         completed_at=created_at,
-        description_markers=_GENERATION_HANDOFF_MARKERS,
+        only_max_step=True,
     )
 
     MessageBus(conn, sessions_dir).send(
@@ -486,7 +472,7 @@ def submit_verification(
             conn,
             run_state["verification_session_id"],
             completed_at=created_at,
-            description_markers=_VERIFICATION_SYNTHESIS_MARKERS,
+            only_max_step=True,
         )
 
     MessageBus(conn, sessions_dir).send(
@@ -948,21 +934,24 @@ def _complete_open_session_tasks(
     session_id: str,
     *,
     completed_at: str,
-    description_markers: Optional[Iterable[str]] = None,
+    only_max_step: bool = False,
 ) -> List[Dict[str, Any]]:
-    """Close matching open tasks when a Co-Scientist phase boundary is crossed.
+    """Close open tasks when a Co-Scientist phase boundary is crossed.
 
-    When description_markers is set, only tasks whose description contains one of
-    the markers (case-insensitive) are completed. This avoids marking scout/critic
-    plan steps done merely because verification handoff ran.
+    When only_max_step is True, complete only open tasks at the highest step_num
+    (generation handoff / verification adjudicator), not earlier plan steps.
     """
-    markers = [m.lower() for m in (description_markers or []) if m]
+    tasks = collab_db.get_session_tasks(conn, session_id)
+    if only_max_step and tasks:
+        max_step = max(int(task.get("step_num") or 0) for task in tasks)
+    else:
+        max_step = None
+
     completed: List[Dict[str, Any]] = []
-    for task in collab_db.get_session_tasks(conn, session_id):
+    for task in tasks:
         if task.get("status") in {"completed", "cancelled"}:
             continue
-        description = str(task.get("description") or "").lower()
-        if markers and not any(marker in description for marker in markers):
+        if max_step is not None and int(task.get("step_num") or 0) != max_step:
             continue
         collab_db.update_task_status(
             conn,
