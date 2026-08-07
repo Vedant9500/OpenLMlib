@@ -58,6 +58,29 @@ openlmlib mcp remove --cli codex_cli,aider
 
 ---
 
+## Embedding Model
+
+Set `embedding_model` in `~/.openlmlib/config/settings.json`. Default is
+`BAAI/bge-small-en-v1.5` (same 384-dim as MiniLM-L6-v2, better retrieval
+accuracy). After changing the model, rebuild the vector index so existing
+findings are re-embedded with the new model:
+
+```bash
+openlmlib rebuild-index
+```
+
+| Tier | Model | Dim | Notes |
+|---|---|---|---|
+| **Recommended** | `BAAI/bge-small-en-v1.5` | 384 | Best accuracy/speed balance; Apache-2.0 (default) |
+| Accurate | `sentence-transformers/all-mpnet-base-v2` | 768 | Heavier, stronger on some tasks |
+| Tiny | `sentence-transformers/paraphrase-MiniLM-L3-v2` | 384 | Minimal footprint, weaker accuracy |
+
+`embedding_dim` must match the model (`384` for bge-small / MiniLM-L3-v2,
+`768` for mpnet-base). Changing the model invalidates the existing FAISS index —
+always run `rebuild-index` after a swap.
+
+---
+
 ## Manual Configuration
 
 If you prefer to configure manually, here are the exact configurations for each tool:
@@ -176,13 +199,14 @@ qwen
   "mcp": {
     "openlmlib": {
       "type": "local",
-      "command": "python",
-      "args": [
+      "command": [
+        "python",
         "-m",
         "openlmlib.mcp_server",
         "--settings",
         "/path/to/openlmlib/settings.json"
-      ]
+      ],
+      "enabled": true
     }
   }
 }

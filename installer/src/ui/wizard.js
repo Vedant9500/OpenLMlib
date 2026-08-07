@@ -3,8 +3,9 @@ import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
 
 const EMBEDDING_MODELS = [
-  { label: 'all-MiniLM-L6-v2 (fast, 384d) — Recommended', value: 'sentence-transformers/all-MiniLM-L6-v2' },
+  { label: 'BAAI/bge-small-en-v1.5 (fast, 384d) — Recommended', value: 'BAAI/bge-small-en-v1.5' },
   { label: 'all-mpnet-base-v2 (accurate, 768d)', value: 'sentence-transformers/all-mpnet-base-v2' },
+  { label: 'all-MiniLM-L6-v2 (fast, 384d)', value: 'sentence-transformers/all-MiniLM-L6-v2' },
   { label: 'paraphrase-MiniLM-L3-v2 (tiny, 384d)', value: 'sentence-transformers/paraphrase-MiniLM-L3-v2' },
 ];
 

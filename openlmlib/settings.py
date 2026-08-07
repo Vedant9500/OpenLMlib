@@ -26,7 +26,7 @@ def _parse_bool(value: object, default: bool) -> bool:
 class WriteGateSettings:
     min_confidence: float = 0.6
     min_reasoning_length: int = 50
-    min_claim_evidence_sim: float = 0.7
+    min_claim_evidence_sim: float = 0.75
 
 
 @dataclass
@@ -141,13 +141,13 @@ class Settings:
             vector_meta_path=resolve_path("vector_meta_path", "data/embeddings_meta.json"),
             findings_dir=resolve_path("findings_dir", "data/findings"),
             embeddings_cache_path=resolve_path("embeddings_cache_path", "data/embeddings_cache.pkl"),
-            embedding_model=data.get("embedding_model", "sentence-transformers/all-MiniLM-L6-v2"),
+            embedding_model=data.get("embedding_model", "BAAI/bge-small-en-v1.5"),
             embedding_dim=int(data.get("embedding_dim", 384)),
             embedding_metric=data.get("embedding_metric", "cosine"),
             write_gate=WriteGateSettings(
                 min_confidence=float(write_gate_data.get("min_confidence", 0.6)),
                 min_reasoning_length=int(write_gate_data.get("min_reasoning_length", 50)),
-                min_claim_evidence_sim=float(write_gate_data.get("min_claim_evidence_sim", 0.7)),
+                min_claim_evidence_sim=float(write_gate_data.get("min_claim_evidence_sim", 0.75)),
             ),
             novelty=NoveltySettings(
                 similarity_threshold=float(novelty_data.get("similarity_threshold", 0.85)),
@@ -207,13 +207,13 @@ DEFAULT_SETTINGS_DATA = {
     "vector_meta_path": "data/embeddings_meta.json",
     "findings_dir": "data/findings",
     "embeddings_cache_path": "data/embeddings_cache.pkl",
-    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "embedding_model": "BAAI/bge-small-en-v1.5",
     "embedding_dim": 384,
     "embedding_metric": "cosine",
     "write_gate": {
         "min_confidence": 0.6,
         "min_reasoning_length": 50,
-        "min_claim_evidence_sim": 0.7,
+        "min_claim_evidence_sim": 0.75,
     },
     "novelty": {
         "similarity_threshold": 0.85,

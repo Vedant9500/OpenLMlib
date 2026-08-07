@@ -30,7 +30,7 @@ from .sanitization import render_untrusted_context
 from .evaluation import evaluate_retrieval, faithfulness_score, relevance_alignment
 from .runtime import get_runtime, mark_dirty, maybe_flush
 from .vector_store import create_vector_store, load_vector_store, save_vector_store
-from .write_gate import WriteGate
+from .write_gate import WriteGate, _cosine_similarity
 
 logger = logging.getLogger(__name__)
 
@@ -304,28 +304,55 @@ def _serialize_issues(issues) -> List[Dict[str, str]]:
 
 # Threshold for read-before-write duplicate detection
 DUPLICATE_SIMILARITY_THRESHOLD = 0.90
+# Sentence-embedding (claim vs claim) duplicate threshold. Claim-claim cosine is
+# much higher than token-set Jaccard at the same level: identical ~1.0, reworded
+# ~0.91, close-but-distinct ~0.61. 0.80 flags genuine re-saves while leaving
+# topically-related-but-distinct findings alone.
+DUPLICATE_EMBEDDING_SIMILARITY_THRESHOLD = 0.80
 
 
-def _check_duplicate_warning(similar_findings: Optional[List[Dict[str, Any]]], claim: str) -> Optional[Dict[str, Any]]:
+def _claim_semantic_similarity(candidate: str, existing: str, embedder) -> float:
+    """Cosine similarity between two claim sentence embeddings, or 0.0 if embedder is missing."""
+    if embedder is None:
+        return 0.0
+    try:
+        candidate_vec, existing_vec = embedder.encode([candidate, existing])
+        return _cosine_similarity(candidate_vec, existing_vec)
+    except Exception:
+        return 0.0
+
+
+def _check_duplicate_warning(
+    similar_findings: Optional[List[Dict[str, Any]]],
+    claim: str,
+    embedder=None,
+) -> Optional[Dict[str, Any]]:
     """Check if similar findings suggest this might be a duplicate.
 
     Returns a warning dict if a very similar finding exists, otherwise None.
-    FTS5 rank finds candidates; token overlap gates the duplicate warning.
+    FTS5 rank finds candidates; token overlap (Jaccard) and, when an embedder is
+    available, claim-claim sentence similarity gate the duplicate warning.
     """
     if not similar_findings:
         return None
 
     for finding in similar_findings[:3]:
-        similarity = _claim_similarity(claim, finding.get("claim", ""))
-        if similarity >= DUPLICATE_SIMILARITY_THRESHOLD:
+        existing_claim = finding.get("claim", "")
+        token_similarity = _claim_similarity(claim, existing_claim)
+        semantic_similarity = _claim_semantic_similarity(claim, existing_claim, embedder)
+        if (
+            token_similarity >= DUPLICATE_SIMILARITY_THRESHOLD
+            or semantic_similarity >= DUPLICATE_EMBEDDING_SIMILARITY_THRESHOLD
+        ):
             return {
                 "message": f"A very similar finding already exists (id={finding.get('id')}). "
                           f"Consider updating it instead of creating a duplicate.",
                 "existing_finding_id": finding.get("id"),
-                "claim_similarity": similarity,
+                "claim_similarity": token_similarity,
+                "claim_semantic_similarity": semantic_similarity,
                 "similarity_rank": finding.get("rank"),
                 "fts_rank": finding.get("rank"),
-                "claim_preview": finding.get("claim", "")[:150],
+                "claim_preview": existing_claim[:150],
             }
 
     return None
@@ -363,7 +390,11 @@ def add_finding(
             "message": "Set confirm=true to add a finding.",
         }
 
-    duplicate_warning = _check_duplicate_warning(similar_findings, claim) if similar_findings else None
+    duplicate_warning = (
+        _check_duplicate_warning(similar_findings, claim, embedder=duplicate_embedder)
+        if similar_findings
+        else None
+    )
     if duplicate_warning:
         return {
             "status": "duplicate_suggestion",
@@ -404,6 +435,10 @@ def add_finding(
 
     embedder = runtime.embedder
     store = runtime.store
+
+    # Trusted exports bypass embedding claim/evidence similarity, so also skip
+    # the semantic duplicate check (the source was already reviewed upstream).
+    duplicate_embedder = None if trusted_export else embedder
 
     # Trusted exports still enforce confidence/reasoning/evidence presence, but
     # do not fail on embedding claim/evidence similarity (source already reviewed).

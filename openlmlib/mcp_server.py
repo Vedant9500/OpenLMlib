@@ -31,6 +31,54 @@ def _settings_path() -> Path:
     return resolve_global_settings_path()
 
 
+def _log_error_message(result: dict) -> str:
+    """Build a durable analytics error message for a failed save_finding.
+
+    Rejections return structured dicts (status="rejected" + issues) rather than
+    raising, so they previously recorded error_message=None. Surface the failing
+    gate field(s) so analytics can attribute failures to a specific gate.
+    """
+    fields = [str(issue.get("field")) for issue in result.get("issues", []) if issue.get("field")]
+    if fields:
+        return f"rejected: fields={','.join(fields)}"
+    msg = result.get("message")
+    if msg:
+        return str(msg)
+    return f"status={result.get('status')}"
+
+
+def _log_save_analytics(
+    settings_path,
+    project: str,
+    confidence: float,
+    result: dict,
+    claim: str,
+    execution_time_ms: float = 0.0,
+) -> None:
+    """Log a save_finding call to analytics without breaking the primary tool.
+
+    Shares the structured-rejection error_message logic with save_finding so
+    save_finding_auto rejections are attributed to a specific gate too.
+    """
+    from .usage_analytics import log_tool_call
+
+    try:
+        _runtime = get_runtime(settings_path)
+        log_tool_call(
+            conn=_runtime.conn,
+            tool_name="save_finding",
+            call_mode="automatic",
+            parameters={"project": project, "confidence": confidence},
+            success=result.get("status") == "ok",
+            error_message=_log_error_message(result) if result.get("status") != "ok" else None,
+            execution_time_ms=execution_time_ms,
+            result_summary=f"Saved finding: {claim[:80]}",
+            triggered_by="discovery",
+        )
+    except Exception:
+        pass  # Analytics logging should never break the primary tool
+
+
 mcp = FastMCP("OpenLMlib")
 
 # Lazy-load collab tools to avoid importing the entire collab module tree
@@ -1067,7 +1115,7 @@ def save_finding(
                 call_mode="automatic",  # Model decides based on discovery
                 parameters={"project": project, "confidence": confidence},
                 success=result.get("status") == "ok",
-                error_message=result.get("message") if result.get("status") != "ok" else None,
+                error_message=_log_error_message(result) if result.get("status") != "ok" else None,
                 execution_time_ms=_elapsed_ms,
                 result_summary=f"Saved finding: {claim[:80]}",
                 triggered_by="discovery",
@@ -1561,7 +1609,9 @@ def save_finding_auto(
     _duplicate_check = search_fts(_settings_path(), claim, limit=3)
     _similar_findings = _duplicate_check.get("items", []) if _duplicate_check.get("status") == "ok" else []
 
-    return add_finding(
+    import time as _time
+    _t0 = _time.monotonic()
+    result = add_finding(
         settings_path=_settings_path(),
         project=project,
         claim=claim,
@@ -1573,6 +1623,13 @@ def save_finding_auto(
         confirm=confirm,
         similar_findings=_similar_findings,
     )
+    _elapsed_ms = (_time.monotonic() - _t0) * 1000
+
+    _log_save_analytics(
+        _settings_path(), project, confidence, result, claim, execution_time_ms=_elapsed_ms
+    )
+
+    return result
 
 
 @mcp.tool()

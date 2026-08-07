@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 from openlmlib import db
+from openlmlib.mcp_server import _log_error_message
 from openlmlib.usage_analytics import get_tool_selection_accuracy, log_tool_selection
 
 
@@ -34,6 +35,23 @@ class TestUsageAnalytics(unittest.TestCase):
             self.assertEqual(metrics["correct_selections"], 1)
             self.assertEqual(metrics["accuracy_rate"], 1.0)
             conn.close()
+
+    def test_log_error_message_surfaces_rejected_gate_fields(self):
+        result = {
+            "status": "rejected",
+            "issues": [
+                {"field": "evidence", "message": "similarity below threshold", "severity": "error"},
+                {"field": "confidence", "message": "too low", "severity": "error"},
+            ],
+        }
+        self.assertEqual(
+            _log_error_message(result),
+            "rejected: fields=evidence,confidence",
+        )
+
+    def test_log_error_message_falls_back_to_status(self):
+        result = {"status": "duplicate_suggestion", "existing_finding_id": "f-1"}
+        self.assertEqual(_log_error_message(result), "status=duplicate_suggestion")
 
 
 if __name__ == "__main__":

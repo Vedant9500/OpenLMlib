@@ -69,6 +69,34 @@ class WriteGate:
         self._memo_evidence_text = evidence_text
         return claim_vec, evidence_vec
 
+    def _evidence_item_similarities(self, claim_vec, evidence: List[str]) -> List[float]:
+        """Cosine of the claim against each evidence item.
+
+        Joint-embedding the full evidence dilutes strong single items (e.g. a
+        verbatim quote mixed with a paraphrase), so score each item separately
+        and let the strongest carry the gate.
+        """
+        items = [(item or "").strip() for item in evidence]
+        items = [item for item in items if item]
+        if not items:
+            return []
+        vectors = self.embedder.encode(items)
+        return [_cosine_similarity(claim_vec, vec) for vec in vectors]
+
+    def evidence_similarity(self, claim: str, evidence: List[str]) -> float:
+        """Effective claim<->evidence similarity.
+
+        Max of the joined-evidence cosine and the best single-item cosine, so
+        multi-item evidence is not punished by a weak item diluting the join.
+        For a single evidence item the two are identical.
+        """
+        claim_vec, evidence_vec = self._encode_claim_evidence(claim, evidence)
+        joined_sim = _cosine_similarity(claim_vec, evidence_vec)
+        if len(evidence) <= 1:
+            return joined_sim
+        item_scores = self._evidence_item_similarities(claim_vec, evidence)
+        return max(joined_sim, max(item_scores) if item_scores else 0.0)
+
     def validate(
         self,
         claim: str,
@@ -125,13 +153,19 @@ class WriteGate:
             return issues
 
         claim_vec, evidence_vec = self._encode_claim_evidence(claim, evidence)
-        similarity = _cosine_similarity(claim_vec, evidence_vec)
+        similarity = self.evidence_similarity(claim, evidence)
 
         if similarity < self.min_claim_evidence_sim:
             issues.append(
                 ValidationIssue(
                     field="evidence",
-                    message=f"Claim/evidence similarity {similarity:.2f} below threshold {self.min_claim_evidence_sim}",
+                    message=(
+                        f"Claim/evidence similarity {similarity:.2f} below threshold "
+                        f"{self.min_claim_evidence_sim}. The evidence does not appear to support the claim. "
+                        "Add a paraphrase sentence restating the claim (verbatim quotes alone "
+                        "score too low to pass), or move the quote into reasoning and keep "
+                        "evidence as a paraphrase."
+                    ),
                 )
             )
 

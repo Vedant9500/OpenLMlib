@@ -20,6 +20,25 @@ class SplitEmbedder:
         return vectors
 
 
+class StrongItemEmbedder:
+    """Emulate real dilution: one evidence item strongly matches the claim, a
+    second is off-topic. Joining them produces a mixed vector that scores
+    below threshold, while the lone strong item scores above it."""
+
+    def encode(self, texts):
+        out = []
+        for text in texts:
+            has_strong = "claimish" in text
+            has_weak = "offtopic" in text
+            if has_strong and has_weak:
+                out.append([0.7, 0.7])  # joined/diluted
+            elif has_strong:
+                out.append([1.0, 0.0])  # lone strong item
+            else:
+                out.append([0.0, 1.0])  # off-topic
+        return out
+
+
 class SimpleVectorStore:
     dim = 2
 
@@ -53,6 +72,43 @@ class TestWriteGate(unittest.TestCase):
             embedder=SplitEmbedder(),
         )
         issues = gate.validate("claim", ["evidence"], "reasoning text", 0.7)
+        self.assertFalse(gate.is_allowed(issues))
+
+    def test_multi_item_evidence_rescued_by_strong_item(self):
+        # With a single off-topic item, joined similarity would fail.
+        gate = WriteGate(
+            min_confidence=0.6,
+            min_reasoning_length=10,
+            min_claim_evidence_sim=0.7,
+            novelty_similarity_threshold=0.85,
+            novelty_top_k=5,
+            embedder=StrongItemEmbedder(),
+        )
+        # Join of weak + strong would score ~0.7 (mixed vector) and fail;
+        # the max-item path uses the strong lone item and passes.
+        issues = gate.validate(
+            "claimish claim",
+            ["offtopic filler nowhere near the claim", "claimish supporting evidence"],
+            "reasoning text long enough",
+            0.9,
+        )
+        self.assertTrue(gate.is_allowed(issues))
+
+    def test_all_off_topic_evidence_still_rejected(self):
+        gate = WriteGate(
+            min_confidence=0.6,
+            min_reasoning_length=10,
+            min_claim_evidence_sim=0.7,
+            novelty_similarity_threshold=0.85,
+            novelty_top_k=5,
+            embedder=StrongItemEmbedder(),
+        )
+        issues = gate.validate(
+            "claimish claim",
+            ["offtopic unrelated filler one", "offtopic unrelated filler two"],
+            "reasoning text long enough",
+            0.9,
+        )
         self.assertFalse(gate.is_allowed(issues))
 
     def test_accepts_valid(self):

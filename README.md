@@ -373,7 +373,7 @@ python -m openlmlib.mcp_server --settings ./config/settings.json
 ## Notes
 
 - **Vector Search**: Uses FAISS if installed, otherwise Numpy fallback
-- **Embedding Model**: `sentence-transformers/all-MiniLM-L6-v2` (default)
+- **Embedding Model**: `BAAI/bge-small-en-v1.5` (default; 384-d, best accuracy/speed balance)
 - **Python**: Requires 3.10+
 - **Global vs Local**: Global installs use `~/.openlmlib/`, local uses project `data/`
 

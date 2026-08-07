@@ -157,13 +157,25 @@ def build_server_entry(settings_path: Path, client_id: str = "") -> Dict[str, ob
     import sys
 
     resolved_settings = str(Path(settings_path).expanduser().resolve(strict=False))
+    if client_id == "opencode":
+        # OpenCode 1.18+ expects MCP commands as a single argv array and
+        # requires an explicit enabled flag for each configured server.
+        return {
+            "type": "local",
+            "command": [
+                sys.executable,
+                "-m",
+                "openlmlib.mcp_server",
+                "--settings",
+                resolved_settings,
+            ],
+            "enabled": True,
+        }
+
     entry: Dict[str, object] = {
         "command": sys.executable,
         "args": ["-m", "openlmlib.mcp_server", "--settings", resolved_settings],
     }
-    # OpenCode requires a "type" field to distinguish local vs remote servers
-    if client_id == "opencode":
-        entry["type"] = "local"
     return entry
 
 

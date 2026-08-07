@@ -145,6 +145,36 @@ class TestMcpSetup(unittest.TestCase):
             self.assertIn("mcpServers", payload)
             self.assertIn("openlmlib", payload["mcpServers"])
 
+    def test_install_opencode_uses_current_mcp_entry_shape(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            settings_path = home / ".openlmlib" / "config" / "settings.json"
+
+            result = install_client_config(
+                "opencode",
+                settings_path=settings_path,
+                platform="linux",
+                home=home,
+            )
+
+            self.assertEqual(result["status"], "ok")
+            config_path = home / ".config" / "opencode" / "opencode.json"
+            payload = json.loads(config_path.read_text(encoding="utf-8"))
+            entry = payload["mcp"]["openlmlib"]
+            self.assertEqual(entry["type"], "local")
+            self.assertTrue(entry["enabled"])
+            self.assertEqual(
+                entry["command"],
+                [
+                    sys.executable,
+                    "-m",
+                    "openlmlib.mcp_server",
+                    "--settings",
+                    str(settings_path.resolve()),
+                ],
+            )
+            self.assertNotIn("args", entry)
+
     def test_refresh_defaults_prefers_existing_client_configs(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
