@@ -185,7 +185,13 @@ def _collab_connection():
             logger.info("Initialized collab database schema at %s", db_path)
         except Exception as e:
             raise DatabaseError(f"Failed to initialize collab database: {e}")
-    yield conn, sessions_dir
+    try:
+        yield conn, sessions_dir
+    finally:
+        # Close the thread-local connection so the DB file is not left locked
+        # (required for reliable cleanup on Windows).
+        from .db import _release_thread_connection
+        _release_thread_connection(db_path)
 
 
 def _get_collab_connection():

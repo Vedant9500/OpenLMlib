@@ -358,14 +358,16 @@ class TestSimulatedAgentSession(unittest.TestCase):
         rules = RulesEngine(DEFAULT_RULES)
 
         from datetime import timedelta
+        from openlmlib.collab.rules_engine import _parse_iso
         active_time = "2026-04-06T10:00:00Z"
-        old_time = (datetime.fromisoformat(active_time) - timedelta(minutes=180)).isoformat()
+        before = _parse_iso(active_time)
+        old_time = (before - timedelta(minutes=180)).isoformat()
 
         is_idle, minutes = rules.is_idle(old_time, active_time)
         self.assertTrue(is_idle)
         self.assertGreater(minutes, 120)
 
-        recent_time = (datetime.fromisoformat(active_time) - timedelta(minutes=10)).isoformat()
+        recent_time = (before - timedelta(minutes=10)).isoformat()
         is_idle, minutes = rules.is_idle(recent_time, active_time)
         self.assertFalse(is_idle)
 

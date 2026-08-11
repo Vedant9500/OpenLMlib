@@ -158,6 +158,22 @@ def close_thread_connections() -> None:
         _tl.conns.clear()
 
 
+def _release_thread_connection(db_path: Path) -> None:
+    """Close and drop the thread-local connection for a specific DB path.
+
+    Used by context managers so a per-request collab connection is released
+    promptly, freeing the underlying file on Windows.
+    """
+    if not hasattr(_tl, "conns"):
+        return
+    conn = _tl.conns.pop(str(db_path), None)
+    if conn is not None:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def connect_collab_db(db_path: Path) -> sqlite3.Connection:
     """Connect to the collab sessions database with optimized pragmas."""
     db_path.parent.mkdir(parents=True, exist_ok=True)

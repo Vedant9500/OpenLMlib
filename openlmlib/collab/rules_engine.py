@@ -7,7 +7,19 @@ and idle timeouts.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Dict, List, Optional, Tuple
+
+
+def _parse_iso(value: str) -> datetime:
+    """Parse an ISO-8601 timestamp, tolerating a trailing 'Z' UTC suffix.
+
+    Python < 3.11 cannot parse the 'Z' suffix in ``fromisoformat``, so replace
+    it with an explicit UTC offset for cross-version compatibility.
+    """
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    return datetime.fromisoformat(value)
 
 
 DEFAULT_RULES = {
@@ -97,10 +109,10 @@ class RulesEngine:
         Returns (is_idle, minutes_since_activity).
         """
         try:
-            from datetime import datetime, timezone
+            from datetime import timezone
 
-            last = datetime.fromisoformat(last_activity_iso)
-            current = datetime.fromisoformat(current_iso)
+            last = _parse_iso(last_activity_iso)
+            current = _parse_iso(current_iso)
             if last.tzinfo is None:
                 last = last.replace(tzinfo=timezone.utc)
             if current.tzinfo is None:
