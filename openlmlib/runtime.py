@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from threading import RLock
 from time import monotonic
+from typing import Optional
 import os
 
 from . import db
@@ -18,13 +19,46 @@ class RuntimeState:
     settings: object
     conn: object
     cache: EmbeddingCache
-    embedder: SentenceTransformerEmbedder
     store: object
     dirty_vector: bool = False
     dirty_cache: bool = False
     writes_since_flush: int = 0
     last_flush_ts: float = 0.0
     write_lock: RLock = field(default_factory=RLock)
+    _embedder: Optional[SentenceTransformerEmbedder] = field(default=None, repr=False)
+
+    @property
+    def embedder(self) -> SentenceTransformerEmbedder:
+        """Lazily build the embedding model on first semantic use.
+
+        Building sentence-transformers imports torch, which hangs/crashes on
+        some platforms (e.g. Windows CI runners) even when embeddings are never
+        used. Construct it only on first access so health() and other
+        non-semantic paths never pull the heavy stack.
+        """
+        if self._embedder is None:
+            self._embedder = SentenceTransformerEmbedder(
+                self.settings.embedding_model,
+                cache=self.cache,
+                normalize=self.settings.embedding_metric == "cosine",
+            )
+            self._prewarm()
+        return self._embedder
+
+    def _prewarm(self) -> None:
+        if os.environ.get("OPENLMLIB_EMBED_PREWARM", "1") == "0":
+            return
+        _ = self._embedder.encode([
+            "openlmlib runtime prewarm",
+            "Claim: Example finding claim with supporting evidence and reasoning text.",
+            (
+                "Context: This is a longer contextual chunk that simulates the output "
+                "of build_contextual_chunk with multiple sentences and detailed information "
+                "about a technical topic including evidence references and reasoning steps "
+                "that would typically appear in a real finding document stored in the library."
+            ),
+        ])
+        self.cache.save()
 
 
 _RUNTIME_LOCK = RLock()
@@ -66,11 +100,6 @@ def get_runtime(settings_path: Path) -> RuntimeState:
             db.init_db(conn)
 
             cache = EmbeddingCache(settings.embeddings_cache_path)
-            embedder = SentenceTransformerEmbedder(
-                settings.embedding_model,
-                cache=cache,
-                normalize=settings.embedding_metric == "cosine",
-            )
 
             if settings.vector_index_path.exists() and settings.vector_meta_path.exists():
                 store = load_vector_store(settings.vector_index_path, settings.vector_meta_path)
@@ -82,26 +111,9 @@ def get_runtime(settings_path: Path) -> RuntimeState:
                 settings=settings,
                 conn=conn,
                 cache=cache,
-                embedder=embedder,
                 store=store,
                 last_flush_ts=monotonic(),
             )
-
-            if os.environ.get("OPENLMLIB_EMBED_PREWARM", "1") != "0":
-                # Force lazy model internals to initialize once at startup for better first-query latency.
-                # Encode texts of varying lengths to trigger all lazy initialization paths
-                # (short tokens, medium claims, long contextual chunks).
-                _ = embedder.encode([
-                    "openlmlib runtime prewarm",
-                    "Claim: Example finding claim with supporting evidence and reasoning text.",
-                    (
-                        "Context: This is a longer contextual chunk that simulates the output "
-                        "of build_contextual_chunk with multiple sentences and detailed information "
-                        "about a technical topic including evidence references and reasoning steps "
-                        "that would typically appear in a real finding document stored in the library."
-                    ),
-                ])
-                cache.save()
         except Exception:
             if conn is not None:
                 try:
