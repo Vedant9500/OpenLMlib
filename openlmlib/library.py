@@ -390,8 +390,12 @@ def add_finding(
             "message": "Set confirm=true to add a finding.",
         }
 
+    # Read-before-write duplicate gate runs before runtime construction so a
+    # duplicate suggestion never pays embedder/runtime load cost. Token-overlap
+    # (Jaccard) check applies here; _claim_semantic_similarity returns 0.0
+    # without an embedder, so semantic gating happens via the WriteGate below.
     duplicate_warning = (
-        _check_duplicate_warning(similar_findings, claim, embedder=duplicate_embedder)
+        _check_duplicate_warning(similar_findings, claim)
         if similar_findings
         else None
     )
@@ -435,10 +439,6 @@ def add_finding(
 
     embedder = runtime.embedder
     store = runtime.store
-
-    # Trusted exports bypass embedding claim/evidence similarity, so also skip
-    # the semantic duplicate check (the source was already reviewed upstream).
-    duplicate_embedder = None if trusted_export else embedder
 
     # Trusted exports still enforce confidence/reasoning/evidence presence, but
     # do not fail on embedding claim/evidence similarity (source already reviewed).

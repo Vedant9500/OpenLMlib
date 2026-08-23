@@ -33,7 +33,10 @@ classifiers = [
 dependencies = [
   "numpy>=1.23,<3.0",
   "mcp>=1.0.0,<2.0.0",
-  "sentence-transformers>=2.2,<5.0",
+  "sentence-transformers>=5.5,<6.0",
+  # Security floor: excludes transformers with known RCE advisories
+  # PYSEC-2026-2288 (<5.0.0), PYSEC-2026-2289 (<5.3.0), PYSEC-2026-2290 (<5.5.0).
+  "transformers>=5.5.0,<6",
   "rich>=12.0.0,<15.0.0",
   "tomli>=2.0.0; python_version<'3.11'",
   "tomli-w>=1.0.0,<2.0.0",

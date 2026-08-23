@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from .markup import MEMORY_CONTEXT_CLOSE, MEMORY_CONTEXT_OPEN, escape_untrusted
 from .storage import MemoryStorage
 
 logger = logging.getLogger(__name__)
@@ -333,6 +334,9 @@ class ProgressiveRetriever:
         """
         Format observations into LLM-readable context block.
 
+        All observation-derived fields are untrusted stored content; they are
+        escaped so they cannot forge the memory-context delimiters.
+
         Args:
             observations: List of observation dicts
 
@@ -340,7 +344,7 @@ class ProgressiveRetriever:
             Formatted context string
         """
         lines = []
-        lines.append("<openlmlib-memory-context>")
+        lines.append(MEMORY_CONTEXT_OPEN)
         lines.append(
             f"# Retrieved Knowledge ({len(observations)} items)"
         )
@@ -349,32 +353,32 @@ class ProgressiveRetriever:
         for idx, obs in enumerate(observations, 1):
             # Generate title
             title = self._generate_title(obs)
-            lines.append(f"## {idx}. {title[:80]}")
+            lines.append(f"## {idx}. {escape_untrusted(title[:80])}")
 
             # Add metadata
             if obs.get("obs_type"):
-                lines.append(f"**Type**: {obs['obs_type']}")
+                lines.append(f"**Type**: {escape_untrusted(obs['obs_type'])}")
 
             if obs.get("timestamp"):
-                lines.append(f"**Timestamp**: {obs['timestamp'][:19]}")
+                lines.append(f"**Timestamp**: {escape_untrusted(obs['timestamp'][:19])}")
 
             # Add compressed summary if available
             if obs.get("compressed_summary"):
-                lines.append(f"**Summary**: {obs['compressed_summary'][:200]}")
+                lines.append(f"**Summary**: {escape_untrusted(obs['compressed_summary'][:200])}")
             elif obs.get("tool_output"):
                 # Fallback to truncated tool output
-                lines.append(f"**Output**: {obs['tool_output'][:150]}...")
+                lines.append(f"**Output**: {escape_untrusted(obs['tool_output'][:150])}...")
 
             # Add tags/concepts
             concepts = obs.get("concepts", [])
             if concepts:
                 lines.append(
-                    f"**Concepts**: {', '.join(concepts[:5])}"
+                    f"**Concepts**: {escape_untrusted(', '.join(concepts[:5]))}"
                 )
 
             lines.append("")
 
-        lines.append("</openlmlib-memory-context>")
+        lines.append(MEMORY_CONTEXT_CLOSE)
         lines.append("")
         lines.append(
             "This context was retrieved from previous sessions. "

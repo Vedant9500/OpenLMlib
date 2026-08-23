@@ -65,3 +65,6 @@ run_ci_checks.ps1
 .bench_probe/
 .bench_tmp/
 results/
+
+# Security audit scratch reproductions and scanner output
+scratch/

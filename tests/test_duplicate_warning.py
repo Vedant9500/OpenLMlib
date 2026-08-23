@@ -1,6 +1,8 @@
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
-from openlmlib.library import _check_duplicate_warning
+from openlmlib.library import _check_duplicate_warning, add_finding
 
 
 class DictEmbedder:
@@ -73,6 +75,37 @@ class TestDuplicateWarning(unittest.TestCase):
         # Identical short claims pass the token Jaccard path even without an embedder.
         self.assertIsNotNone(warning)
         self.assertEqual(warning["existing_finding_id"], "f-3")
+
+
+class TestAddFindingDuplicateGate(unittest.TestCase):
+    """Regression: MCP save passes similar_findings; add_finding must return a
+    duplicate suggestion without constructing the runtime (H-1)."""
+
+    SIMILAR = [
+        {
+            "id": "f-existing",
+            "claim": "Redis caching reduces API latency under production load",
+            "rank": 0.12,
+        }
+    ]
+
+    def test_duplicate_suggestion_before_runtime_construction(self):
+        claim = "Redis caching reduces API latency under production load"
+        with patch("openlmlib.library.get_runtime") as get_runtime:
+            result = add_finding(
+                settings_path=Path("/tmp/unused-settings.json"),
+                project="p",
+                claim=claim,
+                confidence=0.9,
+                evidence=["e1"],
+                reasoning="x" * 40,
+                confirm=True,
+                similar_findings=self.SIMILAR,
+            )
+
+        self.assertEqual(result["status"], "duplicate_suggestion")
+        self.assertEqual(result["existing_finding_id"], "f-existing")
+        get_runtime.assert_not_called()
 
 
 if __name__ == "__main__":

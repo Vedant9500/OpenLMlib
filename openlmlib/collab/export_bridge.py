@@ -15,6 +15,27 @@ from .db import get_session, get_session_artifacts
 from .artifact_store import ArtifactStore
 from .security import validate_artifact_id
 
+# Sessions in these states can still receive new artifacts from members, so
+# exporting them would race concurrent writes and could promote unreviewed
+# attacker-influenced content past the write-quality gates.
+LIVE_SESSION_STATUSES = frozenset({"active", "paused"})
+
+
+def _live_session_rejection(session: Dict) -> Optional[Dict]:
+    """Return an export-rejection payload when the session is still live."""
+    status = str(session.get("status") or "").lower()
+    if status in LIVE_SESSION_STATUSES:
+        return {
+            "error": (
+                f"Session {session.get('session_id')} is still live "
+                f"(status={status!r}). Terminate or complete the session "
+                "before exporting artifacts to the library."
+            ),
+            "error_type": "session_live",
+            "exported": 0,
+        }
+    return None
+
 
 def _validate_artifact_filter_ids(artifact_ids: Optional[List[str]]) -> Optional[List[str]]:
     if artifact_ids is None:
@@ -116,6 +137,10 @@ def export_session_to_library(
             "exported": 0,
         }
 
+    rejection = _live_session_rejection(session)
+    if rejection is not None:
+        return rejection
+
     store = ArtifactStore(collab_conn, sessions_dir)
     artifacts = store.list_artifacts(session_id)
 
@@ -213,6 +238,10 @@ def export_session_summary_as_finding(
     session = get_session(collab_conn, session_id)
     if session is None:
         return {"error": f"Session {session_id} not found"}
+
+    rejection = _live_session_rejection(session)
+    if rejection is not None:
+        return rejection
 
     store = ArtifactStore(collab_conn, sessions_dir)
     summary = store.get_latest_summary(session_id)

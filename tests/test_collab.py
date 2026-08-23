@@ -1182,6 +1182,10 @@ class TestExportBridge(unittest.TestCase):
                 content="Exportable content",
                 created_at="2026-04-05T10:01:00Z",
             )
+            # Exports require a closed session; live sessions are rejected.
+            update_session_status(
+                conn, result["session_id"], "terminated", "2026-04-05T10:05:00Z"
+            )
 
             with patch("openlmlib.collab.export_bridge.add_finding") as add_finding_mock:
                 add_finding_mock.return_value = {"status": "ok", "id": "finding_001"}
@@ -1263,6 +1267,9 @@ class TestExportBridge(unittest.TestCase):
                 content="Exportable content",
                 created_at="2026-04-05T10:01:00Z",
             )
+            update_session_status(
+                conn, result["session_id"], "terminated", "2026-04-05T10:05:00Z"
+            )
 
             with patch("openlmlib.collab.export_bridge.add_finding") as add_finding_mock:
                 add_finding_mock.return_value = {
@@ -1287,6 +1294,85 @@ class TestExportBridge(unittest.TestCase):
             self.assertEqual(failure["status"], "rejected")
             self.assertIn("similarity", failure["reason"].lower())
             self.assertEqual(failure["issues"][0]["field"], "claim_evidence_sim")
+        finally:
+            if conn is not None:
+                conn.close()
+            tmp.cleanup()
+
+    def test_export_rejects_live_session(self):
+        """Live sessions (active/paused) must not export trusted findings (H-3)."""
+        from openlmlib.collab.export_bridge import (
+            export_session_to_library,
+            export_session_summary_as_finding,
+        )
+
+        tmp = tempfile.TemporaryDirectory()
+        conn = None
+        try:
+            sessions_dir = Path(tmp.name) / "sessions"
+            sessions_dir.mkdir(parents=True)
+            conn = connect_collab_db(Path(tmp.name) / "test.db")
+            init_collab_db(conn)
+            result = create_collab_session(
+                conn,
+                sessions_dir,
+                title="Live Export Test",
+                created_by="orch",
+            )
+            store = ArtifactStore(conn, sessions_dir)
+            store.save(
+                session_id=result["session_id"],
+                created_by=result["agent_id"],
+                title="Summary",
+                content="Exportable content while live",
+                created_at="2026-04-05T10:01:00Z",
+            )
+
+            with patch("openlmlib.collab.export_bridge.add_finding") as add_finding_mock:
+                # active session -> rejected
+                active_result = export_session_to_library(
+                    settings_path=Path(tmp.name) / "settings.json",
+                    session_id=result["session_id"],
+                    collab_conn=conn,
+                    sessions_dir=sessions_dir,
+                )
+                self.assertEqual(active_result.get("error_type"), "session_live")
+                self.assertEqual(active_result.get("exported"), 0)
+
+                summary_result = export_session_summary_as_finding(
+                    settings_path=Path(tmp.name) / "settings.json",
+                    session_id=result["session_id"],
+                    collab_conn=conn,
+                    sessions_dir=sessions_dir,
+                )
+                self.assertEqual(summary_result.get("error_type"), "session_live")
+
+                # paused session -> still rejected
+                update_session_status(
+                    conn, result["session_id"], "paused", "2026-04-05T10:02:00Z"
+                )
+                paused_result = export_session_to_library(
+                    settings_path=Path(tmp.name) / "settings.json",
+                    session_id=result["session_id"],
+                    collab_conn=conn,
+                    sessions_dir=sessions_dir,
+                )
+                self.assertEqual(paused_result.get("error_type"), "session_live")
+                add_finding_mock.assert_not_called()
+
+            # terminated session -> export path allowed again
+            update_session_status(
+                conn, result["session_id"], "terminated", "2026-04-05T10:05:00Z"
+            )
+            with patch("openlmlib.collab.export_bridge.add_finding") as add_finding_mock:
+                add_finding_mock.return_value = {"status": "ok", "id": "finding_001"}
+                closed_result = export_session_to_library(
+                    settings_path=Path(tmp.name) / "settings.json",
+                    session_id=result["session_id"],
+                    collab_conn=conn,
+                    sessions_dir=sessions_dir,
+                )
+            self.assertEqual(closed_result.get("exported"), 1)
         finally:
             if conn is not None:
                 conn.close()
