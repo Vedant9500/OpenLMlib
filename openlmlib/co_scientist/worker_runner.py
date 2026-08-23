@@ -11,7 +11,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
+import sys
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -38,6 +40,39 @@ WORKER_STATUS_VALUES = frozenset({
     "cancelled",
     "launch_failed",
 })
+
+# Environment variables a worker spec may not override (M-11). These control
+# process resolution, code loading, and TLS/proxy behavior; letting spec files
+# set them enables arbitrary code execution and traffic interception.
+PROTECTED_WORKER_ENV_KEYS = frozenset({
+    "PATH", "PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP",
+    "LD_LIBRARY_PATH", "LD_PRELOAD", "LD_AUDIT",
+    "DYLD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES", "DYLD_FRAMEWORK_PATH",
+    "http_proxy", "https_proxy", "all_proxy", "no_proxy",
+    "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+})
+
+
+def _worker_allowed_executables() -> "set[str]":
+    """Executables a worker spec may launch.
+
+    Default: only the current Python interpreter (workers are Python
+    subprocesses in normal operation). Operators extend the allow-list with
+    OPENLMLIB_WORKER_ALLOWED_COMMANDS (comma-separated absolute paths or
+    PATH-resolvable names).
+    """
+    allowed: "set[str]" = set()
+    if sys.executable:
+        allowed.add(os.path.abspath(sys.executable))
+    configured = os.environ.get("OPENLMLIB_WORKER_ALLOWED_COMMANDS", "")
+    for chunk in configured.split(","):
+        entry = chunk.strip()
+        if not entry:
+            continue
+        resolved = entry if os.path.isabs(entry) else (shutil.which(entry) or "")
+        if resolved:
+            allowed.add(os.path.abspath(resolved))
+    return allowed
 
 
 class WorkerRunnerError(Exception):
@@ -120,6 +155,35 @@ class WorkerLaunchSpec:
             issues.append("budget.max_tokens must be >= 1 when provided")
         if self.budget.max_cost_usd is not None and float(self.budget.max_cost_usd) < 0:
             issues.append("budget.max_cost_usd must be >= 0 when provided")
+
+        # Executable allow-list (M-11): specs are untrusted input; only
+        # operator-approved executables may be launched.
+        if self.command and all(isinstance(item, str) and item for item in self.command):
+            executable = self.command[0]
+            resolved = (
+                os.path.abspath(executable)
+                if os.path.isabs(executable)
+                else (shutil.which(executable) and os.path.abspath(shutil.which(executable)))
+            )
+            allowed = _worker_allowed_executables()
+            allowed_real = {os.path.realpath(path) for path in allowed}
+            if resolved is None or os.path.realpath(resolved) not in allowed_real:
+                issues.append(
+                    f"executable {executable!r} is not in the worker allow-list "
+                    "(set OPENLMLIB_WORKER_ALLOWED_COMMANDS to approve additional "
+                    "executables)"
+                )
+
+        # Protected environment keys (M-11): spec files cannot override PATH,
+        # code-loading, or proxy/TLS variables.
+        override_flag = os.environ.get("OPENLMLIB_WORKER_ALLOW_ENV_OVERRIDE", "") == "1"
+        if not override_flag:
+            blocked = sorted(set(self.env) & PROTECTED_WORKER_ENV_KEYS)
+            if blocked:
+                issues.append(
+                    "spec.env overrides protected variables: " + ", ".join(blocked)
+                )
+
         if issues:
             raise WorkerRunnerError("; ".join(issues))
 
@@ -191,8 +255,26 @@ class ExternalWorkerRunner:
         self.settings_path = settings_path
         self.workers_dir.mkdir(parents=True, exist_ok=True)
 
+    def validate_workspace_cwd(self, spec: WorkerLaunchSpec) -> None:
+        """Worker working directories must stay inside the data root (M-11)."""
+        workspace_root = self.workers_dir.parent.resolve()
+        if spec.cwd is None:
+            return
+        resolved_cwd = Path(spec.cwd).resolve()
+        if resolved_cwd != workspace_root and workspace_root not in resolved_cwd.parents:
+            raise WorkerRunnerError(
+                f"spec.cwd {spec.cwd} is outside the workspace root "
+                f"{workspace_root}; worker working directories must stay "
+                "inside the configured data root."
+            )
+
     def start_worker(self, spec: WorkerLaunchSpec) -> WorkerProcess:
         spec.validate()
+
+        # cwd containment (M-11): arbitrary directories would give specs
+        # implicit access wherever the host process happens to run.
+        self.validate_workspace_cwd(spec)
+
         worker_run_id = WORKER_RUN_PREFIX + uuid.uuid4().hex[:12]
         worker_dir = self.workers_dir / worker_run_id
         worker_dir.mkdir(parents=True, exist_ok=False)
@@ -233,7 +315,14 @@ class ExternalWorkerRunner:
         _write_json(heartbeat_path, _heartbeat_payload(worker_run_id, spec, agent_id, "starting", now))
 
         log_handle = log_path.open("a", encoding="utf-8", buffering=1)
-        log_handle.write(f"[{now}] launching {' '.join(spec.command)}\n")
+        protected_overrides = sorted(set(spec.env) & PROTECTED_WORKER_ENV_KEYS)
+        log_handle.write(
+            f"[{now}] launching {' '.join(spec.command)}\n"
+            f"[{now}] cwd={spec.cwd or '<inherited>'}\n"
+            f"[{now}] env override keys: {sorted(spec.env) or 'none'}"
+            + (f" (PROTECTED, applied anyway via override flag: {protected_overrides})" if protected_overrides else "")
+            + "\n"
+        )
         try:
             process = subprocess.Popen(
                 spec.command,

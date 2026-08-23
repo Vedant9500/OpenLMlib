@@ -4,10 +4,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Tuple
 import json
+import logging
 import math
 import os
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 try:
     import faiss  # type: ignore
@@ -206,6 +209,16 @@ class NumpyVectorStore(VectorStore):
             dim = int(payload["dim"][0])
             ids = payload["ids"].astype(np.int64)
             vectors = payload["vectors"].astype(np.float32)
+        if ids.size != vectors.shape[0]:
+            raise ValueError(
+                f"Corrupt vector index {index_path}: {ids.size} ids do not "
+                f"match {vectors.shape[0]} stored vectors."
+            )
+        if vectors.size and vectors.shape[1] != dim:
+            raise ValueError(
+                f"Corrupt vector index {index_path}: vector width "
+                f"{vectors.shape[1]} does not match declared dim {dim}."
+            )
         store = cls(dim, metric)
         store._vectors = {
             int(idx): vectors[pos].copy()
@@ -256,12 +269,33 @@ def load_vector_store(index_path: Path, meta_path: Path) -> VectorStore:
         if meta.backend == "faiss":
             if faiss is None:
                 raise RuntimeError("Vector index uses faiss, but faiss is not installed.")
-            return FaissVectorStore.load(resolved_index_path, meta.metric)
+            store = FaissVectorStore.load(resolved_index_path, meta.metric)
+            if store.dim != meta.dim:
+                raise RuntimeError(
+                    f"Vector index dim {store.dim} does not match metadata dim "
+                    f"{meta.dim}; refusing to use a mismatched index."
+                )
+            return store
         if meta.backend == "numpy":
+            # Fail closed on corrupt or dimension-mismatched indexes: silently
+            # substituting an empty store would make later saves overwrite the
+            # real index with nothing (M-7).
             try:
-                return NumpyVectorStore.load(resolved_index_path, meta.metric)
-            except Exception:
-                return NumpyVectorStore(dim=meta.dim, metric=meta.metric)
+                store = NumpyVectorStore.load(resolved_index_path, meta.metric)
+            except FileNotFoundError:
+                raise
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Failed to load numpy vector index at {resolved_index_path}: {exc}. "
+                    "Refusing to continue with an empty replacement; restore from a "
+                    "backup or rebuild the index."
+                ) from exc
+            if store.dim != meta.dim:
+                raise RuntimeError(
+                    f"Vector index dim {store.dim} does not match metadata dim "
+                    f"{meta.dim}; refusing to use a mismatched index."
+                )
+            return store
         raise RuntimeError(f"Unknown vector store backend: {meta.backend}")
 
     return create_vector_store(dim=0, metric="cosine", prefer_faiss=False)
@@ -278,36 +312,36 @@ def save_vector_store(
     lock_path = meta_path.with_suffix(meta_path.suffix + ".lock")
     with interprocess_lock(lock_path, timeout_sec=60.0):
         original_store = store
+        # Merge failures must surface: swallowing them here would let the
+        # subsequent save overwrite the on-disk index without the existing
+        # vectors, silently losing data after successful DB commits (M-7).
         if merge_existing and meta_path.exists():
-            try:
-                existing_meta = load_meta(meta_path)
-                if existing_meta.backend == store.backend and existing_meta.metric == store.metric:
-                    if existing_meta.backend == "faiss" and index_path.exists():
-                        try:
-                            existing_store = FaissVectorStore.load(index_path, existing_meta.metric)
-                            pending_deletes = list(getattr(store, "_pending_delete_ids", set()))
-                            pending_adds = dict(getattr(store, "_pending_add_vectors", {}))
-                            if pending_deletes:
-                                existing_store.delete(pending_deletes)
-                            if pending_adds:
-                                existing_store.add(pending_adds.keys(), pending_adds.values())
-                            existing_store.clear_pending()
-                            store = existing_store
-                        except Exception:
-                            pass
-                    elif existing_meta.backend == "numpy" and index_path.exists():
-                        try:
-                            existing_store = NumpyVectorStore.load(index_path, existing_meta.metric)
-                            if getattr(store, "_vectors", None) is not None:
-                                existing_store._vectors.update(store._vectors)
-                                for deleted_id in getattr(store, "_deleted_ids", set()):
-                                    existing_store._vectors.pop(int(deleted_id), None)
-                                existing_store._deleted_ids = set(getattr(store, "_deleted_ids", set()))
-                                store = existing_store
-                        except Exception:
-                            pass
-            except Exception:
-                pass
+            existing_meta = load_meta(meta_path)
+            if existing_meta.backend != store.backend or existing_meta.metric != store.metric:
+                logger.warning(
+                    "Vector backend/metric changed (%s/%s -> %s/%s); "
+                    "skipping merge with existing index.",
+                    existing_meta.backend, existing_meta.metric,
+                    store.backend, store.metric,
+                )
+            elif existing_meta.backend == "faiss" and index_path.exists():
+                existing_store = FaissVectorStore.load(index_path, existing_meta.metric)
+                pending_deletes = list(getattr(store, "_pending_delete_ids", set()))
+                pending_adds = dict(getattr(store, "_pending_add_vectors", {}))
+                if pending_deletes:
+                    existing_store.delete(pending_deletes)
+                if pending_adds:
+                    existing_store.add(pending_adds.keys(), pending_adds.values())
+                existing_store.clear_pending()
+                store = existing_store
+            elif existing_meta.backend == "numpy" and index_path.exists():
+                existing_store = NumpyVectorStore.load(index_path, existing_meta.metric)
+                if getattr(store, "_vectors", None) is not None:
+                    existing_store._vectors.update(store._vectors)
+                    for deleted_id in getattr(store, "_deleted_ids", set()):
+                        existing_store._vectors.pop(int(deleted_id), None)
+                    existing_store._deleted_ids = set(getattr(store, "_deleted_ids", set()))
+                    store = existing_store
 
         store.save(index_path)
         meta = VectorStoreMeta(

@@ -203,7 +203,10 @@ function installFromLocal(localPath, onProgress) {
 
 function downloadModel(modelName, onProgress) {
   onProgress(`Downloading embedding model: ${modelName}...`);
-  const script = `from sentence_transformers import SentenceTransformer; SentenceTransformer("${modelName}"); print("model-downloaded")`;
+  // Serialize the model name as JSON and parse it in Python; string
+  // concatenation into Python source would allow code injection if a hostile
+  // value ever reaches this path (M-18).
+  const script = `import json as _json; from sentence_transformers import SentenceTransformer; SentenceTransformer(_json.loads(${JSON.stringify(JSON.stringify(modelName))})); print("model-downloaded")`;
   try {
     execFileSync(VENV_PYTHON, ['-c', script], {
       stdio: 'pipe',
@@ -219,22 +222,32 @@ function downloadModel(modelName, onProgress) {
 
 function runSetupWizard(config, onProgress) {
   onProgress('Configuring MCP clients...');
-  const escapedHome = OPENLMLIB_HOME.replace(/\\/g, '\\\\');
+  // All external values are passed as one JSON document parsed inside Python.
+  // Never interpolate operator-controlled strings directly into Python
+  // source; that would allow code execution via crafted values (M-18).
+  const payloadJson = JSON.stringify({
+    home: OPENLMLIB_HOME,
+    vector_backend: config.vectorBackend || null,
+    embedding_model: config.embeddingModel || null,
+  });
   const script = [
     'from pathlib import Path',
+    'import json',
     'from openlmlib.mcp_setup import install_or_refresh_default_client_configs',
     'from openlmlib.settings import write_default_settings, default_settings_payload',
-    'import json',
-    `settings_path = Path(r"${escapedHome}") / "config" / "settings.json"`,
+    `config = json.loads(${JSON.stringify(payloadJson)})`,
+    'settings_path = Path(config["home"]) / "config" / "settings.json"',
     'write_default_settings(settings_path)',
     'payload = default_settings_payload()',
-    config.vectorBackend ? `payload["vector_backend"] = "${config.vectorBackend}"` : '',
-    config.embeddingModel ? `payload["embedding_model"] = "${config.embeddingModel}"` : '',
+    'if config.get("vector_backend"):',
+    '    payload["vector_backend"] = config["vector_backend"]',
+    'if config.get("embedding_model"):',
+    '    payload["embedding_model"] = config["embedding_model"]',
     'with open(settings_path, "w") as f:',
     '    json.dump(payload, f, indent=2)',
     'install_or_refresh_default_client_configs(settings_path=settings_path)',
     'print("setup-complete")',
-  ].filter(Boolean).join('\n');
+  ].join('\n');
 
   const scriptPath = path.join(os.tmpdir(), `openlmlib-setup-${Date.now()}.py`);
   fs.writeFileSync(scriptPath, script, { encoding: 'utf-8' });

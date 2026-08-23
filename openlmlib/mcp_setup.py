@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import logging
 import os
+import shutil
 from pathlib import Path
 import re
 from typing import Dict, Iterable, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 SERVER_NAME = "openlmlib"
@@ -434,36 +438,36 @@ def install_client_config(
 
         if changed or not target_existed:
             target_path.parent.mkdir(parents=True, exist_ok=True)
-            
+
             # Handle TOML serialization for Codex CLI
             if client_id == "codex_cli" or target_path.suffix == ".toml":
                 try:
                     import tomli_w
                 except ImportError:
                     tomli_w = None
-                
+
                 if tomli_w:
-                    target_path.write_text(tomli_w.dumps(payload), encoding="utf-8")
+                    rendered = tomli_w.dumps(payload)
                 else:
-                    target_path.write_text(_dump_simple_toml(payload), encoding="utf-8")
+                    rendered = _dump_simple_toml(payload)
             elif client_id == "aider" or target_path.suffix.lower() in {".yml", ".yaml"}:
                 try:
                     import yaml  # type: ignore
-                    target_path.write_text(
-                        yaml.safe_dump(payload, sort_keys=False, default_flow_style=False),
-                        encoding="utf-8",
-                    )
+                    rendered = yaml.safe_dump(payload, sort_keys=False, default_flow_style=False)
                 except ImportError:
-                    target_path.write_text(_dump_simple_yaml(payload), encoding="utf-8")
+                    rendered = _dump_simple_yaml(payload)
             else:
                 # Default JSON serialization
-                target_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+                rendered = json.dumps(payload, indent=2)
+
+            _atomic_write_text(target_path, rendered)
 
         return {
             "client": client.id,
             "label": client.label,
             "status": "ok",
             "path": str(target_path),
+            "created": not target_existed,
             "updated": changed or not target_existed,
         }
     except Exception as exc:
@@ -474,6 +478,26 @@ def install_client_config(
             "path": str(target_path),
             "message": str(exc),
         }
+
+
+def _atomic_write_text(target_path: Path, text: str) -> None:
+    """Replace a client config atomically, preserving existing permissions.
+
+    A temp file in the same directory is fully written, chmod'ed to match the
+    previous file (or a safe default for new files), then os.replace()d into
+    place so readers never observe partial configs.
+    """
+    tmp_path = target_path.with_suffix(target_path.suffix + f".{os.getpid()}.tmp")
+    tmp_path.write_text(text, encoding="utf-8")
+    try:
+        if target_path.exists():
+            shutil.copymode(target_path, tmp_path)
+        else:
+            os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, target_path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
 
 
 def install_client_configs(
@@ -534,13 +558,34 @@ def install_or_refresh_default_client_configs(
     env: Optional[Dict[str, str]] = None,
     home: Optional[Path] = None,
 ) -> Dict[str, object]:
-    # Upgrade MCP entries for clients the user already configured.
-    # If no client config exists yet, seed VS Code + popular CLI tools by default.
+    """Upgrade MCP entries for clients the user already configured.
+
+    If no client config exists yet, seeds a default set (VS Code + popular CLI
+    tools). Operators can narrow that default with OPENLMLIB_MCP_CLIENTS
+    (comma-separated client IDs) instead of accepting the full set (M-4).
+
+    Every written path is logged and echoed in the per-client results.
+    """
     client_ids = discover_existing_client_ids(platform=platform, env=env, home=home)
     if not client_ids:
         # Default to VS Code + top CLI tools with native MCP support
         client_ids = ["vscode", "claude_code", "gemini_cli", "qwen_code", "opencode", "codex_cli"]
 
+        override = (env or os.environ).get("OPENLMLIB_MCP_CLIENTS", "")
+        requested = [chunk.strip() for chunk in override.split(",") if chunk.strip()]
+        if requested:
+            known = {client.id for client in CLIENT_SPECS}
+            unknown = [item for item in requested if item not in known]
+            if unknown:
+                raise ValueError(
+                    f"OPENLMLIB_MCP_CLIENTS lists unknown clients: {', '.join(unknown)}"
+                )
+            client_ids = requested
+
+    logger.info(
+        "Writing MCP server entries for clients: %s",
+        ", ".join(client_ids),
+    )
     return install_client_configs(
         client_ids,
         settings_path=settings_path,

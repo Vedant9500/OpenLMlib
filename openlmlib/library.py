@@ -7,7 +7,10 @@ import logging
 import re
 import shutil
 import sqlite3
+import tempfile
 import uuid
+import hashlib
+import os
 from datetime import datetime, timezone
 from time import monotonic
 from uuid import uuid4
@@ -163,6 +166,17 @@ def _create_backup_dir(root: Path, prefix: str = "openlmlib") -> Path:
     raise FileExistsError(f"Could not allocate unique backup directory under {root}")
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+BACKUP_MANIFEST_VERSION = 2
+
+
 def backup_library(settings_path: Path, output_dir: Optional[Path] = None) -> Dict[str, Any]:
     settings = load_settings(settings_path)
     root = output_dir or (settings.data_root / "backups")
@@ -170,6 +184,15 @@ def backup_library(settings_path: Path, output_dir: Optional[Path] = None) -> Di
 
     copied_files: List[str] = []
     copied_dirs: List[str] = []
+
+    manifest_files: List[Dict[str, Any]] = []
+
+    def _record(dest: Path, relative: str) -> None:
+        manifest_files.append({
+            "path": relative,
+            "sha256": _sha256_file(dest),
+            "size": dest.stat().st_size,
+        })
 
     if settings.db_path.exists():
         # Use SQLite Online Backup API for WAL-mode safety.
@@ -188,30 +211,47 @@ def backup_library(settings_path: Path, output_dir: Optional[Path] = None) -> Di
             # Fallback for corrupted or non-SQLite files — copy raw bytes.
             shutil.copy2(settings.db_path, db_dest)
         copied_files.append(str(db_dest))
+        _record(db_dest, "findings.db")
 
     if settings.vector_index_path.exists():
         vec_dest = backup_dir / settings.vector_index_path.name
         shutil.copy2(settings.vector_index_path, vec_dest)
         copied_files.append(str(vec_dest))
+        _record(vec_dest, settings.vector_index_path.name)
 
     if settings.vector_meta_path.exists():
         meta_dest = backup_dir / settings.vector_meta_path.name
         shutil.copy2(settings.vector_meta_path, meta_dest)
         copied_files.append(str(meta_dest))
+        _record(meta_dest, settings.vector_meta_path.name)
 
     if settings.embeddings_cache_path.exists():
         cache_dest = backup_dir / settings.embeddings_cache_path.name
         shutil.copy2(settings.embeddings_cache_path, cache_dest)
         copied_files.append(str(cache_dest))
+        _record(cache_dest, settings.embeddings_cache_path.name)
 
     if settings.findings_dir.exists():
         findings_dest = backup_dir / "findings"
         shutil.copytree(settings.findings_dir, findings_dest)
         copied_dirs.append(str(findings_dest))
+        for json_file in sorted(findings_dest.rglob("*")):
+            if json_file.is_file():
+                _record(json_file, json_file.relative_to(backup_dir).as_posix())
 
+    # Canonical relative paths + checksums make the manifest trustworthy
+    # provenance; restore validates every entry before touching live data (M-13).
     manifest = {
+        "format_version": BACKUP_MANIFEST_VERSION,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "settings_path": str(settings_path),
+        "embedding": {
+            "model": getattr(settings, "embedding_model", ""),
+            "dim": getattr(settings, "embedding_dim", None),
+            "metric": getattr(settings, "embedding_metric", ""),
+        },
+        "files": manifest_files,
+        # Legacy keys kept for older tooling that reads them.
         "copied_files": copied_files,
         "copied_dirs": copied_dirs,
     }
@@ -247,6 +287,45 @@ def restore_library(
     if not manifest_path.exists():
         return {"status": "error", "message": "manifest.json not found in backup directory."}
 
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {"status": "error", "message": f"manifest.json is unreadable: {exc}"}
+
+    # Integrity gate (M-13): v2+ manifests list canonical relative paths with
+    # checksums. Every entry must verify before live data is touched.
+    problems: List[str] = []
+    if int(manifest.get("format_version") or 1) >= 2:
+        for entry in manifest.get("files", []):
+            relative = str(entry.get("path", ""))
+            source = backup_dir / relative
+            if not source.is_file():
+                problems.append(f"missing from backup: {relative}")
+                continue
+            actual = _sha256_file(source)
+            expected = entry.get("sha256")
+            if expected and actual != expected:
+                problems.append(f"checksum mismatch: {relative}")
+        if problems:
+            return {
+                "status": "error",
+                "message": (
+                    "Backup integrity check failed; live data was not modified. "
+                    "The backup directory is incomplete or corrupted."
+                ),
+                "problems": problems,
+            }
+    else:
+        logger.warning(
+            "Backup at %s uses a legacy manifest without checksums; "
+            "skipping integrity verification.",
+            backup_dir,
+        )
+
+    # Release cached DB/vector handles so live files can be replaced safely.
+    from .runtime import shutdown_runtime
+    shutdown_runtime(settings_path)
+
     pre_restore = None
     if create_pre_restore_backup:
         pre_restore = backup_library(settings_path)
@@ -255,28 +334,77 @@ def restore_library(
     settings.findings_dir.parent.mkdir(parents=True, exist_ok=True)
 
     mapping = [
-        (backup_dir / "findings.db", settings.db_path),
-        (backup_dir / settings.vector_index_path.name, settings.vector_index_path),
-        (backup_dir / settings.vector_meta_path.name, settings.vector_meta_path),
-        (backup_dir / settings.embeddings_cache_path.name, settings.embeddings_cache_path),
+        ("findings.db", backup_dir / "findings.db", settings.db_path),
+        (settings.vector_index_path.name, backup_dir / settings.vector_index_path.name, settings.vector_index_path),
+        (settings.vector_meta_path.name, backup_dir / settings.vector_meta_path.name, settings.vector_meta_path),
+        (settings.embeddings_cache_path.name, backup_dir / settings.embeddings_cache_path.name, settings.embeddings_cache_path),
     ]
 
     restored_files: List[str] = []
-    for source, target in mapping:
-        if source.exists():
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, target)
-            restored_files.append(str(target))
+    staging_root = Path(tempfile.mkdtemp(prefix="openlmlib-restore-stage-"))
+    try:
+        # Phase 1 — stage every source copy up front. Failures here abort the
+        # restore before any live file is touched (M-6).
+        staged_mapping: List[tuple[Path, Path]] = []
+        for _name, source, target in mapping:
+            if source.exists():
+                staged_source = staging_root / "sources" / target.name
+                staged_source.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, staged_source)
+                staged_mapping.append((staged_source, target))
 
-    findings_source = backup_dir / "findings"
-    if findings_source.exists() and findings_source.is_dir():
-        if settings.findings_dir.exists():
-            shutil.rmtree(settings.findings_dir)
-        shutil.copytree(findings_source, settings.findings_dir)
+        findings_source = backup_dir / "findings"
+        staged_findings: Optional[Path] = None
+        if findings_source.exists() and findings_source.is_dir():
+            staged_findings = staging_root / "sources" / "findings"
+            shutil.copytree(findings_source, staged_findings)
+
+        # Phase 2 — move current live targets aside so a mid-commit failure
+        # can put them back exactly as they were.
+        rollback_dir = staging_root / "rollback"
+        rollback_dir.mkdir()
+        moved_aside: List[tuple[Path, Path]] = []  # (saved_path, original_path)
+        committed: List[Path] = []
+
+        def _rollback() -> None:
+            for written in committed:
+                if written.is_dir():
+                    shutil.rmtree(written, ignore_errors=True)
+                elif written.exists():
+                    written.unlink(missing_ok=True)
+            for saved_path, original_path in reversed(moved_aside):
+                os.replace(saved_path, original_path)
+
+        try:
+            for _staged_source, target in staged_mapping:
+                if target.exists():
+                    saved_path = rollback_dir / target.name
+                    os.replace(target, saved_path)
+                    moved_aside.append((saved_path, target))
+
+            if staged_findings is not None and settings.findings_dir.exists():
+                saved_findings = rollback_dir / "findings"
+                os.replace(settings.findings_dir, saved_findings)
+                moved_aside.append((saved_findings, settings.findings_dir))
+
+            # Phase 3 — commit all copies.
+            for staged_source, target in staged_mapping:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(staged_source, target)
+                committed.append(target)
+                restored_files.append(str(target))
+
+            if staged_findings is not None:
+                shutil.copytree(staged_findings, settings.findings_dir)
+                committed.append(settings.findings_dir)
+        except Exception:
+            _rollback()
+            raise
+    finally:
+        shutil.rmtree(staging_root, ignore_errors=True)
 
     # Invalidate the cached runtime so the next get_runtime() creates fresh
     # connections to the restored files on disk.
-    from .runtime import shutdown_runtime
     shutdown_runtime(settings_path)
 
     return {
@@ -291,6 +419,14 @@ def _load_store(settings):
     store = load_vector_store(settings.vector_index_path, settings.vector_meta_path)
     if store.dim == 0:
         store = create_vector_store(settings.embedding_dim, settings.embedding_metric)
+    elif store.dim != settings.embedding_dim:
+        # Cross-check persisted dimension against the configured embedding
+        # model: a mismatched index would silently corrupt similarity math.
+        raise RuntimeError(
+            f"Vector index dim {store.dim} does not match configured "
+            f"embedding_dim {settings.embedding_dim}. Restore a matching "
+            "index from backup or rebuild it."
+        )
     return store
 
 

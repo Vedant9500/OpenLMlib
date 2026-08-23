@@ -5,6 +5,7 @@ from pathlib import Path
 from threading import RLock
 from time import monotonic
 from typing import Optional
+import logging
 import os
 import sys
 
@@ -12,6 +13,8 @@ from . import db
 from .embeddings import EmbeddingCache, SentenceTransformerEmbedder
 from .settings import load_settings
 from .vector_store import create_vector_store, load_vector_store
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -167,7 +170,14 @@ def shutdown_runtime(settings_path: Path) -> bool:
         with state.write_lock:
             maybe_flush(state, force=True)
     except Exception:
-        pass
+        # Surface the failure loudly: silently returning success here hid
+        # data loss (dirty vectors never written) from operators (M-7).
+        logger.exception(
+            "Runtime flush failed during shutdown for %s; dirty vector/cache "
+            "state was NOT persisted and will be lost. The SQLite connection "
+            "is still being closed.",
+            settings_path,
+        )
 
     # Close outside the global lock to avoid blocking other threads.
     # Connection may already be closed in edge cases.

@@ -72,7 +72,7 @@ def _log_save_analytics(
             success=result.get("status") == "ok",
             error_message=_log_error_message(result) if result.get("status") != "ok" else None,
             execution_time_ms=execution_time_ms,
-            result_summary=f"Saved finding: {claim[:80]}",
+            result_summary=f"Saved finding ({len(claim)} chars)",
             triggered_by="discovery",
         )
     except Exception:
@@ -1120,7 +1120,7 @@ def save_finding(
                 success=result.get("status") == "ok",
                 error_message=_log_error_message(result) if result.get("status") != "ok" else None,
                 execution_time_ms=_elapsed_ms,
-                result_summary=f"Saved finding: {claim[:80]}",
+                result_summary=f"Saved finding ({len(claim)} chars)",
                 triggered_by="discovery",
             )
         except Exception:

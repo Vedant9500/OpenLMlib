@@ -204,7 +204,9 @@ class ContextBuilder:
         )
 
         if not index:
-            logger.debug(f"No context for prompt: {user_prompt[:50]}")
+            # No prompt text in logs: DEBUG handlers may persist user content
+            # outside memory privacy controls (CWE-532).
+            logger.debug("No context for prompt (prompt text withheld, len=%d)", len(user_prompt))
             return ""
 
         # Apply caveman compression to index entries

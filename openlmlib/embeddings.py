@@ -4,15 +4,21 @@ from pathlib import Path
 from typing import Iterable, List, Optional
 import hashlib
 import json
+import logging
 import os
 
 import numpy as np
-import logging
 
-# Quiet sentence-transformers logger to avoid noisy HTTP checks and init logs
-logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
-logging.getLogger("transformers").setLevel(logging.WARNING)
-logging.getLogger("httpx").setLevel(logging.WARNING)
+logger = logging.getLogger(__name__)
+
+# Pickle protocol files start with 0x80 followed by a protocol version byte
+# (or, for protocol 0, are plain-ASCII marshal-ish text). The current cache
+# format is JSON only; a pickle signature means a pre-0.2.x legacy cache.
+_PICKLE_SIGNATURES = (b"\x80", b"(dp0", b"dp0")
+
+
+def _looks_like_legacy_pickle(raw: bytes) -> bool:
+    return raw[:1] == b"\x80" or raw.startswith(_PICKLE_SIGNATURES[1:])
 
 
 class EmbeddingCache:
@@ -21,16 +27,39 @@ class EmbeddingCache:
         self._loaded = False
         self._cache = {}
 
+    def _read_raw(self) -> Optional[bytes]:
+        try:
+            return self.path.read_bytes()
+        except OSError:
+            return None
+
     def _load(self) -> None:
         if self._loaded:
             return
         if self.path.exists():
-            try:
-                payload = json.loads(self.path.read_text(encoding="utf-8"))
-                if isinstance(payload, dict):
-                    self._cache = payload
-            except Exception:
-                self._cache = {}
+            raw = self._read_raw()
+            if raw and _looks_like_legacy_pickle(raw):
+                # Never deserialize legacy pickles (unsafe format); surface an
+                # explicit migration warning instead of failing silently (M-12).
+                logger.warning(
+                    "Legacy pickle embedding cache detected at %s (%d bytes). "
+                    "It will not be loaded or deserialized. A JSON-format copy is "
+                    "preserved beside it on the next save; delete the .legacy file "
+                    "after confirming the migration.",
+                    self.path,
+                    len(raw),
+                )
+            else:
+                try:
+                    payload = json.loads(raw.decode("utf-8")) if raw is not None else None
+                    if isinstance(payload, dict):
+                        self._cache = payload
+                except Exception:
+                    logger.warning(
+                        "Embedding cache at %s is not valid JSON; starting empty.",
+                        self.path,
+                    )
+                    self._cache = {}
         self._loaded = True
 
     def get(self, key: str):
@@ -49,10 +78,26 @@ class EmbeddingCache:
 
         lock_path = self.path.with_suffix(self.path.suffix + ".lock")
         with interprocess_lock(lock_path, timeout_sec=60.0):
-            # Merge disk state so concurrent processes do not drop each other's keys.
-            if self.path.exists():
+            raw = self._read_raw() if self.path.exists() else None
+            if raw and _looks_like_legacy_pickle(raw):
+                # Preserve the legacy artifact before the atomic replace so the
+                # migration never silently destroys old vectors (M-12).
+                backup_path = self.path.with_suffix(self.path.suffix + ".legacy")
                 try:
-                    disk_payload = json.loads(self.path.read_text(encoding="utf-8"))
+                    backup_path.write_bytes(raw)
+                    logger.warning(
+                        "Legacy pickle cache preserved at %s before JSON rewrite.",
+                        backup_path,
+                    )
+                except OSError as exc:
+                    raise RuntimeError(
+                        f"Refusing to overwrite unreadable legacy embedding cache "
+                        f"at {self.path}: could not preserve it ({exc})."
+                    ) from exc
+            elif raw is not None:
+                # Merge disk state so concurrent processes do not drop each other's keys.
+                try:
+                    disk_payload = json.loads(raw.decode("utf-8"))
                     if isinstance(disk_payload, dict):
                         merged = dict(disk_payload)
                         merged.update(self._cache)
@@ -66,6 +111,12 @@ class EmbeddingCache:
             }
             tmp_path.write_text(json.dumps(payload), encoding="utf-8")
             os.replace(tmp_path, self.path)
+
+
+# Quiet sentence-transformers logger to avoid noisy HTTP checks and init logs
+logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+logging.getLogger("transformers").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def _cache_key(model_name: str, text: str) -> str:

@@ -300,19 +300,25 @@ function InstallScreen({ config, onDone }) {
 
     try {
       updateStep(0, 'running');
-      const settingsPathExpr = process.env.OPENLMLIB_SETTINGS
-        ? `Path(r"${String(process.env.OPENLMLIB_SETTINGS).replace(/\\/g, '\\\\')}")`
-        : 'global_settings_path()';
+      // Values cross the JS→Python boundary as a JSON document parsed with
+      // json.loads; direct interpolation into Python source would allow code
+      // injection from crafted settings paths or model names (M-18).
+      const configJson = JSON.stringify({
+        settings_path: process.env.OPENLMLIB_SETTINGS || null,
+        embedding_model: config.embeddingModel,
+        vector_backend: config.vectorBackend,
+      });
       const settingsScript = [
         'import json',
         'from pathlib import Path',
         'from openlmlib.settings import default_settings_payload',
         'from openlmlib.mcp_setup import global_settings_path',
-        `settings_path = ${settingsPathExpr}`,
+        `config = json.loads(${JSON.stringify(configJson)})`,
+        "settings_path = Path(config['settings_path']) if config.get('settings_path') else global_settings_path()",
         'settings_path.parent.mkdir(parents=True, exist_ok=True)',
         'payload = default_settings_payload()',
-        `payload['embedding_model'] = '${config.embeddingModel}'`,
-        `payload['vector_backend'] = '${config.vectorBackend}'`,
+        "payload['embedding_model'] = config['embedding_model']",
+        "payload['vector_backend'] = config['vector_backend']",
         'with open(settings_path, "w") as f:',
         '    json.dump(payload, f, indent=2)',
         "print('ok')",
@@ -329,7 +335,8 @@ function InstallScreen({ config, onDone }) {
       }
 
       updateStep(1, 'running');
-      const downloadScript = `from sentence_transformers import SentenceTransformer; SentenceTransformer("${config.embeddingModel}"); print("model-downloaded")`;
+      const modelJson = JSON.stringify(JSON.stringify(config.embeddingModel || ''));
+      const downloadScript = `import json as _json; from sentence_transformers import SentenceTransformer; SentenceTransformer(_json.loads(${modelJson})); print("model-downloaded")`;
       try {
         runPythonScript(downloadScript);
         updateStep(1, 'done');

@@ -23,6 +23,48 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# Analytics persistence bounds (M-15): stored content must be redacted and
+# size-capped so claims, secrets, or oversized payloads cannot accumulate in
+# the analytics database.
+ANALYTICS_PARAM_MAX_BYTES = 8192
+ANALYTICS_SUMMARY_MAX_CHARS = 200
+ANALYTICS_ERROR_MAX_CHARS = 500
+
+
+def _redact_text(value: Optional[str], limit: int) -> Optional[str]:
+    """Redact secret-shaped content, then hard-cap length."""
+    if value is None:
+        return None
+    from .memory.privacy import sanitize_for_storage
+
+    return sanitize_for_storage(str(value))[:limit]
+
+
+def _sanitize_parameters(parameters: Any) -> Any:
+    """Redact parameter values recursively; drop payloads over the size cap."""
+    if not parameters:
+        return None
+    from .memory.privacy import sanitize_for_storage
+
+    def walk(value):
+        if isinstance(value, str):
+            return sanitize_for_storage(value)
+        if isinstance(value, list):
+            return [walk(item) for item in value]
+        if isinstance(value, dict):
+            return {str(key): walk(item) for key, item in value.items()}
+        return value
+
+    cleaned = walk(dict(parameters))
+    payload = json.dumps(cleaned)
+    if len(payload.encode("utf-8")) > ANALYTICS_PARAM_MAX_BYTES:
+        return {
+            "_redacted": True,
+            "_reason": "payload exceeded size cap",
+            "_original_bytes": len(payload.encode("utf-8")),
+        }
+    return cleaned
+
 
 def log_tool_call(
     conn: sqlite3.Connection,
@@ -75,11 +117,11 @@ def log_tool_call(
             call_mode,
             session_id,
             user_id,
-            json.dumps(parameters) if parameters else None,
+            json.dumps(_sanitize_parameters(parameters)) if parameters else None,
             1 if success else 0,
-            error_message,
+            _redact_text(error_message, ANALYTICS_ERROR_MAX_CHARS),
             execution_time_ms,
-            result_summary,
+            _redact_text(result_summary, ANALYTICS_SUMMARY_MAX_CHARS),
             workflow_position,
             triggered_by,
         ),
