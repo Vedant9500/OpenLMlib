@@ -6,6 +6,7 @@ from threading import RLock
 from time import monotonic
 from typing import Optional
 import os
+import sys
 
 from . import db
 from .embeddings import EmbeddingCache, SentenceTransformerEmbedder
@@ -67,7 +68,13 @@ _RUNTIME_INIT_LOCKS: dict[str, RLock] = {}
 
 
 def _runtime_key(settings_path: Path) -> str:
-    return str(settings_path.resolve()).lower()
+    # Only case-fold on Windows, where paths are case-insensitive by default.
+    # On POSIX, /tmp/A.json and /tmp/a.json are distinct libraries and must
+    # not share cached runtime state (M-14).
+    resolved = str(settings_path.resolve())
+    if sys.platform.startswith("win"):
+        return resolved.lower()
+    return resolved
 
 
 def get_runtime(settings_path: Path) -> RuntimeState:

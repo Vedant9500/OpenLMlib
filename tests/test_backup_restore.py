@@ -50,6 +50,27 @@ class TestBackupRestore(unittest.TestCase):
             self.assertTrue((backup_dir / "findings.db").exists())
             self.assertTrue((backup_dir / "findings" / "f-1.json").exists())
 
+    def test_two_backups_in_same_second_do_not_collide(self):
+        """Rapid sequential backups must not hit mkdir(exist_ok=False) (M-1)."""
+        import os
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            settings_path = self._write_settings(root)
+            self._seed_data(root)
+
+            first = backup_library(settings_path)
+            second = backup_library(settings_path)
+
+            self.assertEqual(first["status"], "ok")
+            self.assertEqual(second["status"], "ok")
+            self.assertNotEqual(first["backup_dir"], second["backup_dir"])
+            # Same-second backups share the timestamp prefix, differ by suffix.
+            base_first = os.path.basename(first["backup_dir"])
+            base_second = os.path.basename(second["backup_dir"])
+            self.assertEqual(base_first[:24], base_second[:24])
+            self.assertNotEqual(base_first, base_second)
+
     def test_restore_requires_confirmation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

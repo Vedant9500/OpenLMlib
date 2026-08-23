@@ -613,7 +613,10 @@ def _register_memory_tools() -> None:
         if session_id:
             knowledge_entries = storage.get_knowledge(session_id)
         else:
-            knowledge_entries = storage.get_knowledge(limit=limit)
+            from .memory.storage import normalize_limit
+            knowledge_entries = storage.get_knowledge(
+                limit=normalize_limit(limit, default=3, maximum=50)
+            )
 
         if not knowledge_entries:
             return {
@@ -1312,11 +1315,13 @@ def search_knowledge(query: str, limit: int = 10) -> dict:
     """
     # retrieve_findings already performs hybrid search (semantic + FTS) internally
     # with proper scoring and deduplication (see openlmlib/retrieval.py)
+    from .library import _clamp_limit
+    bounded_limit = _clamp_limit(limit, default=10)
     try:
         result = lib_retrieve_findings(
             settings_path=_settings_path(),
             query=query,
-            final_k=limit,
+            final_k=bounded_limit,
         )
         items = result.get("items", [])
         return {
@@ -1329,7 +1334,7 @@ def search_knowledge(query: str, limit: int = 10) -> dict:
         }
     except Exception:
         # Fall back to keyword only if semantic engine fails
-        keyword_results = search_fts(_settings_path(), query, limit=limit)
+        keyword_results = search_fts(_settings_path(), query, limit=bounded_limit)
         items = keyword_results.get("items", [])
         return {
             "status": "ok",
@@ -1540,7 +1545,9 @@ def check_context(query: str, project: Optional[str] = None) -> dict:
     Returns: {has_context: bool, finding_count: int, top_findings: []}
     """
     results = search_fts(_settings_path(), query, limit=5)
-    findings = results.get("findings", [])
+    # search_fts contract: {"status": "ok", "items": [...]}. Older code read
+    # nonexistent "findings"/"count" keys and always reported no context.
+    findings = results.get("items", []) or []
 
     # Extract top topics/tags
     top_topics = []
@@ -1550,7 +1557,7 @@ def check_context(query: str, project: Optional[str] = None) -> dict:
 
     return {
         "has_context": len(findings) > 0,
-        "finding_count": results.get("count", 0),
+        "finding_count": len(findings),
         "top_findings": top_topics,
         "recommendation": "Existing knowledge found - review before doing fresh research" if findings else "No existing knowledge - proceed with fresh research"
     }

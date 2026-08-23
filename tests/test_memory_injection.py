@@ -3,6 +3,7 @@ import sqlite3
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from openlmlib.memory import (
     SessionManager,
@@ -719,6 +720,67 @@ class TestMemoryContextBoundary(unittest.TestCase):
 
         self.assertEqual(context.count(MEMORY_CONTEXT_OPEN), 1)
         self.assertEqual(context.count(MEMORY_CONTEXT_CLOSE), 1)
+
+
+class TestMemoryResultBounds(unittest.TestCase):
+    """Memory reads normalize limits and ID-list sizes before SQL (M-9)."""
+
+    def setUp(self):
+        self.conn = sqlite3.connect(":memory:")
+        self.storage = MemoryStorage(self.conn)
+        self.retriever = ProgressiveRetriever(self.storage)
+
+    def tearDown(self):
+        self.conn.close()
+
+    def test_layer1_clamps_negative_limit_to_default(self):
+        self.storage.create_session("sess_bounds", "user")
+        for i in range(3):
+            self.storage.add_observation({
+                "session_id": "sess_bounds",
+                "tool_name": "Read",
+                "tool_output": f"content {i}",
+            })
+
+        with patch.object(
+            self.storage, "search_observations", wraps=self.storage.search_observations
+        ) as spy:
+            self.retriever.layer1_search_index("content", limit=-999)
+            kwargs = spy.call_args.kwargs
+            self.assertEqual(kwargs["limit"], 50)
+
+    def test_normalize_limit_rejects_and_caps(self):
+        from openlmlib.memory.storage import MEMORY_LIMIT_MAX, normalize_limit
+
+        self.assertEqual(normalize_limit(-999, default=50), 50)
+        self.assertEqual(normalize_limit(0, default=50), 50)
+        self.assertEqual(normalize_limit(10_000_000, default=50), MEMORY_LIMIT_MAX)
+        self.assertEqual(normalize_limit("not-a-number", default=20), 20)
+        self.assertEqual(normalize_limit(7, default=50), 7)
+
+    def test_get_observations_by_ids_caps_id_list(self):
+        from openlmlib.memory.storage import MEMORY_ID_LIST_MAX, MemoryStorage as MS
+
+        huge_ids = [f"obs_{i}" for i in range(500_000)]
+        # Must not build a 500k-placeholder statement; returns without error.
+        rows = self.storage.get_observations_by_ids(huge_ids)
+        self.assertIsInstance(rows, list)
+        self.assertLessEqual(MEMORY_ID_LIST_MAX, 200)
+
+    def test_auto_inject_context_clamps_limit(self):
+        self.storage.create_session("prev", "user")
+        self.storage.add_observation({
+            "session_id": "prev",
+            "tool_name": "Read",
+            "tool_output": "knowledge",
+        })
+        with patch.object(
+            self.storage,
+            "get_recent_observations",
+            wraps=self.storage.get_recent_observations,
+        ) as spy:
+            self.retriever.auto_inject_context("current", limit=-5)
+            self.assertEqual(spy.call_args.kwargs["limit"], 50)
 
 
 # ==================== Hook Registry Tests ====================

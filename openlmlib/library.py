@@ -4,11 +4,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import json
 import logging
+import re
 import shutil
 import sqlite3
 import uuid
 from datetime import datetime, timezone
 from time import monotonic
+from uuid import uuid4
 
 from .settings import load_settings, write_default_settings
 from . import db
@@ -144,11 +146,27 @@ def _backup_dir_name(prefix: str = "backup") -> str:
     return f"{prefix}-{ts}"
 
 
+def _create_backup_dir(root: Path, prefix: str = "openlmlib") -> Path:
+    """Create a unique per-second backup directory.
+
+    Two backups within the same UTC second would otherwise collide on
+    ``mkdir(exist_ok=False)``; a short random suffix disambiguates.
+    """
+    base = root / _backup_dir_name(prefix)
+    candidate = base
+    for attempt in range(5):
+        try:
+            candidate.mkdir(parents=True, exist_ok=False)
+            return candidate
+        except FileExistsError:
+            candidate = Path(f"{base}-{uuid4().hex[:4]}")
+    raise FileExistsError(f"Could not allocate unique backup directory under {root}")
+
+
 def backup_library(settings_path: Path, output_dir: Optional[Path] = None) -> Dict[str, Any]:
     settings = load_settings(settings_path)
     root = output_dir or (settings.data_root / "backups")
-    backup_dir = root / _backup_dir_name("openlmlib")
-    backup_dir.mkdir(parents=True, exist_ok=False)
+    backup_dir = _create_backup_dir(root)
 
     copied_files: List[str] = []
     copied_dirs: List[str] = []
@@ -310,6 +328,14 @@ DUPLICATE_SIMILARITY_THRESHOLD = 0.90
 # topically-related-but-distinct findings alone.
 DUPLICATE_EMBEDDING_SIMILARITY_THRESHOLD = 0.80
 
+# Caller-supplied finding IDs become JSON filenames under findings_dir; only
+# accept the canonical generated shape so IDs cannot escape that directory
+# (no separators, no traversal, no absolute paths).
+FINDING_ID_RE = re.compile(r"fnd-[a-f0-9]{12}")
+
+# Documented upper bound for finding read APIs (matches MCP tool contract).
+FINDINGS_LIMIT_MAX = 200
+
 
 def _claim_semantic_similarity(candidate: str, existing: str, embedder) -> float:
     """Cosine similarity between two claim sentence embeddings, or 0.0 if embedder is missing."""
@@ -388,6 +414,18 @@ def add_finding(
         return {
             "status": "confirmation_required",
             "message": "Set confirm=true to add a finding.",
+        }
+
+    # Caller-supplied IDs become JSON filenames under findings_dir; only the
+    # canonical generated format is accepted so path construction stays
+    # contained regardless of input (CWE-22).
+    if finding_id is not None and not FINDING_ID_RE.fullmatch(finding_id):
+        return {
+            "status": "error",
+            "message": (
+                "finding_id must match 'fnd-' followed by 12 hex characters "
+                f"(got: {finding_id!r}). Omit finding_id to auto-generate one."
+            ),
         }
 
     # Read-before-write duplicate gate runs before runtime construction so a
@@ -618,11 +656,30 @@ def add_finding(
     }
 
 
+def _clamp_limit(value: Any, default: int, maximum: int = FINDINGS_LIMIT_MAX) -> int:
+    """Clamp caller-supplied result limits into [1, maximum].
+
+    SQLite treats a negative LIMIT as unbounded, so negative/zero/oversized
+    values are normalized instead of being passed through to SQL.
+    """
+    try:
+        limit = int(value)
+    except (TypeError, ValueError):
+        return default
+    if limit <= 0:
+        return default
+    return min(limit, maximum)
+
+
 def list_findings(settings_path: Path, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
     settings = load_settings(settings_path)
     conn = db.connect(settings.db_path)
     db.init_db(conn)
-    rows = db.list_findings(conn, limit=limit, offset=offset)
+    try:
+        offset = max(0, int(offset))
+    except (TypeError, ValueError):
+        offset = 0
+    rows = db.list_findings(conn, limit=_clamp_limit(limit, default=50), offset=offset)
     conn.close()
     return {"status": "ok", "items": rows}
 
@@ -645,7 +702,7 @@ def search_fts(settings_path: Path, query: str, limit: int = 10) -> Dict[str, An
     settings = load_settings(settings_path)
     conn = db.connect(settings.db_path)
     db.init_db(conn)
-    results = db.search_findings(conn, query, limit=limit)
+    results = db.search_findings(conn, query, limit=_clamp_limit(limit, default=10))
     conn.close()
     return {"status": "ok", "items": results}
 

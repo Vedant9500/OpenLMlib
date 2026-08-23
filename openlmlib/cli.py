@@ -728,14 +728,37 @@ def cmd_collab_terminate(args) -> int:
 def cmd_collab_export(args) -> int:
     import shutil
     from openlmlib.collab.db import get_session
+    from openlmlib.collab.security import validate_session_id
+
+    # Session IDs become path segments for source and destination; validate
+    # before constructing any filesystem paths (M-17, CWE-22).
+    try:
+        validate_session_id(args.session_id)
+    except Exception as exc:
+        print(f"Invalid session id: {exc}")
+        return 1
+
     conn, sessions_dir = _collab_connection(Path(args.settings))
     try:
         session = get_session(conn, args.session_id)
         if session is None:
             print(f"Session {args.session_id} not found")
             return 1
-        src = sessions_dir / args.session_id
-        dst = Path(args.output_dir) / args.session_id
+
+        src_root = sessions_dir.resolve()
+        dst_root = Path(args.output_dir).resolve()
+        src = (src_root / args.session_id).resolve()
+        dst = (dst_root / args.session_id).resolve()
+
+        # Belt-and-braces containment: resolved paths must stay inside the
+        # intended roots even if directory entries are replaced by symlinks.
+        try:
+            src.relative_to(src_root)
+            dst.relative_to(dst_root)
+        except ValueError:
+            print("Resolved export path escaped the sessions/output directories")
+            return 1
+
         if src.exists():
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copytree(src, dst, dirs_exist_ok=True)

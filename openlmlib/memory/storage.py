@@ -17,6 +17,27 @@ from .privacy import sanitize_for_storage
 
 logger = logging.getLogger(__name__)
 
+# Resource bounds for memory reads (M-9): SQLite treats a negative LIMIT as
+# unbounded and one-placeholder-per-ID IN clauses grow with the ID list, so
+# every caller-supplied limit/ID list is normalized before it reaches SQL.
+MEMORY_LIMIT_MAX = 200
+MEMORY_ID_LIST_MAX = 200
+
+
+def normalize_limit(value: Any, default: int, maximum: int = MEMORY_LIMIT_MAX) -> int:
+    """Clamp a caller-supplied result limit into [1, maximum].
+
+    Invalid values fall back to the documented default instead of being
+    forwarded to SQLite.
+    """
+    try:
+        limit = int(value)
+    except (TypeError, ValueError):
+        return default
+    if limit <= 0:
+        return default
+    return min(limit, maximum)
+
 
 def _sanitize_value(value: Any) -> Any:
     """Recursively redact sensitive strings while preserving JSON shape."""
@@ -505,6 +526,10 @@ class MemoryStorage:
         """
         if not ids:
             return []
+
+        # Cap placeholder count so oversized ID lists cannot balloon the SQL
+        # statement (M-9).
+        ids = list(ids)[:MEMORY_ID_LIST_MAX]
 
         cursor = self.conn.cursor()
         placeholders = ",".join("?" * len(ids))

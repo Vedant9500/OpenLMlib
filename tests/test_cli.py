@@ -79,5 +79,35 @@ class TestEvalDatasetPathContainment(unittest.TestCase):
         self.assertIn("Dataset not found", result["message"])
 
 
+class TestCollabExportSessionIdValidation(unittest.TestCase):
+    """CLI collab export must validate session IDs before path work (M-17)."""
+
+    def _args(self, session_id):
+        import argparse
+
+        return argparse.Namespace(
+            session_id=session_id,
+            settings="/tmp/unused-settings.json",
+            output_dir="/tmp/unused-output",
+        )
+
+    def test_traversal_session_id_rejected_without_filesystem_calls(self):
+        from openlmlib import cli
+
+        for bad in ("../../victim", "sess_1/../..", "abs/path", "back\\slash"):
+            with patch.object(cli, "_collab_connection") as conn_factory:
+                rc = cli.cmd_collab_export(self._args(bad))
+                self.assertEqual(rc, 1, bad)
+                conn_factory.assert_not_called()
+
+    def test_malformed_session_id_rejected_before_connection(self):
+        from openlmlib import cli
+
+        with patch.object(cli, "_collab_connection") as conn_factory:
+            rc = cli.cmd_collab_export(self._args("not-a-valid-session-id"))
+            self.assertEqual(rc, 1)
+            conn_factory.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

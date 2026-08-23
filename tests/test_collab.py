@@ -1423,6 +1423,52 @@ class TestCollabMCP(unittest.TestCase):
         self.assertTrue(update_resp["success"])
         self.assertEqual(update_resp["state"]["current_phase"], "running")
 
+    def test_settings_cache_distinguishes_equal_mtime_paths(self):
+        """Two settings files with identical mtime must resolve their own
+        data roots; cache identity includes the resolved path (M-8)."""
+        import openlmlib.collab.collab_mcp as collab_mcp_module
+
+        root_a = Path(self.tmp.name) / "a"
+        root_b = Path(self.tmp.name) / "b"
+        settings_a = root_a / "config" / "settings.json"
+        settings_b = root_b / "config" / "settings.json"
+        for root, data_name in ((root_a, "A-data"), (root_b, "B-data")):
+            root.joinpath("config").mkdir(parents=True)
+            root.joinpath(data_name).mkdir()
+            root.joinpath("config", "settings.json").write_text(
+                json.dumps({"data_root": data_name}), encoding="utf-8"
+            )
+
+        # Force identical mtimes so a mtime-only cache key would collide.
+        stamp = 1_700_000_000.0
+        os.utime(settings_a, (stamp, stamp))
+        os.utime(settings_b, (stamp, stamp))
+
+        def _reset_cache():
+            collab_mcp_module._cached_paths = None
+            collab_mcp_module._cached_paths_mtime = 0.0
+            collab_mcp_module._cached_paths_settings = None
+
+        try:
+            _reset_cache()
+            os.environ["OPENLMLIB_SETTINGS"] = str(settings_a)
+            db_a, sessions_a = collab_mcp_module._get_collab_paths()
+
+            # Same mtime, different path -> must not reuse A's resolution.
+            os.environ["OPENLMLIB_SETTINGS"] = str(settings_b)
+            db_b, sessions_b = collab_mcp_module._get_collab_paths()
+
+            self.assertIn("A-data", str(db_a))
+            self.assertIn("B-data", str(db_b))
+            self.assertNotEqual(db_a, db_b)
+
+            # Switching back re-resolves to A (path part of the key).
+            os.environ["OPENLMLIB_SETTINGS"] = str(settings_a)
+            db_again, _ = collab_mcp_module._get_collab_paths()
+            self.assertEqual(db_again, db_a)
+        finally:
+            _reset_cache()
+
     def test_read_messages_filtered_does_not_advance_stored_offset(self):
         create_resp = self.collab_mcp_module.create_session(
             title="Offset Session",

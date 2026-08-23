@@ -100,17 +100,23 @@ logger = logging.getLogger(__name__)
 # Use builtin dict for those tool return types at runtime.
 Dict = dict  # type: ignore[assignment]
 
-# Cached settings resolution to avoid re-parsing settings.json on every call
+# Cached settings resolution to avoid re-parsing settings.json on every call.
+# Cache identity includes the resolved settings path: two distinct settings
+# files can share an mtime, and keying on mtime alone would hand the second
+# file's callers the first file's DB/sessions paths (M-8).
 _cached_paths: Optional[tuple] = None
 _cached_paths_mtime: float = 0.0
+_cached_paths_settings: Optional[str] = None
 
 
 def _get_collab_paths() -> tuple[Path, Path]:
     """Get the collab DB path and sessions directory from settings.
 
-    Caches the result and invalidates when the settings file changes.
+    Caches the result and invalidates when the settings file or its path
+    changes. The default fallback for a missing settings file is never cached,
+    so creating the file later takes effect immediately.
     """
-    global _cached_paths, _cached_paths_mtime
+    global _cached_paths, _cached_paths_mtime, _cached_paths_settings
 
     settings_path_str = os.environ.get("OPENLMLIB_SETTINGS")
     if settings_path_str:
@@ -119,13 +125,22 @@ def _get_collab_paths() -> tuple[Path, Path]:
         from openlmlib.settings import resolve_global_settings_path
         settings_path = resolve_global_settings_path()
 
-    # Check cache validity
+    # Check cache validity: same resolved path AND same mtime.
     try:
         current_mtime = settings_path.stat().st_mtime if settings_path.exists() else 0.0
     except OSError:
         current_mtime = 0.0
 
-    if _cached_paths is not None and current_mtime == _cached_paths_mtime:
+    try:
+        resolved_key = str(settings_path.resolve())
+    except OSError:
+        resolved_key = str(settings_path)
+
+    if (
+        _cached_paths is not None
+        and _cached_paths_settings == resolved_key
+        and current_mtime == _cached_paths_mtime
+    ):
         return _cached_paths
 
     if settings_path.exists():
@@ -143,9 +158,12 @@ def _get_collab_paths() -> tuple[Path, Path]:
 
     db_path = data_root / "collab_sessions.db"
     sessions_dir = data_root / "sessions"
-    _cached_paths = (db_path, sessions_dir)
-    _cached_paths_mtime = current_mtime
-    return _cached_paths
+    if settings_path.exists():
+        # Only cache resolutions backed by a real settings file.
+        _cached_paths = (db_path, sessions_dir)
+        _cached_paths_mtime = current_mtime
+        _cached_paths_settings = resolved_key
+    return (db_path, sessions_dir)
 
 
 def _get_sessions_dir() -> Path:

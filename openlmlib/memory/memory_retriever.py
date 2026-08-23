@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from .markup import MEMORY_CONTEXT_CLOSE, MEMORY_CONTEXT_OPEN, escape_untrusted
-from .storage import MemoryStorage
+from .storage import MemoryStorage, normalize_limit
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +131,7 @@ class ProgressiveRetriever:
             List of MemoryIndex entries
         """
         observations = self.storage.search_observations(
-            query, limit=limit, filters=filters
+            query, limit=normalize_limit(limit, default=50), filters=filters
         )
 
         indexes = []
@@ -299,13 +299,14 @@ class ProgressiveRetriever:
             filters["user_id"] = user_id
 
         # Get recent or query-relevant observations from previous sessions.
+        bounded_limit = normalize_limit(limit, default=50)
         if query:
             observations = self.storage.search_observations(
-                query, limit=limit, filters=filters
+                query, limit=bounded_limit, filters=filters
             )
         else:
             observations = self.storage.get_recent_observations(
-                limit=limit,
+                limit=bounded_limit,
                 user_id=user_id,
                 exclude_session_id=session_id,
             )

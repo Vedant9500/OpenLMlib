@@ -6,6 +6,45 @@ from unittest.mock import patch
 from openlmlib import mcp_server
 
 
+class TestCheckContext(unittest.TestCase):
+    """check_context must honor the search_fts result contract (M-2)."""
+
+    def test_reports_context_when_items_exist(self):
+        payload = {
+            "status": "ok",
+            "items": [
+                {"id": "f-1", "claim": "Redis caching cuts latency"},
+                {"id": "f-2", "claim": "Connection pooling matters"},
+            ],
+        }
+        with patch.object(mcp_server, "_settings_path", return_value=Path("s.json")), \
+             patch.object(mcp_server, "search_fts", return_value=payload):
+            result = mcp_server.check_context("caching")
+
+        self.assertTrue(result["has_context"])
+        self.assertEqual(result["finding_count"], 2)
+        self.assertIn("Redis caching", result["top_findings"][0])
+
+    def test_reports_no_context_for_empty_results(self):
+        with patch.object(mcp_server, "_settings_path", return_value=Path("s.json")), \
+             patch.object(mcp_server, "search_fts", return_value={"status": "ok", "items": []}):
+            result = mcp_server.check_context("anything")
+
+        self.assertFalse(result["has_context"])
+        self.assertEqual(result["finding_count"], 0)
+
+    def test_search_knowledge_clamps_limit(self):
+        settings_path = Path("config/settings.json")
+        with patch.object(mcp_server, "_settings_path", return_value=settings_path), \
+             patch.object(mcp_server, "lib_retrieve_findings", return_value={"status": "ok", "items": []}) as hybrid, \
+             patch.object(mcp_server, "search_fts") as keyword:
+            mcp_server.search_knowledge("q", limit=-99)
+
+        kwargs = hybrid.call_args.kwargs
+        self.assertEqual(kwargs["final_k"], 10)  # negative -> documented default
+        keyword.assert_not_called()
+
+
 class TestMcpServerTools(unittest.TestCase):
     def test_save_finding_includes_session_warning(self):
         settings_path = Path("config/settings.json")
