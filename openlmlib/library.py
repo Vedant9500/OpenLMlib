@@ -827,6 +827,25 @@ def evaluate_dataset(
 ) -> Dict[str, Any]:
     runtime = get_runtime(settings_path)
     settings = runtime.settings
+
+    # Contain eval datasets to the configured library tree so a caller cannot
+    # make the server read arbitrary local files and reflect their contents.
+    resolved_dataset = dataset_path.resolve()
+    allowed_roots = [settings.data_root.resolve(), settings_path.parent.resolve()]
+    if not any(
+        resolved_dataset == root or root in resolved_dataset.parents
+        for root in allowed_roots
+    ):
+        return {
+            "status": "error",
+            "message": (
+                "Dataset path must be inside the configured data root "
+                f"({settings.data_root}) or the settings directory "
+                f"({settings_path.parent}); got: {dataset_path}"
+            ),
+        }
+
+    dataset_path = resolved_dataset
     if not dataset_path.exists():
         return {
             "status": "error",

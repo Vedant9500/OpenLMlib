@@ -47,11 +47,11 @@ faiss = ["faiss-cpu>=1.7.4"]
 dev = []
 
 [project.urls]
-Homepage = "https://github.com/Vedant9500/LMlib"
-Documentation = "https://github.com/Vedant9500/LMlib#readme"
-Repository = "https://github.com/Vedant9500/LMlib"
-Changelog = "https://github.com/Vedant9500/LMlib/blob/main/CHANGELOG.md"
-"Bug Tracker" = "https://github.com/Vedant9500/LMlib/issues"
+Homepage = "https://github.com/Vedant9500/OpenLMlib"
+Documentation = "https://github.com/Vedant9500/OpenLMlib#readme"
+Repository = "https://github.com/Vedant9500/OpenLMlib"
+Changelog = "https://github.com/Vedant9500/OpenLMlib/blob/main/CHANGELOG.md"
+"Bug Tracker" = "https://github.com/Vedant9500/OpenLMlib/issues"
 
 [project.scripts]
 openlmlib = "openlmlib.cli:main"

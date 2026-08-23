@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Text, useApp } from 'ink';
-import Spinner from 'ink-spinner';
+import { Box, Text, useApp, useInput } from 'ink';
 
 import Welcome from './welcome.js';
 import Checks from './checks.js';
@@ -17,8 +16,60 @@ import {
   runSetupWizard,
 } from '../install.js';
 
-import { installPython } from '../python-install.js';
+import { installPython, detectPackageManager } from '../python-install.js';
 import path from 'path';
+
+// Confirms before running the (possibly sudo) package-manager command.
+function PythonInstallScreen({ onResult }) {
+  const [status, setStatus] = useState(null);
+  const [running, setRunning] = useState(false);
+  const pm = detectPackageManager();
+
+  useInput((input) => {
+    if (running || status) return;
+    const key = (input || '').toLowerCase();
+    if (key === 'y' && pm) {
+      setRunning(true);
+      installPython((err, result) => {
+        setStatus(result);
+        onResult(result);
+      }, { confirmed: true });
+    } else if (key === 'n') {
+      const skipped = {
+        success: false,
+        skipped: true,
+        message: 'Skipped automatic Python installation.\nPlease install Python 3.10+ from https://www.python.org/downloads/ and re-run the installer.',
+      };
+      setStatus(skipped);
+      onResult(skipped);
+    }
+  });
+
+  if (status) {
+    return React.createElement(Box, { flexDirection: 'column', padding: 1 },
+      React.createElement(Text, { bold: status.success, color: status.success ? 'green' : 'yellow' },
+        status.success ? 'Python installed.' : status.message
+      )
+    );
+  }
+
+  return React.createElement(Box, { flexDirection: 'column', padding: 1 },
+    React.createElement(Text, { bold: true, color: 'cyan' }, 'Python installation requires your confirmation'),
+    React.createElement(Box, { marginTop: 1 },
+      React.createElement(Text,
+        null,
+        pm
+          ? `The installer can run this privileged command via ${pm.name}:\n\n  ${pm.command}\n\nThis installs Python system-wide.`
+          : 'No supported package manager found.\nPlease install Python 3.10+ manually from https://www.python.org/downloads/'
+      )
+    ),
+    React.createElement(Box, { marginTop: 1 },
+      React.createElement(Text, { color: 'gray' },
+        pm ? '[Y] Run it now   [N] Skip and install manually' : 'Press any key to continue...'
+      )
+    )
+  );
+}
 
 function App({ pythonCheck, hasPackageManager, installerDir }) {
   const { exit } = useApp();
@@ -56,19 +107,6 @@ function App({ pythonCheck, hasPackageManager, installerDir }) {
       } else {
         setTimeout(() => setScreen('installing'), 1500);
       }
-    }
-  }, [screen]);
-
-  useEffect(() => {
-    if (screen === 'python-install') {
-      installPython((err, result) => {
-        setPythonInstallStatus(result);
-        if (result.success) {
-          setTimeout(() => setScreen('installing'), 2000);
-        } else {
-          setTimeout(() => setScreen('complete'), 2000);
-        }
-      });
     }
   }, [screen]);
 
@@ -126,14 +164,16 @@ function App({ pythonCheck, hasPackageManager, installerDir }) {
   }
 
   if (screen === 'python-install') {
-    return React.createElement(Box, { flexDirection: 'column', padding: 1 },
-      React.createElement(Text, { bold: true, color: 'cyan' }, 'Installing Python...'),
-      React.createElement(Box, { marginTop: 1 },
-        React.createElement(Spinner, { type: 'dots' }),
-        React.createElement(Text, { color: 'gray' }, ' ',
-          pythonInstallStatus ? pythonInstallStatus.message : 'Detecting package manager...')
-      )
-    );
+    return React.createElement(PythonInstallScreen, {
+      onResult: (result) => {
+        setPythonInstallStatus(result);
+        if (result.success) {
+          setTimeout(() => setScreen('installing'), 2000);
+        } else {
+          setTimeout(() => setScreen('complete'), 2000);
+        }
+      },
+    });
   }
 
   if (screen === 'installing') {

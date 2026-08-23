@@ -37,12 +37,28 @@ function detectPackageManager() {
   }
 }
 
-function installPython(callback) {
+function installPython(callback, { confirmed = false } = {}) {
   const pm = detectPackageManager();
   if (!pm) {
     callback(null, {
       success: false,
       message: 'Could not find a supported package manager to install Python automatically.\nPlease install Python 3.10+ manually from https://www.python.org/downloads/',
+    });
+    return;
+  }
+
+  // Installing Python is a privileged, system-wide change. Never execute the
+  // package-manager command without the operator explicitly confirming it.
+  if (!confirmed) {
+    callback(null, {
+      success: false,
+      needsConfirmation: true,
+      manager: pm.name,
+      command: pm.command,
+      message:
+        `Python can be installed via ${pm.name} with the following privileged command:\n`
+        + `  ${pm.command}\n`
+        + 'Press Y to run it now, or N to skip and install Python manually from https://www.python.org/downloads/',
     });
     return;
   }
