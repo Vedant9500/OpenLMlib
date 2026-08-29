@@ -7,9 +7,8 @@ Supports <private> tags and pattern-based detection of secrets.
 
 from __future__ import annotations
 
-import re
 import logging
-from typing import Set
+import re
 
 logger = logging.getLogger(__name__)
 

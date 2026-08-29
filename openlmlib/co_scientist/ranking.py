@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 import re
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
+from typing import Any
 
 from openlmlib.schema import ValidationIssue
 
 from .evidence import evidence_quality_score
 from .hypothesis import (
     HYPOTHESIS_ID_RE,
-    SCORE_FIELDS,
     new_hypothesis_id,
     validate_hypothesis_packet,
 )
-
 
 SCORING_AXES = (
     "novelty",
@@ -92,12 +91,12 @@ class PairwiseComparison:
     hypothesis_a: str
     hypothesis_b: str
     winner: str
-    criteria: List[str]
+    criteria: list[str]
     rationale: str
     judge_agent: str
     confidence: float
 
-    def to_dict(self) -> Dict[str, object]:
+    def to_dict(self) -> dict[str, object]:
         return {
             "hypothesis_a": self.hypothesis_a,
             "hypothesis_b": self.hypothesis_b,
@@ -109,9 +108,9 @@ class PairwiseComparison:
         }
 
 
-def validate_pairwise_comparison(payload: Any) -> List[ValidationIssue]:
+def validate_pairwise_comparison(payload: Any) -> list[ValidationIssue]:
     """Validate a pairwise comparison record."""
-    issues: List[ValidationIssue] = []
+    issues: list[ValidationIssue] = []
     if not isinstance(payload, dict):
         return [ValidationIssue("comparison", "Must be an object")]
 
@@ -146,7 +145,7 @@ def validate_pairwise_comparison(payload: Any) -> List[ValidationIssue]:
     return issues
 
 
-def score_hypothesis(packet: Dict[str, Any], axis_weights: Optional[Dict[str, float]] = None) -> Dict[str, object]:
+def score_hypothesis(packet: dict[str, Any], axis_weights: dict[str, float] | None = None) -> dict[str, object]:
     """Score one hypothesis across the Phase 5 axes."""
     _ensure_valid_packet(packet)
     weights = _normalize_weights(axis_weights)
@@ -164,16 +163,16 @@ def score_hypothesis(packet: Dict[str, Any], axis_weights: Optional[Dict[str, fl
 
 
 def rank_hypotheses(
-    hypothesis_packets: Sequence[Dict[str, Any]],
-    pairwise_comparisons: Optional[Sequence[Dict[str, Any]]] = None,
-    axis_weights: Optional[Dict[str, float]] = None,
-) -> Dict[str, object]:
+    hypothesis_packets: Sequence[dict[str, Any]],
+    pairwise_comparisons: Sequence[dict[str, Any]] | None = None,
+    axis_weights: dict[str, float] | None = None,
+) -> dict[str, object]:
     """Return a deterministic ranking from packet scores and optional comparisons."""
     if not hypothesis_packets:
         raise RankingInputError("At least one hypothesis packet is required", [ValidationIssue("hypotheses", "Must not be empty")])
 
-    packets_by_id: Dict[str, Dict[str, Any]] = {}
-    issues: List[ValidationIssue] = []
+    packets_by_id: dict[str, dict[str, Any]] = {}
+    issues: list[ValidationIssue] = []
     for idx, packet in enumerate(hypothesis_packets):
         packet_issues = validate_hypothesis_packet(packet)
         if packet_issues:
@@ -232,9 +231,9 @@ def rank_hypotheses(
 
 
 def cluster_similar_hypotheses(
-    hypothesis_packets: Sequence[Dict[str, Any]],
+    hypothesis_packets: Sequence[dict[str, Any]],
     threshold: float = 0.55,
-) -> Dict[str, object]:
+) -> dict[str, object]:
     """Flag similar hypotheses using deterministic token Jaccard similarity."""
     if not 0.0 <= threshold <= 1.0:
         raise RankingInputError("threshold must be between 0.0 and 1.0", [ValidationIssue("threshold", "Must be between 0.0 and 1.0")])
@@ -256,7 +255,7 @@ def cluster_similar_hypotheses(
                     "similarity": round(similarity, 6),
                 })
 
-    grouped: Dict[str, List[str]] = {}
+    grouped: dict[str, list[str]] = {}
     for hypothesis_id in ids:
         grouped.setdefault(_find(parent, hypothesis_id), []).append(hypothesis_id)
 
@@ -279,11 +278,11 @@ def cluster_similar_hypotheses(
 
 
 def evolve_hypothesis_packet(
-    parent_packet: Dict[str, Any],
-    updates: Dict[str, Any],
-    generated_by: Optional[str] = None,
-    hypothesis_id: Optional[str] = None,
-) -> Dict[str, Any]:
+    parent_packet: dict[str, Any],
+    updates: dict[str, Any],
+    generated_by: str | None = None,
+    hypothesis_id: str | None = None,
+) -> dict[str, Any]:
     """Create a new hypothesis packet version while preserving lineage."""
     _ensure_valid_packet(parent_packet)
     if not isinstance(updates, dict):
@@ -311,15 +310,15 @@ def evolve_hypothesis_packet(
     return evolved
 
 
-def _ensure_valid_packet(packet: Dict[str, Any]) -> None:
+def _ensure_valid_packet(packet: dict[str, Any]) -> None:
     issues = validate_hypothesis_packet(packet)
     if issues:
         raise RankingInputError("Invalid hypothesis packet", issues)
 
 
-def _validated_comparisons(comparisons: Sequence[Dict[str, Any]], valid_ids: set[str]) -> List[PairwiseComparison]:
-    parsed: List[PairwiseComparison] = []
-    issues: List[ValidationIssue] = []
+def _validated_comparisons(comparisons: Sequence[dict[str, Any]], valid_ids: set[str]) -> list[PairwiseComparison]:
+    parsed: list[PairwiseComparison] = []
+    issues: list[ValidationIssue] = []
     for idx, comparison in enumerate(comparisons):
         comparison_issues = validate_pairwise_comparison(comparison)
         if comparison_issues:
@@ -348,7 +347,7 @@ def _validated_comparisons(comparisons: Sequence[Dict[str, Any]], valid_ids: set
     return parsed
 
 
-def _apply_comparison(comparison: PairwiseComparison, stats: Dict[str, Dict[str, float]]) -> None:
+def _apply_comparison(comparison: PairwiseComparison, stats: dict[str, dict[str, float]]) -> None:
     left = stats[comparison.hypothesis_a]
     right = stats[comparison.hypothesis_b]
     left["appearances"] += 1
@@ -367,7 +366,7 @@ def _apply_comparison(comparison: PairwiseComparison, stats: Dict[str, Dict[str,
     stats[loser_id]["points"] -= comparison.confidence * 0.25
 
 
-def _comparison_score(stats: Dict[str, float]) -> float:
+def _comparison_score(stats: dict[str, float]) -> float:
     appearances = int(stats["appearances"])
     if appearances == 0:
         return 0.5
@@ -375,7 +374,7 @@ def _comparison_score(stats: Dict[str, float]) -> float:
     return round(max(0.0, min(1.0, raw)), 6)
 
 
-def _normalize_weights(axis_weights: Optional[Dict[str, float]]) -> Dict[str, float]:
+def _normalize_weights(axis_weights: dict[str, float] | None) -> dict[str, float]:
     raw = dict(DEFAULT_AXIS_WEIGHTS)
     if axis_weights:
         for axis, value in axis_weights.items():
@@ -385,21 +384,21 @@ def _normalize_weights(axis_weights: Optional[Dict[str, float]]) -> Dict[str, fl
     return {axis: raw[axis] / total for axis in SCORING_AXES}
 
 
-def _evidence_quality(packet: Dict[str, Any]) -> float:
+def _evidence_quality(packet: dict[str, Any]) -> float:
     evidence = packet.get("evidence") or []
     if not evidence:
         return 0.0
     return sum(evidence_quality_score(item) for item in evidence) / len(evidence)
 
 
-def _optional_score(packet: Dict[str, Any], field: str, default: float) -> float:
+def _optional_score(packet: dict[str, Any], field: str, default: float) -> float:
     value = packet.get(field, default)
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return default
     return max(0.0, min(1.0, float(value)))
 
 
-def _safety_score(packet: Dict[str, Any]) -> float:
+def _safety_score(packet: dict[str, Any]) -> float:
     notes = " ".join(str(item).lower() for item in packet.get("safety_notes", []))
     if any(term in notes for term in ("unsafe", "out of scope", "blocked")):
         return 0.2
@@ -408,7 +407,7 @@ def _safety_score(packet: Dict[str, Any]) -> float:
     return 1.0
 
 
-def _validate_non_empty_string_list(value: Any, field: str, issues: List[ValidationIssue]) -> None:
+def _validate_non_empty_string_list(value: Any, field: str, issues: list[ValidationIssue]) -> None:
     if not isinstance(value, list) or not value:
         issues.append(ValidationIssue(field, "Must be a non-empty list"))
         return
@@ -417,8 +416,8 @@ def _validate_non_empty_string_list(value: Any, field: str, issues: List[Validat
             issues.append(ValidationIssue(f"{field}[{idx}]", "Must be a non-empty string"))
 
 
-def _packet_tokens(packet: Dict[str, Any]) -> set[str]:
-    parts: List[str] = [
+def _packet_tokens(packet: dict[str, Any]) -> set[str]:
+    parts: list[str] = [
         packet.get("title", ""),
         packet.get("claim", ""),
         packet.get("rationale", ""),
@@ -436,22 +435,22 @@ def _jaccard(left: set[str], right: set[str]) -> float:
     return len(left & right) / len(left | right)
 
 
-def _find(parent: Dict[str, str], item: str) -> str:
+def _find(parent: dict[str, str], item: str) -> str:
     while parent[item] != item:
         parent[item] = parent[parent[item]]
         item = parent[item]
     return item
 
 
-def _union(parent: Dict[str, str], left: str, right: str) -> None:
+def _union(parent: dict[str, str], left: str, right: str) -> None:
     root_left = _find(parent, left)
     root_right = _find(parent, right)
     if root_left != root_right:
         parent[max(root_left, root_right)] = min(root_left, root_right)
 
 
-def _dedupe(items: Iterable[str]) -> List[str]:
-    result: List[str] = []
+def _dedupe(items: Iterable[str]) -> list[str]:
+    result: list[str] = []
     seen = set()
     for item in items:
         if item not in seen:

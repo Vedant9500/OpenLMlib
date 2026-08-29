@@ -1,28 +1,25 @@
-import unittest
 import sqlite3
-import json
+import unittest
 from datetime import datetime, timezone
-from pathlib import Path
 from unittest.mock import patch
 
 from openlmlib.memory import (
-    SessionManager,
     MemoryStorage,
     ProgressiveRetriever,
+    SessionManager,
 )
-from openlmlib.memory.storage import MemoryStorage
-from openlmlib.memory.session_manager import SessionManager
+from openlmlib.memory.compressor import MemoryCompressor
+from openlmlib.memory.context_builder import ContextBuilder
+from openlmlib.memory.hooks import Hook, HookRegistry, HookType
+from openlmlib.memory.memory_retriever import ProgressiveRetriever
 from openlmlib.memory.privacy import (
+    PrivacyFilter,
     contains_private,
     filter_private,
     sanitize_for_storage,
-    PrivacyFilter,
 )
-from openlmlib.memory.compressor import MemoryCompressor
-from openlmlib.memory.memory_retriever import ProgressiveRetriever
-from openlmlib.memory.context_builder import ContextBuilder
-from openlmlib.memory.hooks import HookType, HookRegistry, Hook
-
+from openlmlib.memory.session_manager import SessionManager
+from openlmlib.memory.storage import MemoryStorage
 
 # ==================== Storage Tests ====================
 
@@ -759,7 +756,7 @@ class TestMemoryResultBounds(unittest.TestCase):
         self.assertEqual(normalize_limit(7, default=50), 7)
 
     def test_get_observations_by_ids_caps_id_list(self):
-        from openlmlib.memory.storage import MEMORY_ID_LIST_MAX, MemoryStorage as MS
+        from openlmlib.memory.storage import MEMORY_ID_LIST_MAX
 
         huge_ids = [f"obs_{i}" for i in range(500_000)]
         # Must not build a 500k-placeholder statement; returns without error.

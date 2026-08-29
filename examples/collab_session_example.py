@@ -13,25 +13,23 @@ Usage:
 
 from __future__ import annotations
 
-import json
+import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from openlmlib.collab.db import connect_collab_db, init_collab_db, get_session_tasks
+from openlmlib.collab.artifact_store import ArtifactStore
+from openlmlib.collab.context_compiler import ContextCompiler
+from openlmlib.collab.db import connect_collab_db, init_collab_db
+from openlmlib.collab.message_bus import MessageBus
+from openlmlib.collab.prompts import get_system_prompt
 from openlmlib.collab.session import (
     create_collab_session,
     join_collab_session,
     terminate_collab_session,
 )
-from openlmlib.collab.message_bus import MessageBus
-from openlmlib.collab.artifact_store import ArtifactStore
-from openlmlib.collab.context_compiler import ContextCompiler
-from openlmlib.collab.state_manager import StateManager
-from openlmlib.collab.prompts import get_system_prompt
 
 
 def main():

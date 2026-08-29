@@ -2,7 +2,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from openlmlib.collab.db import connect_collab_db, init_collab_db
 from openlmlib.co_scientist.evaluation import (
     compare_workflows,
     evaluate_run,
@@ -16,6 +15,7 @@ from openlmlib.co_scientist.orchestrator import (
     submit_verification,
 )
 from openlmlib.co_scientist.reporting import create_final_report
+from openlmlib.collab.db import connect_collab_db, init_collab_db
 from tests.test_co_scientist_reporting import packet, report
 
 

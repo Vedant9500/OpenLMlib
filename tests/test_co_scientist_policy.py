@@ -8,6 +8,8 @@ from openlmlib.co_scientist import (
 )
 from openlmlib.collab.collab_mcp import (
     get_co_scientist_scope_policy as mcp_get_scope_policy,
+)
+from openlmlib.collab.collab_mcp import (
     screen_co_scientist_scope as mcp_screen_scope,
 )
 

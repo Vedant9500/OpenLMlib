@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import logging
 import os
-import shutil
-from pathlib import Path
 import re
-from typing import Dict, Iterable, List, Optional
+import shutil
+from collections.abc import Iterable
+from dataclasses import dataclass
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -106,11 +106,11 @@ def _format_toml_key(key: str) -> str:
     return json.dumps(key)
 
 
-def _dump_simple_toml(data: Dict[str, object]) -> str:
+def _dump_simple_toml(data: dict[str, object]) -> str:
     """Serialize the simple TOML structures used by MCP client configs."""
-    lines: List[str] = []
+    lines: list[str] = []
 
-    def emit_table(table: Dict[str, object], path: List[str]) -> None:
+    def emit_table(table: dict[str, object], path: list[str]) -> None:
         scalars = [(key, value) for key, value in table.items() if not isinstance(value, dict)]
         nested = [(key, value) for key, value in table.items() if isinstance(value, dict)]
 
@@ -129,12 +129,12 @@ def _dump_simple_toml(data: Dict[str, object]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def available_clients() -> List[McpClientSpec]:
+def available_clients() -> list[McpClientSpec]:
     return list(CLIENT_SPECS)
 
 
-def normalize_client_ids(values: Optional[Iterable[str]]) -> List[str]:
-    normalized: List[str] = []
+def normalize_client_ids(values: Iterable[str] | None) -> list[str]:
+    normalized: list[str] = []
     seen = set()
 
     for raw_value in values or []:
@@ -157,7 +157,7 @@ def global_settings_path() -> Path:
     return Path.home() / ".openlmlib" / "config" / "settings.json"
 
 
-def build_server_entry(settings_path: Path, client_id: str = "") -> Dict[str, object]:
+def build_server_entry(settings_path: Path, client_id: str = "") -> dict[str, object]:
     import sys
 
     resolved_settings = str(Path(settings_path).expanduser().resolve(strict=False))
@@ -176,7 +176,7 @@ def build_server_entry(settings_path: Path, client_id: str = "") -> Dict[str, ob
             "enabled": True,
         }
 
-    entry: Dict[str, object] = {
+    entry: dict[str, object] = {
         "command": sys.executable,
         "args": ["-m", "openlmlib.mcp_server", "--settings", resolved_settings],
     }
@@ -186,10 +186,10 @@ def build_server_entry(settings_path: Path, client_id: str = "") -> Dict[str, ob
 def client_config_path(
     client_id: str,
     *,
-    platform: Optional[str] = None,
-    env: Optional[Dict[str, str]] = None,
-    home: Optional[Path] = None,
-) -> Optional[Path]:
+    platform: str | None = None,
+    env: dict[str, str] | None = None,
+    home: Path | None = None,
+) -> Path | None:
     platform = platform or os.sys.platform
     env = env or dict(os.environ)
     home = Path(home) if home is not None else Path.home()
@@ -305,7 +305,7 @@ def _dump_simple_yaml(data: object, indent: int = 0) -> str:
     if isinstance(data, dict):
         if not data:
             return "{}\n" if indent == 0 else "{}"
-        lines: List[str] = []
+        lines: list[str] = []
         for key, value in data.items():
             key_text = str(key)
             if isinstance(value, dict):
@@ -338,7 +338,7 @@ def _dump_simple_yaml(data: object, indent: int = 0) -> str:
     return f"{pad}{_yaml_scalar(data)}\n"
 
 
-def _load_existing_config(path: Path, client_id: str = "") -> Dict[str, object]:
+def _load_existing_config(path: Path, client_id: str = "") -> dict[str, object]:
     if not path.exists():
         return {}
 
@@ -385,7 +385,7 @@ def _load_existing_config(path: Path, client_id: str = "") -> Dict[str, object]:
     return payload
 
 
-def _prepare_config_root(client: McpClientSpec, payload: Dict[str, object]) -> Dict[str, object]:
+def _prepare_config_root(client: McpClientSpec, payload: dict[str, object]) -> dict[str, object]:
     if client.id == "vscode" and "servers" not in payload and isinstance(payload.get("mcpServers"), dict):
         payload["servers"] = payload.pop("mcpServers")
 
@@ -404,10 +404,10 @@ def install_client_config(
     client_id: str,
     *,
     settings_path: Path,
-    platform: Optional[str] = None,
-    env: Optional[Dict[str, str]] = None,
-    home: Optional[Path] = None,
-) -> Dict[str, object]:
+    platform: str | None = None,
+    env: dict[str, str] | None = None,
+    home: Path | None = None,
+) -> dict[str, object]:
     client = CLIENTS_BY_ID.get(client_id)
     if client is None:
         return {
@@ -504,10 +504,10 @@ def install_client_configs(
     client_ids: Iterable[str],
     *,
     settings_path: Path,
-    platform: Optional[str] = None,
-    env: Optional[Dict[str, str]] = None,
-    home: Optional[Path] = None,
-) -> Dict[str, object]:
+    platform: str | None = None,
+    env: dict[str, str] | None = None,
+    home: Path | None = None,
+) -> dict[str, object]:
     results = [
         install_client_config(
             client_id,
@@ -537,11 +537,11 @@ def install_client_configs(
 
 def discover_existing_client_ids(
     *,
-    platform: Optional[str] = None,
-    env: Optional[Dict[str, str]] = None,
-    home: Optional[Path] = None,
-) -> List[str]:
-    discovered: List[str] = []
+    platform: str | None = None,
+    env: dict[str, str] | None = None,
+    home: Path | None = None,
+) -> list[str]:
+    discovered: list[str] = []
     for client in CLIENT_SPECS:
         path = client_config_path(client.id, platform=platform, env=env, home=home)
         if path is None:
@@ -554,10 +554,10 @@ def discover_existing_client_ids(
 def install_or_refresh_default_client_configs(
     *,
     settings_path: Path,
-    platform: Optional[str] = None,
-    env: Optional[Dict[str, str]] = None,
-    home: Optional[Path] = None,
-) -> Dict[str, object]:
+    platform: str | None = None,
+    env: dict[str, str] | None = None,
+    home: Path | None = None,
+) -> dict[str, object]:
     """Upgrade MCP entries for clients the user already configured.
 
     If no client config exists yet, seeds a default set (VS Code + popular CLI

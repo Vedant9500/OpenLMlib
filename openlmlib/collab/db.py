@@ -9,9 +9,8 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
-
 
 COLLAB_SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -134,6 +133,7 @@ CREATE INDEX IF NOT EXISTS idx_perf_session ON performance_metrics(session_id);
 """
 
 import threading
+
 _tl = threading.local()
 
 
@@ -221,7 +221,7 @@ def _json_dump(value) -> str:
     return json.dumps(value, separators=(",", ":"))
 
 
-def _json_load(value: Optional[str], default=None):
+def _json_load(value: str | None, default=None):
     if value is None:
         return default
     return json.loads(value)
@@ -235,14 +235,14 @@ def normalize_fts_query(query: str) -> str:
     return " ".join(tokens)
 
 
-def _row_to_message(row: sqlite3.Row) -> Dict:
+def _row_to_message(row: sqlite3.Row) -> dict:
     """Convert a message row to a dict with parsed metadata."""
     d = dict(row)
     d["metadata"] = _json_load(d.pop("metadata_json"), {})
     return d
 
 
-def _row_to_artifact(row: sqlite3.Row) -> Dict:
+def _row_to_artifact(row: sqlite3.Row) -> dict:
     """Convert an artifact row to a dict with parsed JSON fields."""
     d = dict(row)
     d["tags"] = _json_load(d.pop("tags_json"), [])
@@ -267,7 +267,7 @@ def touch_session(
 def get_orchestrator_agent_id(
     conn: sqlite3.Connection,
     session_id: str,
-) -> Optional[str]:
+) -> str | None:
     """Return the agent_id for the session orchestrator if present."""
     row = conn.execute(
         """
@@ -292,10 +292,10 @@ def create_session(
     title: str,
     created_by: str,
     created_at: str,
-    description: Optional[str] = None,
-    orchestrator: Optional[str] = None,
-    rules: Optional[Dict] = None,
-) -> Dict:
+    description: str | None = None,
+    orchestrator: str | None = None,
+    rules: dict | None = None,
+) -> dict:
     """Create a new collaboration session."""
     orch = orchestrator or created_by
     with conn:
@@ -334,7 +334,7 @@ def create_session(
     }
 
 
-def get_session(conn: sqlite3.Connection, session_id: str) -> Optional[Dict]:
+def get_session(conn: sqlite3.Connection, session_id: str) -> dict | None:
     """Get session metadata."""
     row = conn.execute(
         "SELECT * FROM sessions WHERE session_id = ?", (session_id,)
@@ -348,10 +348,10 @@ def get_session(conn: sqlite3.Connection, session_id: str) -> Optional[Dict]:
 
 def list_sessions(
     conn: sqlite3.Connection,
-    status: Optional[str] = None,
+    status: str | None = None,
     limit: int = 50,
     offset: int = 0,
-) -> List[Dict]:
+) -> list[dict]:
     """List sessions with optional status filter."""
     sql = """
         SELECT session_id, title, description, created_by, created_at,
@@ -395,7 +395,7 @@ def insert_agent(
     model: str,
     role: str,
     joined_at: str,
-    capabilities: Optional[List[str]] = None,
+    capabilities: list[str] | None = None,
 ) -> None:
     """Register an agent in a session."""
     with conn:
@@ -411,7 +411,7 @@ def insert_agent(
         touch_session(conn, session_id, joined_at)
 
 
-def get_session_agents(conn: sqlite3.Connection, session_id: str) -> List[Dict]:
+def get_session_agents(conn: sqlite3.Connection, session_id: str) -> list[dict]:
     """Get all agents registered in a session."""
     rows = conn.execute(
         """
@@ -435,7 +435,7 @@ def update_agent_status(
     conn: sqlite3.Connection,
     agent_id: str,
     status: str,
-    last_seen: Optional[str] = None,
+    last_seen: str | None = None,
 ) -> None:
     """Update an agent's status."""
     with conn:
@@ -457,14 +457,14 @@ def insert_message(
     conn: sqlite3.Connection,
     msg_id: str,
     session_id: str,
-    seq: Optional[int],
+    seq: int | None,
     from_agent: str,
     msg_type: str,
     content: str,
     created_at: str,
-    from_model: Optional[str] = None,
-    to_agent: Optional[str] = None,
-    metadata: Optional[Dict] = None,
+    from_model: str | None = None,
+    to_agent: str | None = None,
+    metadata: dict | None = None,
 ) -> None:
     """Append a message to the session (append-only).
     
@@ -508,11 +508,11 @@ def get_messages(
     session_id: str,
     limit: int = 50,
     offset: int = 0,
-    msg_types: Optional[List[str]] = None,
-    from_agent: Optional[str] = None,
-    to_agent: Optional[str] = None,
-    reader_agent: Optional[str] = None,
-) -> List[Dict]:
+    msg_types: list[str] | None = None,
+    from_agent: str | None = None,
+    to_agent: str | None = None,
+    reader_agent: str | None = None,
+) -> list[dict]:
     """Get messages for a session with optional filters."""
     sql = """
         SELECT msg_id, session_id, seq, from_agent, from_model, msg_type,
@@ -548,10 +548,10 @@ def get_messages_since(
     session_id: str,
     last_seq: int,
     limit: int = 50,
-    msg_types: Optional[List[str]] = None,
-    from_agent: Optional[str] = None,
-    reader_agent: Optional[str] = None,
-) -> List[Dict]:
+    msg_types: list[str] | None = None,
+    from_agent: str | None = None,
+    reader_agent: str | None = None,
+) -> list[dict]:
     """Get messages with seq > last_seq (offset-based polling)."""
     sql = """
         SELECT msg_id, session_id, seq, from_agent, from_model, msg_type,
@@ -583,8 +583,8 @@ def get_messages_tail(
     conn: sqlite3.Connection,
     session_id: str,
     n: int = 20,
-    reader_agent: Optional[str] = None,
-) -> List[Dict]:
+    reader_agent: str | None = None,
+) -> list[dict]:
     """Get the last N messages for a session."""
     sql = """
         SELECT msg_id, session_id, seq, from_agent, from_model, msg_type,
@@ -607,8 +607,8 @@ def get_message_range(
     session_id: str,
     start_seq: int,
     end_seq: int,
-    reader_agent: Optional[str] = None,
-) -> List[Dict]:
+    reader_agent: str | None = None,
+) -> list[dict]:
     """Get messages in a sequence range [start_seq, end_seq)."""
     sql = """
         SELECT msg_id, session_id, seq, from_agent, from_model, msg_type,
@@ -630,9 +630,9 @@ def grep_messages(
     session_id: str,
     pattern: str,
     limit: int = 50,
-    msg_types: Optional[List[str]] = None,
-    reader_agent: Optional[str] = None,
-) -> List[Dict]:
+    msg_types: list[str] | None = None,
+    reader_agent: str | None = None,
+) -> list[dict]:
     """Search messages by keyword using FTS5."""
     normalized_pattern = normalize_fts_query(pattern)
     if not normalized_pattern:
@@ -680,7 +680,7 @@ def insert_task(
     step_num: int,
     description: str,
     created_at: str,
-    assigned_to: Optional[str] = None,
+    assigned_to: str | None = None,
 ) -> None:
     """Create a task in a session."""
     with conn:
@@ -699,8 +699,8 @@ def update_task_status(
     conn: sqlite3.Connection,
     task_id: str,
     status: str,
-    started_at: Optional[str] = None,
-    completed_at: Optional[str] = None,
+    started_at: str | None = None,
+    completed_at: str | None = None,
 ) -> None:
     """Update task status."""
     with conn:
@@ -724,12 +724,12 @@ def update_task_status(
 def complete_tasks_for_artifact_type(
     conn: sqlite3.Connection,
     session_id: str,
-    artifact_type: Optional[str],
+    artifact_type: str | None,
     completed_at: str,
     *,
-    completed_by: Optional[str] = None,
-    skip_artifact_types: Optional[Iterable[str]] = None,
-) -> List[Dict]:
+    completed_by: str | None = None,
+    skip_artifact_types: Iterable[str] | None = None,
+) -> list[dict]:
     """Complete open tasks whose text explicitly asks for an artifact type.
 
     Template tasks describe expected outputs as ``artifact_type `<name>``` so
@@ -767,7 +767,7 @@ def complete_tasks_for_artifact_type(
     if not rows:
         return []
 
-    completed: List[Dict] = []
+    completed: list[dict] = []
     with conn:
         for row in rows:
             task = dict(row)
@@ -803,8 +803,8 @@ def claim_task(
     session_id: str,
     agent_id: str,
     started_at: str,
-    task_id: Optional[str] = None,
-) -> Optional[Dict]:
+    task_id: str | None = None,
+) -> dict | None:
     """Atomically claim an unassigned pending task.
     
     If task_id is specified, claims that specific task if available.
@@ -843,8 +843,8 @@ def claim_task(
 def get_session_tasks(
     conn: sqlite3.Connection,
     session_id: str,
-    status: Optional[str] = None,
-) -> List[Dict]:
+    status: str | None = None,
+) -> list[dict]:
     """Get tasks for a session."""
     sql = "SELECT * FROM tasks WHERE session_id = ?"
     params: list = [session_id]
@@ -866,10 +866,10 @@ def insert_artifact(
     title: str,
     file_path: str,
     created_at: str,
-    artifact_type: Optional[str] = None,
-    tags: Optional[List[str]] = None,
-    word_count: Optional[int] = None,
-    referenced_in_messages: Optional[List[str]] = None,
+    artifact_type: str | None = None,
+    tags: list[str] | None = None,
+    word_count: int | None = None,
+    referenced_in_messages: list[str] | None = None,
 ) -> None:
     """Register an artifact in the index."""
     with conn:
@@ -890,8 +890,8 @@ def insert_artifact(
 def get_artifact(
     conn: sqlite3.Connection,
     artifact_id: str,
-    session_id: Optional[str] = None,
-) -> Optional[Dict]:
+    session_id: str | None = None,
+) -> dict | None:
     """Get one artifact by id, optionally constrained to a session."""
     if session_id is None:
         row = conn.execute(
@@ -911,9 +911,9 @@ def get_artifact(
 def get_session_artifacts(
     conn: sqlite3.Connection,
     session_id: str,
-    created_by: Optional[str] = None,
-    artifact_type: Optional[str] = None,
-) -> List[Dict]:
+    created_by: str | None = None,
+    artifact_type: str | None = None,
+) -> list[dict]:
     """Get artifacts for a session."""
     sql = "SELECT * FROM artifacts WHERE session_id = ?"
     params: list = [session_id]
@@ -934,7 +934,7 @@ def get_session_artifacts(
 def get_session_state(
     conn: sqlite3.Connection,
     session_id: str,
-) -> Optional[Dict]:
+) -> dict | None:
     """Get the current session state."""
     row = conn.execute(
         "SELECT * FROM session_state WHERE session_id = ?",
@@ -950,10 +950,10 @@ def get_session_state(
 def update_session_state(
     conn: sqlite3.Connection,
     session_id: str,
-    state: Dict,
+    state: dict,
     updated_by: str,
     updated_at: str,
-    expected_version: Optional[int] = None,
+    expected_version: int | None = None,
 ) -> bool:
     """Atomically update session state with version check.
 

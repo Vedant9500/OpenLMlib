@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Iterable, List, Optional
 import hashlib
 import json
 import logging
 import os
+from collections.abc import Iterable
+from pathlib import Path
 
 import numpy as np
 
@@ -27,7 +27,7 @@ class EmbeddingCache:
         self._loaded = False
         self._cache = {}
 
-    def _read_raw(self) -> Optional[bytes]:
+    def _read_raw(self) -> bytes | None:
         try:
             return self.path.read_bytes()
         except OSError:
@@ -128,7 +128,7 @@ class SentenceTransformerEmbedder:
     def __init__(
         self,
         model_name: str,
-        cache: Optional[EmbeddingCache] = None,
+        cache: EmbeddingCache | None = None,
         normalize: bool = True,
     ) -> None:
         try:
@@ -164,9 +164,9 @@ class SentenceTransformerEmbedder:
         if self._cache is None:
             return self._model.encode(text_list, **encode_kwargs).astype("float32")
 
-        vectors: List[np.ndarray] = [None] * len(text_list)  # type: ignore[list-item]
-        missing_texts: List[str] = []
-        missing_indexes: List[int] = []
+        vectors: list[np.ndarray] = [None] * len(text_list)  # type: ignore[list-item]
+        missing_texts: list[str] = []
+        missing_indexes: list[int] = []
 
         for idx, text in enumerate(text_list):
             key = _cache_key(self.model_name, text)
@@ -197,7 +197,7 @@ def _trim_tokens(text: str, max_tokens: int) -> str:
 
 def build_contextual_chunk(
     claim: str,
-    evidence: Optional[List[str]] = None,
+    evidence: list[str] | None = None,
     reasoning: str = "",
     full_text: str = "",
     context_tokens: int = 80,
@@ -218,9 +218,9 @@ def build_contextual_chunk(
     return body.strip()
 
 
-def build_contextual_query(query: str, project: Optional[str] = None, tags: Optional[List[str]] = None) -> str:
+def build_contextual_query(query: str, project: str | None = None, tags: list[str] | None = None) -> str:
     tags = tags or []
-    scope_bits: List[str] = []
+    scope_bits: list[str] = []
     if project:
         scope_bits.append(f"project={project}")
     if tags:

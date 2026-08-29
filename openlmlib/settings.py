@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -115,7 +115,7 @@ class Settings:
     memory: MemoryInjectionSettings
 
     @classmethod
-    def from_dict(cls, data: dict, base_dir: Path) -> "Settings":
+    def from_dict(cls, data: dict, base_dir: Path) -> Settings:
         def resolve_path(value: str, default: str) -> Path:
             raw = data.get(value, default)
             path = Path(raw)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +24,8 @@ class SummaryGenerator:
 
     def generate_cluster_summary(
         self,
-        findings: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        findings: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """Generate a summary for a cluster of similar findings.
 
         Args:
@@ -65,7 +65,7 @@ class SummaryGenerator:
 
     def generate_finding_summary(
         self,
-        finding: Dict[str, Any],
+        finding: dict[str, Any],
     ) -> str:
         """Generate a short summary for a single finding."""
         claim = finding.get("claim", "")
@@ -85,7 +85,7 @@ class SummaryGenerator:
         return summary
 
 
-def _extract_common_themes(claims: List[str]) -> List[str]:
+def _extract_common_themes(claims: list[str]) -> list[str]:
     """Extract common themes from a list of claims using term frequency."""
     import re
     from collections import Counter
@@ -96,7 +96,7 @@ def _extract_common_themes(claims: List[str]) -> List[str]:
         "could", "should", "may", "might", "to", "of", "in", "for",
         "on", "with", "at", "by", "from", "as", "and", "or", "but",
         "not", "no", "it", "its", "this", "that", "these", "those",
-        "improved", "reduced", "increased", "using", "used", "with",
+        "improved", "reduced", "increased", "using", "used",
     }
 
     all_tokens = []
@@ -110,7 +110,7 @@ def _extract_common_themes(claims: List[str]) -> List[str]:
         for claim in claims
     ]
 
-    theme_scores: Dict[str, int] = Counter()
+    theme_scores: dict[str, int] = Counter()
     for token_set in claim_token_sets:
         for token in token_set:
             theme_scores[token] += 1
@@ -125,7 +125,7 @@ def _extract_common_themes(claims: List[str]) -> List[str]:
     return themes[:5]
 
 
-def _extract_key_points(evidence_items: List[str], max_points: int) -> List[str]:
+def _extract_key_points(evidence_items: list[str], max_points: int) -> list[str]:
     """Extract key points from evidence items."""
     if not evidence_items:
         return []
@@ -142,7 +142,7 @@ def _extract_key_points(evidence_items: List[str], max_points: int) -> List[str]
     return unique[:max_points]
 
 
-def _generate_overview(findings: List[Dict[str, Any]], max_length: int) -> str:
+def _generate_overview(findings: list[dict[str, Any]], max_length: int) -> str:
     """Generate an overview from the most representative finding."""
     if not findings:
         return ""

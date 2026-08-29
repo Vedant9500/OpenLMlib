@@ -18,35 +18,30 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import sqlite3
 import statistics
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, List
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from openlmlib.collab.db import (
-    connect_collab_db,
-    init_collab_db,
-    insert_message,
-    get_messages_since,
-    grep_messages,
-    get_messages_tail,
-    create_session,
-    insert_agent,
-    insert_artifact,
-    get_session_state,
-    update_session_state,
-)
-from openlmlib.collab.message_bus import MessageBus
 from openlmlib.collab.artifact_store import ArtifactStore
 from openlmlib.collab.context_compiler import ContextCompiler
+from openlmlib.collab.db import (
+    connect_collab_db,
+    create_session,
+    get_messages_since,
+    get_messages_tail,
+    grep_messages,
+    init_collab_db,
+    insert_agent,
+    insert_message,
+)
+from openlmlib.collab.message_bus import MessageBus
 from openlmlib.collab.state_manager import StateManager
-
 
 PERFORMANCE_TARGETS = {
     "message_append_ms": 3.0,
@@ -62,7 +57,7 @@ PERFORMANCE_TARGETS = {
 }
 
 
-def benchmark(func: Callable, iterations: int = 100, warmup: int = 10) -> Dict[str, float]:
+def benchmark(func: Callable, iterations: int = 100, warmup: int = 10) -> dict[str, float]:
     """Run a function multiple times and return timing statistics.
 
     Args:
@@ -107,7 +102,7 @@ def setup_test_db() -> tuple:
     return conn, sessions_dir, tmpdir
 
 
-def bench_session_creation(iterations: int) -> Dict[str, Any]:
+def bench_session_creation(iterations: int) -> dict[str, Any]:
     """Benchmark session creation."""
     conn, sessions_dir, tmpdir = setup_test_db()
     try:
@@ -129,7 +124,7 @@ def bench_session_creation(iterations: int) -> Dict[str, Any]:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def bench_message_append(iterations: int) -> Dict[str, Any]:
+def bench_message_append(iterations: int) -> dict[str, Any]:
     """Benchmark single message append."""
     conn, sessions_dir, tmpdir = setup_test_db()
     try:
@@ -157,7 +152,7 @@ def bench_message_append(iterations: int) -> Dict[str, Any]:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def bench_message_read_50(iterations: int) -> Dict[str, Any]:
+def bench_message_read_50(iterations: int) -> dict[str, Any]:
     """Benchmark reading 50 messages."""
     conn, sessions_dir, tmpdir = setup_test_db()
     try:
@@ -182,7 +177,7 @@ def bench_message_read_50(iterations: int) -> Dict[str, Any]:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def bench_fts5_search(iterations: int) -> Dict[str, Any]:
+def bench_fts5_search(iterations: int) -> dict[str, Any]:
     """Benchmark FTS5 keyword search."""
     conn, sessions_dir, tmpdir = setup_test_db()
     try:
@@ -210,7 +205,7 @@ def bench_fts5_search(iterations: int) -> Dict[str, Any]:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def bench_context_compilation(iterations: int) -> Dict[str, Any]:
+def bench_context_compilation(iterations: int) -> dict[str, Any]:
     """Benchmark context compilation."""
     conn, sessions_dir, tmpdir = setup_test_db()
     try:
@@ -243,7 +238,7 @@ def bench_context_compilation(iterations: int) -> Dict[str, Any]:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def bench_state_update(iterations: int) -> Dict[str, Any]:
+def bench_state_update(iterations: int) -> dict[str, Any]:
     """Benchmark state update with version check."""
     conn, sessions_dir, tmpdir = setup_test_db()
     try:
@@ -267,7 +262,7 @@ def bench_state_update(iterations: int) -> Dict[str, Any]:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def bench_artifact_save(iterations: int) -> Dict[str, Any]:
+def bench_artifact_save(iterations: int) -> dict[str, Any]:
     """Benchmark artifact save to disk + DB."""
     conn, sessions_dir, tmpdir = setup_test_db()
     try:
@@ -295,7 +290,7 @@ def bench_artifact_save(iterations: int) -> Dict[str, Any]:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def bench_message_tail(iterations: int) -> Dict[str, Any]:
+def bench_message_tail(iterations: int) -> dict[str, Any]:
     """Benchmark tailing last N messages."""
     conn, sessions_dir, tmpdir = setup_test_db()
     try:
@@ -320,7 +315,7 @@ def bench_message_tail(iterations: int) -> Dict[str, Any]:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def _co_scientist_packet(run_id: str, title: str, score: float = 0.8) -> Dict[str, Any]:
+def _co_scientist_packet(run_id: str, title: str, score: float = 0.8) -> dict[str, Any]:
     from openlmlib.co_scientist.hypothesis import new_hypothesis_id
 
     return {
@@ -355,7 +350,7 @@ def _co_scientist_packet(run_id: str, title: str, score: float = 0.8) -> Dict[st
     }
 
 
-def _co_scientist_report(hypothesis_id: str, verdict: str = "supported") -> Dict[str, Any]:
+def _co_scientist_report(hypothesis_id: str, verdict: str = "supported") -> dict[str, Any]:
     return {
         "hypothesis_id": hypothesis_id,
         "verdict": verdict,
@@ -404,7 +399,7 @@ def _create_complete_co_scientist_run(conn, sessions_dir: Path) -> str:
     return run["run_id"]
 
 
-def bench_co_scientist_evaluate_run(iterations: int) -> Dict[str, Any]:
+def bench_co_scientist_evaluate_run(iterations: int) -> dict[str, Any]:
     """Benchmark Phase 9 run metric evaluation."""
     conn, sessions_dir, tmpdir = setup_test_db()
     try:
@@ -429,7 +424,7 @@ def bench_co_scientist_evaluate_run(iterations: int) -> Dict[str, Any]:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def bench_co_scientist_final_report(iterations: int) -> Dict[str, Any]:
+def bench_co_scientist_final_report(iterations: int) -> dict[str, Any]:
     """Benchmark final report artifact creation on fresh complete runs."""
     conn, sessions_dir, tmpdir = setup_test_db()
     try:
@@ -453,11 +448,9 @@ def bench_co_scientist_final_report(iterations: int) -> Dict[str, Any]:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def bench_concurrent_writes(num_writers: int = 10, messages_per_writer: int = 50) -> Dict[str, Any]:
+def bench_concurrent_writes(num_writers: int = 10, messages_per_writer: int = 50) -> dict[str, Any]:
     """Benchmark concurrent writers using threads."""
     import threading
-    import uuid
-    from datetime import datetime, timezone
 
     conn, sessions_dir, tmpdir = setup_test_db()
     try:
@@ -530,7 +523,7 @@ BENCHMARKS = {
 }
 
 
-def run_all(iterations: int = 100) -> List[Dict[str, Any]]:
+def run_all(iterations: int = 100) -> list[dict[str, Any]]:
     """Run all benchmarks and return results."""
     results = []
     for name, func in BENCHMARKS.items():
@@ -544,7 +537,7 @@ def run_all(iterations: int = 100) -> List[Dict[str, Any]]:
     return results
 
 
-def results_pass(results: List[Dict[str, Any]]) -> bool:
+def results_pass(results: list[dict[str, Any]]) -> bool:
     for r in results:
         if "error" in r:
             return False
@@ -558,7 +551,7 @@ def results_pass(results: List[Dict[str, Any]]) -> bool:
     return True
 
 
-def print_results(results: List[Dict[str, Any]]) -> bool:
+def print_results(results: list[dict[str, Any]]) -> bool:
     """Print benchmark results in a readable format."""
     print("\n" + "=" * 80)
     print("COLLAB SESSIONS PERFORMANCE BENCHMARK RESULTS")
@@ -597,7 +590,7 @@ def print_results(results: List[Dict[str, Any]]) -> bool:
     if "concurrent_writes" in [r.get("operation") for r in results]:
         cw = next(r for r in results if r.get("operation") == "concurrent_writes")
         if "error" not in cw:
-            print(f"\n  concurrent_writes")
+            print("\n  concurrent_writes")
             print(f"    Writers: {cw['writers']}  "
                   f"Messages: {cw['actual_messages']}/{cw['total_messages']}  "
                   f"Time: {cw['total_time_ms']:.1f}ms  "
@@ -631,7 +624,7 @@ def main():
             results = [BENCHMARKS[args.benchmark](args.iterations)]
     else:
         results = run_all(args.iterations)
-        print(f"  Running concurrent_writes...")
+        print("  Running concurrent_writes...")
         results.append(bench_concurrent_writes(num_writers=args.writers))
 
     if args.json:

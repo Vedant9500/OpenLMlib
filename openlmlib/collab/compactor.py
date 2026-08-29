@@ -9,16 +9,13 @@ Inspired by Google ADK's context compaction pattern.
 
 from __future__ import annotations
 
-import json
 import logging
-from typing import Dict, List, Optional
-
 import sqlite3
 
 from ..schema import utc_now_iso
 from . import db
-from .message_bus import MessageBus
 from .artifact_store import ArtifactStore
+from .message_bus import MessageBus
 from .state_manager import StateManager
 
 logger = logging.getLogger(__name__)
@@ -45,7 +42,7 @@ class SessionCompactor:
         self,
         session_id: str,
         from_seq: int = 0,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Generate a human-readable summary of session activity since from_seq.
 
         This creates a factual, structured summary that agents can use
@@ -141,8 +138,8 @@ class SessionCompactor:
         self,
         session_id: str,
         from_seq: int = 0,
-        compacted_at: Optional[str] = None,
-    ) -> Optional[Dict]:
+        compacted_at: str | None = None,
+    ) -> dict | None:
         """Generate a summary, save it, and record the compaction point.
 
         Returns compaction metadata or None if no messages to summarize.
@@ -194,7 +191,7 @@ class SessionCompactor:
         self,
         session_id: str,
         auto_compact_threshold: int = 50,
-    ) -> Optional[Dict]:
+    ) -> dict | None:
         """Auto-compact if the session has exceeded the message threshold."""
         state_row = self.state_manager.get_state(session_id)
         if not state_row:
@@ -247,7 +244,7 @@ class SessionCompactor:
         )
         return False
 
-    def _summarize_messages(self, messages: List[Dict]) -> str:
+    def _summarize_messages(self, messages: list[dict]) -> str:
         """Generate a concise summary of message activity."""
         by_type = {}
         by_agent = {}

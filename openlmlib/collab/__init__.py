@@ -1,30 +1,80 @@
 """CollabSessions: Multi-agent collaboration subsystem for OpenLMLib."""
 
+from .artifact_store import ArtifactStore
+from .compactor import SessionCompactor
+from .context_compiler import ContextCompiler
 from .db import (
+    complete_tasks_for_artifact_type,
     connect_collab_db,
-    init_collab_db,
     create_session,
-    get_session,
-    list_sessions,
-    update_session_status,
-    insert_agent,
-    get_session_agents,
-    update_agent_status,
     get_max_seq,
-    insert_message,
+    get_message_range,
     get_messages,
     get_messages_since,
     get_messages_tail,
-    grep_messages,
-    get_message_range,
-    insert_task,
-    update_task_status,
-    complete_tasks_for_artifact_type,
-    get_session_tasks,
-    insert_artifact,
+    get_session,
+    get_session_agents,
     get_session_artifacts,
     get_session_state,
+    get_session_tasks,
+    grep_messages,
+    init_collab_db,
+    insert_agent,
+    insert_artifact,
+    insert_message,
+    insert_task,
+    list_sessions,
+    update_agent_status,
     update_session_state,
+    update_session_status,
+    update_task_status,
+)
+from .errors import (
+    VALID_AGENT_STATUSES,
+    VALID_MESSAGE_TYPES,
+    VALID_ROLES,
+    VALID_SESSION_STATUSES,
+    VALID_TASK_STATUSES,
+    AgentNotAuthorizedError,
+    AgentNotFoundError,
+    ArtifactNotFoundError,
+    CollabError,
+    DatabaseError,
+    FilesystemError,
+    InvalidMessageTypeError,
+    InvalidRoleError,
+    MessageTooLongError,
+    RulesViolationError,
+    SecurityError,
+    SessionFullError,
+    SessionNotActiveError,
+    SessionNotFoundError,
+    StateConflictError,
+    TemplateNotFoundError,
+    error_from_exception,
+    make_error_response,
+)
+from .message_bus import MessageBus
+from .prompts import (
+    OBSERVER_SYSTEM_PROMPT,
+    ORCHESTRATOR_SYSTEM_PROMPT,
+    PROMPT_TEMPLATES,
+    WORKER_SYSTEM_PROMPT,
+    get_system_prompt,
+    list_available_roles,
+)
+from .rules_engine import DEFAULT_RULES, RulesEngine
+from .security import (
+    sanitize_content,
+    validate_agent_id,
+    validate_artifact_id,
+    validate_message_content,
+    validate_message_type,
+    validate_safe_path,
+    validate_session_id,
+    verify_agent_in_session,
+    verify_orchestrator,
+    verify_session_exists_and_active,
 )
 from .session import (
     create_collab_session,
@@ -32,57 +82,7 @@ from .session import (
     leave_collab_session,
     terminate_collab_session,
 )
-from .message_bus import MessageBus
-from .context_compiler import ContextCompiler
-from .artifact_store import ArtifactStore
 from .state_manager import StateManager
-from .rules_engine import RulesEngine, DEFAULT_RULES
-from .compactor import SessionCompactor
-from .prompts import (
-    ORCHESTRATOR_SYSTEM_PROMPT,
-    WORKER_SYSTEM_PROMPT,
-    OBSERVER_SYSTEM_PROMPT,
-    PROMPT_TEMPLATES,
-    get_system_prompt,
-    list_available_roles,
-)
-from .errors import (
-    CollabError,
-    SessionNotFoundError,
-    SessionNotActiveError,
-    SessionFullError,
-    AgentNotFoundError,
-    AgentNotAuthorizedError,
-    StateConflictError,
-    ArtifactNotFoundError,
-    TemplateNotFoundError,
-    InvalidMessageTypeError,
-    MessageTooLongError,
-    InvalidRoleError,
-    DatabaseError,
-    FilesystemError,
-    SecurityError,
-    RulesViolationError,
-    VALID_MESSAGE_TYPES,
-    VALID_ROLES,
-    VALID_SESSION_STATUSES,
-    VALID_AGENT_STATUSES,
-    VALID_TASK_STATUSES,
-    make_error_response,
-    error_from_exception,
-)
-from .security import (
-    validate_session_id,
-    validate_agent_id,
-    validate_artifact_id,
-    validate_message_type,
-    validate_message_content,
-    sanitize_content,
-    verify_agent_in_session,
-    verify_session_exists_and_active,
-    verify_orchestrator,
-    validate_safe_path,
-)
 
 __all__ = [
     # DB

@@ -12,8 +12,8 @@ from unittest.mock import MagicMock, patch
 from openlmlib.embeddings import EmbeddingCache
 from openlmlib.library import backup_library, restore_library
 from openlmlib.memory.context_builder import ContextBuilder
-from openlmlib.memory.storage import MemoryStorage, normalize_limit
 from openlmlib.memory.memory_retriever import ProgressiveRetriever
+from openlmlib.memory.storage import MemoryStorage, normalize_limit
 from openlmlib.usage_analytics import log_tool_call
 from openlmlib.vector_store import NumpyVectorStore, load_vector_store
 

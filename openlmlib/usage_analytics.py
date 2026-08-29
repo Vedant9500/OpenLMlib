@@ -19,7 +19,7 @@ import logging
 import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ ANALYTICS_SUMMARY_MAX_CHARS = 200
 ANALYTICS_ERROR_MAX_CHARS = 500
 
 
-def _redact_text(value: Optional[str], limit: int) -> Optional[str]:
+def _redact_text(value: str | None, limit: int) -> str | None:
     """Redact secret-shaped content, then hard-cap length."""
     if value is None:
         return None
@@ -70,15 +70,15 @@ def log_tool_call(
     conn: sqlite3.Connection,
     tool_name: str,
     call_mode: str = "explicit",
-    session_id: Optional[str] = None,
-    user_id: Optional[str] = None,
-    parameters: Optional[Dict[str, Any]] = None,
+    session_id: str | None = None,
+    user_id: str | None = None,
+    parameters: dict[str, Any] | None = None,
     success: bool = True,
-    error_message: Optional[str] = None,
-    execution_time_ms: Optional[float] = None,
-    result_summary: Optional[str] = None,
-    workflow_position: Optional[str] = None,
-    triggered_by: Optional[str] = None,
+    error_message: str | None = None,
+    execution_time_ms: float | None = None,
+    result_summary: str | None = None,
+    workflow_position: str | None = None,
+    triggered_by: str | None = None,
 ) -> str:
     """Log a tool call for analytics.
 
@@ -178,10 +178,10 @@ def log_tool_selection(
     conn: sqlite3.Connection,
     query: str,
     selected_tool: str,
-    expected_tool: Optional[str] = None,
-    is_correct: Optional[bool] = None,
-    confidence_score: Optional[float] = None,
-    session_id: Optional[str] = None,
+    expected_tool: str | None = None,
+    is_correct: bool | None = None,
+    confidence_score: float | None = None,
+    session_id: str | None = None,
 ) -> str:
     """Log a tool selection decision.
 
@@ -235,9 +235,9 @@ def log_workflow_event(
     workflow_type: str,
     step_number: int,
     tool_name: str,
-    session_id: Optional[str] = None,
+    session_id: str | None = None,
     skipped: bool = False,
-    skipped_reason: Optional[str] = None,
+    skipped_reason: str | None = None,
 ) -> str:
     """Log a workflow event for completeness tracking.
 
@@ -285,9 +285,9 @@ def _cutoff(days: int) -> str:
 
 def get_automatic_call_rate(
     conn: sqlite3.Connection,
-    tool_name: Optional[str] = None,
+    tool_name: str | None = None,
     days: int = 7,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Get automatic vs explicit call rates.
 
     Args:
@@ -301,7 +301,7 @@ def get_automatic_call_rate(
     cutoff = _cutoff(days)
 
     where = "WHERE called_at >= ?"
-    params: List[Any] = [cutoff]
+    params: list[Any] = [cutoff]
 
     if tool_name:
         where += " AND tool_name = ?"
@@ -336,7 +336,7 @@ def get_automatic_call_rate(
 def get_tool_selection_accuracy(
     conn: sqlite3.Connection,
     days: int = 7,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Get tool selection accuracy metrics."""
     cutoff = _cutoff(days)
 
@@ -369,7 +369,7 @@ def get_tool_selection_accuracy(
 def get_parameter_hallucination_rate(
     conn: sqlite3.Connection,
     days: int = 7,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Get parameter hallucination rate."""
     cutoff = _cutoff(days)
 
@@ -421,14 +421,14 @@ def get_parameter_hallucination_rate(
 
 def get_workflow_completeness(
     conn: sqlite3.Connection,
-    workflow_type: Optional[str] = None,
+    workflow_type: str | None = None,
     days: int = 7,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Get workflow completion rates."""
     cutoff = _cutoff(days)
 
     where = "WHERE completed_at >= ?"
-    params: List[Any] = [cutoff]
+    params: list[Any] = [cutoff]
 
     if workflow_type:
         where += " AND workflow_type = ?"
@@ -485,7 +485,7 @@ def get_workflow_completeness(
 def get_full_analytics_report(
     conn: sqlite3.Connection,
     days: int = 7,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Generate comprehensive analytics report.
 
     Args:
@@ -507,14 +507,14 @@ def get_full_analytics_report(
 
 def get_tool_usage_summary(
     conn: sqlite3.Connection,
-    tool_name: Optional[str] = None,
+    tool_name: str | None = None,
     days: int = 7,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Get usage summary by tool."""
     cutoff = _cutoff(days)
 
     where = "WHERE called_at >= ?"
-    params: List[Any] = [cutoff]
+    params: list[Any] = [cutoff]
 
     if tool_name:
         where += " AND tool_name = ?"

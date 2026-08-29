@@ -9,16 +9,16 @@ Tests cover:
 - Integration with context builder and compressor
 """
 
-import unittest
 import sqlite3
+import unittest
+
 from openlmlib.memory.caveman_compress import (
+    _count_tokens,
+    _is_technical_line,
     caveman_compress,
     compress_context_block,
     compress_observation_summary,
-    _is_technical_line,
-    _count_tokens,
 )
-
 
 # ==================== Basic Compression Tests ====================
 

@@ -5,12 +5,11 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict
 
 from .mcp_setup import global_settings_path
 
 
-def run_interactive_setup(settings_path: Path | None = None) -> Dict[str, object]:
+def run_interactive_setup(settings_path: Path | None = None) -> dict[str, object]:
     settings_path = settings_path or global_settings_path()
     node = shutil.which("node")
     if node is None:

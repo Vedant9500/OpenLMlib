@@ -7,8 +7,6 @@ management with optimistic concurrency control.
 from __future__ import annotations
 
 import logging
-from typing import Dict, Optional
-
 import sqlite3
 
 from . import db
@@ -22,17 +20,17 @@ class StateManager:
     def __init__(self, conn: sqlite3.Connection):
         self.conn = conn
 
-    def get_state(self, session_id: str) -> Optional[Dict]:
+    def get_state(self, session_id: str) -> dict | None:
         """Get current session state."""
         return db.get_session_state(self.conn, session_id)
 
     def update_state(
         self,
         session_id: str,
-        state: Dict,
+        state: dict,
         updated_by: str,
         updated_at: str,
-        expected_version: Optional[int] = None,
+        expected_version: int | None = None,
     ) -> bool:
         """Update session state with version check.
 
@@ -47,8 +45,8 @@ class StateManager:
         session_id: str,
         task_id: str,
         status: str,
-        started_at: Optional[str] = None,
-        completed_at: Optional[str] = None,
+        started_at: str | None = None,
+        completed_at: str | None = None,
     ) -> None:
         """Update a task's status."""
         db.update_task_status(self.conn, task_id, status, started_at, completed_at)

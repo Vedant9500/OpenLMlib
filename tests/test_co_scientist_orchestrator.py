@@ -4,8 +4,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from openlmlib.collab import db as collab_db
-from openlmlib.collab.db import connect_collab_db, init_collab_db
 from openlmlib.co_scientist.hypothesis import new_hypothesis_id
 from openlmlib.co_scientist.orchestrator import (
     RUN_STATE_KEY,
@@ -17,6 +15,8 @@ from openlmlib.co_scientist.orchestrator import (
     submit_hypothesis,
     submit_verification,
 )
+from openlmlib.collab import db as collab_db
+from openlmlib.collab.db import connect_collab_db, init_collab_db
 
 
 def valid_packet(run_id, title, score=0.7, hypothesis_id=None):

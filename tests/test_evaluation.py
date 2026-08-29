@@ -1,6 +1,10 @@
 import unittest
 
-from openlmlib.evaluation import evaluate_retrieval, faithfulness_score, relevance_alignment
+from openlmlib.evaluation import (
+    evaluate_retrieval,
+    faithfulness_score,
+    relevance_alignment,
+)
 
 
 class DummyEmbedder:

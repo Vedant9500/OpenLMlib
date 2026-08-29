@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict
-
-
-VERIFICATION_VERDICTS: Dict[str, str] = {
+VERIFICATION_VERDICTS: dict[str, str] = {
     "supported": "Evidence supports the claim and no serious contradiction was found.",
     "partially_supported": (
         "Some evidence supports the claim, but assumptions or scope remain weak."
@@ -17,7 +14,7 @@ VERIFICATION_VERDICTS: Dict[str, str] = {
     ),
 }
 
-VERIFICATION_CONFIDENCE_RULES: Dict[str, object] = {
+VERIFICATION_CONFIDENCE_RULES: dict[str, object] = {
     "range": "0.0 to 1.0",
     "calibration": {
         "0.80-1.00": "Strong direct evidence or reproducible test result.",
@@ -34,7 +31,7 @@ VERIFICATION_CONFIDENCE_RULES: Dict[str, object] = {
 }
 
 
-CO_SCIENTIST_GENERATE_TEMPLATE: Dict[str, object] = {
+CO_SCIENTIST_GENERATE_TEMPLATE: dict[str, object] = {
     "name": "Co-Scientist Hypothesis Generation",
     "description": (
         "Generate, critique, deduplicate, evolve, and rank hypothesis packets "
@@ -130,7 +127,7 @@ CO_SCIENTIST_GENERATE_TEMPLATE: Dict[str, object] = {
 }
 
 
-CO_SCIENTIST_VERIFY_TEMPLATE: Dict[str, object] = {
+CO_SCIENTIST_VERIFY_TEMPLATE: dict[str, object] = {
     "name": "Co-Scientist Hypothesis Verification",
     "description": (
         "Independently verify hypothesis packets with evidence review, "

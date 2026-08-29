@@ -7,12 +7,12 @@ Uses offline-compatible native SVG for timeline graphing, eliminating CDN script
 Refined filtering logic to sync sidebar checklist changes immediately with graph rendering.
 """
 
-import os
-import re
-import json
-import glob
 import datetime
+import glob
+import json
+import os
 import platform
+import re
 
 
 def load_report_config(results_dir="results"):
@@ -384,7 +384,7 @@ def build_html_report(processed_data, comparison_summary, output_path):
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
     try:
         import openlmlib
-        from openlmlib.settings import resolve_hybrid_settings_path, load_settings
+        from openlmlib.settings import load_settings, resolve_hybrid_settings_path
         
         openlmlib_version = getattr(openlmlib, "__version__", "Unknown")
         settings_path = resolve_hybrid_settings_path()

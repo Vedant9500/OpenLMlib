@@ -1,24 +1,34 @@
 from __future__ import annotations
 
-import os
 import importlib
+import os
 from pathlib import Path
-from typing import List, Optional
-from typing import List as TypingList
 
 from mcp.server.fastmcp import FastMCP
 
 from .library import (
     add_finding,
-    delete_finding as lib_delete_finding,
     evaluate_dataset,
-    get_finding as lib_get_finding,
-    health as lib_health,
-    init_library as lib_init_library,
-    list_findings as lib_list_findings,
-    retrieve_findings as lib_retrieve_findings,
     retrieve_prompt_context,
     search_fts,
+)
+from .library import (
+    delete_finding as lib_delete_finding,
+)
+from .library import (
+    get_finding as lib_get_finding,
+)
+from .library import (
+    health as lib_health,
+)
+from .library import (
+    init_library as lib_init_library,
+)
+from .library import (
+    list_findings as lib_list_findings,
+)
+from .library import (
+    retrieve_findings as lib_retrieve_findings,
 )
 from .runtime import get_runtime
 
@@ -99,10 +109,10 @@ def _get_memory_state():
         return _memory_state
 
     from .memory import (
-        SessionManager,
-        ProgressiveRetriever,
-        MemoryStorage,
         ContextBuilder,
+        MemoryStorage,
+        ProgressiveRetriever,
+        SessionManager,
     )
     from .runtime import get_runtime
 
@@ -136,34 +146,26 @@ def _register_collab_tools() -> None:
         return
 
     from .collab.collab_mcp import (
-        save_artifact,
         compare_co_scientist_workflows,
-        create_co_scientist_run,
         create_co_scientist_final_report,
-        create_session,
+        create_co_scientist_run,
         create_from_template,
+        create_session,
         evaluate_co_scientist_run,
-        export_to_library,
         export_co_scientist_findings,
-        sessions_summary,
-        get_evidence_quality_rubric,
-        get_co_scientist_benchmark_tasks,
-        get_co_scientist_report,
+        export_to_library,
         get_agent_sessions,
         get_artifact,
-        get_model_details,
+        get_co_scientist_benchmark_tasks,
+        get_co_scientist_report,
         get_co_scientist_scope_policy,
+        get_evidence_quality_rubric,
         get_hypothesis_packet_schema,
-        recommended_models,
-        screen_co_scientist_scope,
-        session_context,
-        session_relationships,
+        get_model_details,
         get_session_state,
-        session_statistics,
         get_template,
         grep_artifacts,
         grep_messages,
-        help_collab as help_collab,
         join_session,
         leave_session,
         list_artifacts,
@@ -174,8 +176,15 @@ def _register_collab_tools() -> None:
         poll_messages,
         read_message_range,
         read_messages,
+        recommended_models,
+        save_artifact,
+        screen_co_scientist_scope,
         search_sessions,
         send_message,
+        session_context,
+        session_relationships,
+        session_statistics,
+        sessions_summary,
         start_hypothesis_verification,
         submit_hypothesis,
         submit_verification,
@@ -184,6 +193,9 @@ def _register_collab_tools() -> None:
         update_session_state,
         validate_hypothesis_packet,
         verify_co_scientist_citations,
+    )
+    from .collab.collab_mcp import (
+        help_collab as help_collab,
     )
 
     mcp.tool()(create_session)
@@ -251,8 +263,8 @@ def _register_memory_tools() -> None:
     @mcp.tool()
     def session_start(
         session_id: str,
-        user_id: Optional[str] = None,
-        query: Optional[str] = None,
+        user_id: str | None = None,
+        query: str | None = None,
         limit: int = 50
     ) -> dict:
         """Start a new session and automatically inject relevant context from past sessions.
@@ -390,7 +402,7 @@ def _register_memory_tools() -> None:
     def search_memory(
         query: str,
         limit: int = 50,
-        filters: Optional[dict] = None
+        filters: dict | None = None
     ) -> dict:
         """Layer 1: Lightweight search of memory index (~75 tokens/result). Fast metadata search.
 
@@ -422,7 +434,7 @@ def _register_memory_tools() -> None:
 
     @mcp.tool()
     def memory_timeline(
-        ids: TypingList[str],
+        ids: list[str],
         window: str = "5m"
     ) -> dict:
         """Layer 2: Get chronological context for memory IDs (~200 tokens/result).
@@ -451,7 +463,7 @@ def _register_memory_tools() -> None:
         }
 
     @mcp.tool()
-    def get_observations(ids: TypingList[str]) -> dict:
+    def get_observations(ids: list[str]) -> dict:
         """[DEPRECATED] Layer 3: Get full details for specific memory IDs. Use query_memory instead.
 
         AUTOMATIC TRIGGERS - Call this when:
@@ -480,7 +492,7 @@ def _register_memory_tools() -> None:
     def query_memory(
         query: str,
         limit: int = 20,
-        filters: Optional[dict] = None
+        filters: dict | None = None
     ) -> dict:
         """Adaptive auto-expanding retriever for memory. REPLACES search_memory.
 
@@ -542,9 +554,9 @@ def _register_memory_tools() -> None:
     @mcp.tool()
     def inject_context(
         session_id: str,
-        query: Optional[str] = None,
+        query: str | None = None,
         limit: int = 50,
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
     ) -> dict:
         """Auto-inject relevant context from past sessions at any point during work.
 
@@ -587,7 +599,7 @@ def _register_memory_tools() -> None:
 
     @mcp.tool()
     def session_recap(
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
         limit: int = 3
     ) -> dict:
         """Get a synthesized recap of recent session knowledge (~150-250 tokens). Structured, not raw.
@@ -694,7 +706,7 @@ def _register_memory_tools() -> None:
     @mcp.tool()
     def topic_context(
         topic: str,
-        session_id: Optional[str] = None
+        session_id: str | None = None
     ) -> dict:
         """Get detailed context about a specific topic from past sessions (~500-800 tokens). Deep dive.
 
@@ -912,7 +924,7 @@ def _ensure_runtime_after_delay(delay_sec: float) -> None:
     _ensure_runtime()
 
 
-def _ensure_runtime_background() -> Optional[object]:
+def _ensure_runtime_background() -> object | None:
     """Pre-initialize the runtime in a delayed background thread.
 
     Enabled by default, but delayed so MCP clients can complete their initialize
@@ -955,7 +967,7 @@ def _preimport_embedding_dependencies() -> bool:
         return False
 
 
-def _check_active_sessions() -> Optional[str]:
+def _check_active_sessions() -> str | None:
     """Check if there are any active memory sessions.
 
     Returns a warning message if no sessions are active, None otherwise.
@@ -999,13 +1011,13 @@ def save_finding(
     project: str,
     claim: str,
     confidence: float = 0.8,
-    evidence: Optional[List[str]] = None,
+    evidence: list[str] | None = None,
     reasoning: str = "",
-    caveats: Optional[List[str]] = None,
-    tags: Optional[List[str]] = None,
+    caveats: list[str] | None = None,
+    tags: list[str] | None = None,
     full_text: str = "",
     proposed_by: str = "",
-    finding_id: Optional[str] = None,
+    finding_id: str | None = None,
     confirm: bool = False,
 ) -> dict:
     """Save critical research findings, discoveries, and insights to persistent library.
@@ -1051,6 +1063,7 @@ def save_finding(
     Use search_findings first to check for duplicates.
     """
     import time
+
     from .usage_analytics import log_tool_call
     _t0 = time.monotonic()
 
@@ -1206,14 +1219,14 @@ def search_findings(query: str, limit: int = 10) -> dict:
 @mcp.tool()
 def retrieve_findings(
     query: str,
-    project: Optional[str] = None,
-    tags: Optional[List[str]] = None,
-    created_after: Optional[str] = None,
-    created_before: Optional[str] = None,
-    confidence_min: Optional[float] = None,
-    semantic_k: Optional[int] = None,
-    lexical_k: Optional[int] = None,
-    final_k: Optional[int] = None,
+    project: str | None = None,
+    tags: list[str] | None = None,
+    created_after: str | None = None,
+    created_before: str | None = None,
+    confidence_min: float | None = None,
+    semantic_k: int | None = None,
+    lexical_k: int | None = None,
+    final_k: int | None = None,
 ) -> dict:
     """Run intelligent retrieval combining semantic similarity and keyword matching.
 
@@ -1255,10 +1268,10 @@ def retrieve_findings(
 @mcp.tool()
 def retrieve_context(
     query: str,
-    project: Optional[str] = None,
-    tags: Optional[List[str]] = None,
-    confidence_min: Optional[float] = None,
-    final_k: Optional[int] = None,
+    project: str | None = None,
+    tags: list[str] | None = None,
+    confidence_min: float | None = None,
+    final_k: int | None = None,
 ) -> dict:
     """Retrieve findings and return them in a sanitized format safe for LLM context.
 
@@ -1411,7 +1424,7 @@ def evaluate_retrieval(dataset_path: str = "config/eval_queries.json", final_k: 
 def start_research(
     session_id: str,
     topic: str,
-    user_id: Optional[str] = None,
+    user_id: str | None = None,
     limit: int = 50
 ) -> dict:
     """Begin a complete research session with automatic context loading. COMPOSITE TOOL.
@@ -1465,7 +1478,7 @@ def start_research(
 def end_session(
     session_id: str,
     export_to_library: bool = True,
-    project: Optional[str] = None,
+    project: str | None = None,
 ) -> dict:
     """Gracefully end the current session with automatic knowledge preservation. COMPOSITE TOOL.
 
@@ -1525,7 +1538,7 @@ def end_session(
 
 
 @mcp.tool()
-def check_context(query: str, project: Optional[str] = None) -> dict:
+def check_context(query: str, project: str | None = None) -> dict:
     """Quick check if relevant context exists before starting work. CONVENIENCE TOOL.
 
     AUTOMATIC TRIGGERS - Call this at the start of ANY new task to determine
@@ -1567,11 +1580,11 @@ def check_context(query: str, project: Optional[str] = None) -> dict:
 def save_finding_auto(
     project: str,
     claim: str,
-    confidence: Optional[float] = None,
-    evidence: Optional[List[str]] = None,
+    confidence: float | None = None,
+    evidence: list[str] | None = None,
     reasoning: str = "",
-    caveats: Optional[List[str]] = None,
-    tags: Optional[List[str]] = None,
+    caveats: list[str] | None = None,
+    tags: list[str] | None = None,
     confirm: bool = False,
 ) -> dict:
     """Convenience wrapper for saving findings with automatic confidence scoring.
@@ -1640,7 +1653,7 @@ def save_finding_auto(
 
 
 @mcp.tool()
-def help_library(tool_name: Optional[str] = None) -> dict:
+def help_library(tool_name: str | None = None) -> dict:
     """Get help about all OpenLMlib MCP tools or a specific tool.
 
     Call this with no arguments to see all available tools organized by category.
@@ -1901,7 +1914,7 @@ def help_library(tool_name: Optional[str] = None) -> dict:
 
 
 @mcp.tool()
-def get_usage_analytics(days: int = 7, tool_name: Optional[str] = None) -> dict:
+def get_usage_analytics(days: int = 7, tool_name: str | None = None) -> dict:
     """Get tool usage analytics and optimization metrics. For developers and optimization tracking.
 
     AUTOMATIC TRIGGERS - Call this when:
@@ -1926,11 +1939,8 @@ def get_usage_analytics(days: int = 7, tool_name: Optional[str] = None) -> dict:
     """
     from .usage_analytics import (
         get_automatic_call_rate,
-        get_tool_selection_accuracy,
-        get_parameter_hallucination_rate,
-        get_workflow_completeness,
-        get_tool_usage_summary,
         get_full_analytics_report,
+        get_tool_usage_summary,
     )
 
     try:

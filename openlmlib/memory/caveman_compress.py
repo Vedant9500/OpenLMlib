@@ -10,16 +10,16 @@ Pattern: [thing] [action] [reason]. [next step].
 
 from __future__ import annotations
 
-import re
 import logging
-from typing import List, Dict, Any, Set
+import re
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Words to remove (ultra compression)
-ARTICLES: Set[str] = {'a', 'an', 'the'}
+ARTICLES: set[str] = {'a', 'an', 'the'}
 
-FILLER_WORDS: Set[str] = {
+FILLER_WORDS: set[str] = {
     'just', 'really', 'basically', 'essentially', 'actually',
     'simply', 'very', 'quite', 'rather', 'somewhat',
     'generally', 'typically', 'usually', 'normally',
@@ -27,19 +27,19 @@ FILLER_WORDS: Set[str] = {
     'as well as', 'along with', 'together with',
 }
 
-HEDGING: Set[str] = {
+HEDGING: set[str] = {
     'might', 'could', 'should', 'perhaps', 'maybe',
     'it seems', 'it appears', 'possibly', 'potentially',
-    'likely', 'unlikely', 'probably', 'possibly',
+    'likely', 'unlikely', 'probably',
 }
 
-PLEASANTRIES: Set[str] = {
+PLEASANTRIES: set[str] = {
     'please note', 'note that', 'important to understand',
     'keep in mind', 'remember that', 'for example',
     'in other words', 'that is to say',
 }
 
-TRANSITIONAL: Set[str] = {
+TRANSITIONAL: set[str] = {
     'however', 'therefore', 'moreover', 'furthermore',
     'additionally', 'consequently', 'nevertheless',
     'on the other hand', 'in contrast', 'meanwhile',
@@ -304,7 +304,7 @@ def _extract_preserved_sections(
     text: str,
     preserve_code: bool,
     preserve_urls: bool
-) -> tuple[List[Dict[str, Any]], str]:
+) -> tuple[list[dict[str, Any]], str]:
     """
     Extract sections that should not be compressed.
     Replace with placeholders during compression.
@@ -348,7 +348,7 @@ def _extract_preserved_sections(
 
 def _restore_preserved_sections(
     text: str,
-    preserved: List[Dict[str, Any]]
+    preserved: list[dict[str, Any]]
 ) -> str:
     """Restore preserved sections after compression."""
     for item in preserved:

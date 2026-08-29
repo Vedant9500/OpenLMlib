@@ -8,7 +8,6 @@ and idle timeouts.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
 
 
 def _parse_iso(value: str) -> datetime:
@@ -37,10 +36,10 @@ DEFAULT_RULES = {
 class RulesEngine:
     """Validates operations against session rules."""
 
-    def __init__(self, rules: Optional[Dict] = None):
+    def __init__(self, rules: dict | None = None):
         self.rules = {**DEFAULT_RULES, **(rules or {})}
 
-    def validate_join(self, current_agent_count: int) -> Tuple[bool, Optional[str]]:
+    def validate_join(self, current_agent_count: int) -> tuple[bool, str | None]:
         """Validate if a new agent can join."""
         max_agents = self.rules.get("max_agents", 10)
         if current_agent_count >= max_agents:
@@ -52,7 +51,7 @@ class RulesEngine:
         content: str,
         msg_type: str,
         has_artifact_ref: bool = False,
-    ) -> Tuple[bool, List[str]]:
+    ) -> tuple[bool, list[str]]:
         """Validate a message against session rules.
 
         Returns (is_valid, list_of_warnings).
@@ -80,9 +79,9 @@ class RulesEngine:
 
     def validate_task_assignment(
         self,
-        assigned_to: Optional[str],
+        assigned_to: str | None,
         current_pending_count: int,
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """Validate task assignment.
 
         ``require_assignment`` means the task must name a target (agent id or
@@ -103,7 +102,7 @@ class RulesEngine:
         threshold = self.rules.get("auto_compact_after_messages", 50)
         return (message_count - last_compact_seq) >= threshold
 
-    def is_idle(self, last_activity_iso: str, current_iso: str) -> Tuple[bool, float]:
+    def is_idle(self, last_activity_iso: str, current_iso: str) -> tuple[bool, float]:
         """Check if session is idle beyond the timeout.
 
         Returns (is_idle, minutes_since_activity).

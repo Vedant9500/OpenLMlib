@@ -18,12 +18,12 @@ import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def run_git(args: List[str], cwd: Optional[str] = None) -> str:
+def run_git(args: list[str], cwd: str | None = None) -> str:
     """Run a git command and return stdout."""
     result = subprocess.run(
         ["git"] + args,
@@ -34,7 +34,7 @@ def run_git(args: List[str], cwd: Optional[str] = None) -> str:
     return result.stdout.strip()
 
 
-def get_modified_files(cwd: Optional[str] = None) -> List[Dict[str, Any]]:
+def get_modified_files(cwd: str | None = None) -> list[dict[str, Any]]:
     """Get list of modified, staged, and untracked files."""
     status_output = run_git(["status", "--porcelain"], cwd)
     
@@ -73,7 +73,7 @@ def get_modified_files(cwd: Optional[str] = None) -> List[Dict[str, Any]]:
     return files
 
 
-def get_file_diff(file_path: str, cwd: Optional[str] = None) -> str:
+def get_file_diff(file_path: str, cwd: str | None = None) -> str:
     """Get the diff for a specific file."""
     diff_output = run_git(["diff", "--", file_path], cwd)
     if not diff_output:
@@ -85,10 +85,10 @@ def get_file_diff(file_path: str, cwd: Optional[str] = None) -> str:
 
 
 def get_recent_commits(
-    since: Optional[str] = None,
+    since: str | None = None,
     limit: int = 20,
-    cwd: Optional[str] = None
-) -> List[Dict[str, Any]]:
+    cwd: str | None = None
+) -> list[dict[str, Any]]:
     """Get recent git commits."""
     if since:
         # Get commits since a specific time
@@ -119,7 +119,7 @@ def get_recent_commits(
     return commits
 
 
-def get_commit_diff(hash: str, cwd: Optional[str] = None) -> Dict[str, Any]:
+def get_commit_diff(hash: str, cwd: str | None = None) -> dict[str, Any]:
     """Get files changed in a specific commit."""
     # Get changed files
     files_output = run_git(["diff-tree", "--no-commit-id", "--name-status", "-r", hash], cwd)
@@ -155,13 +155,13 @@ def get_commit_diff(hash: str, cwd: Optional[str] = None) -> Dict[str, Any]:
     }
 
 
-def get_diff_stats(cwd: Optional[str] = None) -> Dict[str, Any]:
+def get_diff_stats(cwd: str | None = None) -> dict[str, Any]:
     """Get overall diff statistics for unstaged changes."""
     output = run_git(["diff", "--stat"], cwd)
     return {"uncommitted": output}
 
 
-def count_lines_changed(diff_text: str) -> Dict[str, int]:
+def count_lines_changed(diff_text: str) -> dict[str, int]:
     """Count added/removed lines from diff text."""
     added = 0
     removed = 0
@@ -179,7 +179,7 @@ def infer_file_reason(
     file_path: str,
     action: str,
     diff_text: str,
-    commit_messages: List[str]
+    commit_messages: list[str]
 ) -> str:
     """Infer why a file was changed based on diff content and commit messages."""
     diff_lower = diff_text.lower() if diff_text else ""
@@ -218,12 +218,12 @@ def infer_file_reason(
 
 def retroactive_ingest(
     session_id: str,
-    cwd: Optional[str] = None,
+    cwd: str | None = None,
     time_window_hours: int = 24,
     include_uncommitted: bool = True,
-    storage: Optional[Any] = None,
-    settings_path: Optional[Path] = None,
-) -> Dict[str, Any]:
+    storage: Any | None = None,
+    settings_path: Path | None = None,
+) -> dict[str, Any]:
     """
     Retroactively ingest session activity from git history.
     

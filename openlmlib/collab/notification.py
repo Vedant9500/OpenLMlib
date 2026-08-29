@@ -18,7 +18,6 @@ import os
 import time
 import uuid
 from pathlib import Path
-from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +92,7 @@ def write_notification(
 
 def read_notification(
     sessions_dir: Path, session_id: str
-) -> Optional[Dict]:
+) -> dict | None:
     """Read the latest notification for a session.
 
     Returns None if no notification file exists or it is corrupt.
@@ -124,7 +123,6 @@ def clear_notification(sessions_dir: Path, session_id: str) -> None:
     
     This function is kept as a no-op for backward compatibility.
     """
-    pass
 
 
 def wait_for_notification(
@@ -133,7 +131,7 @@ def wait_for_notification(
     timeout: float = 30.0,
     poll_interval: float = 0.5,
     last_seq: int = -1,
-) -> Optional[Dict]:
+) -> dict | None:
     """Block and wait for a notification to appear.
 
     This is the core of the autonomous loop — agents call this and it

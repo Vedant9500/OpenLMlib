@@ -1,6 +1,6 @@
 import unittest
 
-from openlmlib.packing import ContextPacker, _interleave_ends, _estimate_tokens
+from openlmlib.packing import ContextPacker, _estimate_tokens, _interleave_ends
 
 
 class TestEstimateTokens(unittest.TestCase):

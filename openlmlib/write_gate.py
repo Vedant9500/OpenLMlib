@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Callable, Dict, Iterable, List, Optional
 import math
 import re
+from collections.abc import Callable, Iterable
 
 from .schema import ValidationIssue
 
@@ -28,10 +28,10 @@ class WriteGate:
         min_claim_evidence_sim: float,
         novelty_similarity_threshold: float,
         novelty_top_k: int,
-        contradiction_similarity_threshold: Optional[float] = None,
+        contradiction_similarity_threshold: float | None = None,
         embedder=None,
         vector_store=None,
-        finding_lookup: Optional[Callable[[int], Optional[Dict[str, str]]]] = None,
+        finding_lookup: Callable[[int], dict[str, str] | None] | None = None,
     ) -> None:
         self.min_confidence = min_confidence
         self.min_reasoning_length = min_reasoning_length
@@ -51,7 +51,7 @@ class WriteGate:
         self._memo_claim = None
         self._memo_evidence_text = None
 
-    def _encode_claim_evidence(self, claim: str, evidence: List[str]):
+    def _encode_claim_evidence(self, claim: str, evidence: list[str]):
         evidence_text = " ".join(evidence)
         if (
             self._claim_vec is not None
@@ -69,7 +69,7 @@ class WriteGate:
         self._memo_evidence_text = evidence_text
         return claim_vec, evidence_vec
 
-    def _evidence_item_similarities(self, claim_vec, evidence: List[str]) -> List[float]:
+    def _evidence_item_similarities(self, claim_vec, evidence: list[str]) -> list[float]:
         """Cosine of the claim against each evidence item.
 
         Joint-embedding the full evidence dilutes strong single items (e.g. a
@@ -83,7 +83,7 @@ class WriteGate:
         vectors = self.embedder.encode(items)
         return [_cosine_similarity(claim_vec, vec) for vec in vectors]
 
-    def evidence_similarity(self, claim: str, evidence: List[str]) -> float:
+    def evidence_similarity(self, claim: str, evidence: list[str]) -> float:
         """Effective claim<->evidence similarity.
 
         Max of the joined-evidence cosine and the best single-item cosine, so
@@ -100,11 +100,11 @@ class WriteGate:
     def validate(
         self,
         claim: str,
-        evidence: List[str],
+        evidence: list[str],
         reasoning: str,
         confidence: float,
-    ) -> List[ValidationIssue]:
-        issues: List[ValidationIssue] = []
+    ) -> list[ValidationIssue]:
+        issues: list[ValidationIssue] = []
 
         if confidence < self.min_confidence:
             issues.append(
@@ -209,9 +209,9 @@ class WriteGate:
     def adjust_confidence(
         self,
         claim: str,
-        evidence: List[str],
+        evidence: list[str],
         proposed_confidence: float,
-        issues: Optional[List[ValidationIssue]] = None,
+        issues: list[ValidationIssue] | None = None,
     ) -> float:
         adjusted = float(proposed_confidence)
         if self.embedder is not None and evidence:
@@ -231,7 +231,7 @@ class WriteGate:
         return float(round(float(adjusted), 3))
 
     @staticmethod
-    def is_allowed(issues: List[ValidationIssue]) -> bool:
+    def is_allowed(issues: list[ValidationIssue]) -> bool:
         return all(issue.severity != "error" for issue in issues)
 
 
@@ -241,11 +241,11 @@ _STOPWORDS = {
 _NEGATION_TERMS = {"not", "no", "never", "without", "cannot", "can't", "fails", "failed", "avoid"}
 
 
-def _tokenize(text: str) -> List[str]:
+def _tokenize(text: str) -> list[str]:
     return [token for token in re.findall(r"[a-z0-9']+", text.lower()) if token not in _STOPWORDS]
 
 
-def _has_negation(tokens: List[str]) -> bool:
+def _has_negation(tokens: list[str]) -> bool:
     return any(token in _NEGATION_TERMS for token in tokens)
 
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """Manually log this session to memory for continuation."""
 from pathlib import Path
-from datetime import datetime, timezone
-from openlmlib.memory import SessionManager, MemoryStorage
+
+from openlmlib.memory import MemoryStorage, SessionManager
 from openlmlib.runtime import get_runtime
 
 session_id = "session_20260413_memory_dev_v3"
@@ -83,6 +83,7 @@ print(f"Session ID: {session_id}")
 
 # Verify
 import sqlite3
+
 conn = sqlite3.connect(str(runtime.settings.db_path))
 c = conn.cursor()
 c.execute("SELECT COUNT(*) FROM memory_sessions")

@@ -1,10 +1,9 @@
+import sqlite3
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 from openlmlib.memory.retrogit_ingest import retroactive_ingest
 from openlmlib.memory.storage import MemoryStorage
-import sqlite3
 
 
 class TestRetroactiveIngest(unittest.TestCase):

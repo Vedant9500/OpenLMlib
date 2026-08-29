@@ -10,23 +10,21 @@ from __future__ import annotations
 import json
 import os
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-
 
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
 MODELS_CACHE_FILE = "openrouter_models.json"
 MODELS_CACHE_TTL_SECONDS = 3600
 
 
-def _get_api_key() -> Optional[str]:
+def _get_api_key() -> str | None:
     """Get OpenRouter API key from environment."""
     return os.environ.get("OPENROUTER_API_KEY")
 
 
-def _get_cache_path(sessions_dir: Optional[Path] = None) -> Path:
+def _get_cache_path(sessions_dir: Path | None = None) -> Path:
     """Get the path to the models cache file."""
     if sessions_dir:
         return sessions_dir / MODELS_CACHE_FILE
@@ -41,25 +39,25 @@ def _is_cache_valid(cache_path: Path) -> bool:
     return (time.time() - mtime) < MODELS_CACHE_TTL_SECONDS
 
 
-def _load_cached_models(cache_path: Path) -> Optional[List[Dict]]:
+def _load_cached_models(cache_path: Path) -> list[dict] | None:
     """Load models from cache file."""
     if not cache_path.exists():
         return None
     try:
         with open(cache_path, "r", encoding="utf-8") as f:
             return json.load(f)
-    except (json.JSONDecodeError, IOError):
+    except (OSError, json.JSONDecodeError):
         return None
 
 
-def _save_cache(cache_path: Path, models: List[Dict]) -> None:
+def _save_cache(cache_path: Path, models: list[dict]) -> None:
     """Save models to cache file."""
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     with open(cache_path, "w", encoding="utf-8") as f:
         json.dump(models, f, indent=2, ensure_ascii=False)
 
 
-def _request_json_with_retry(req: urllib.request.Request, timeout: int, operation: str, max_attempts: int = 5, base_delay: float = 1.0) -> Dict:
+def _request_json_with_retry(req: urllib.request.Request, timeout: int, operation: str, max_attempts: int = 5, base_delay: float = 1.0) -> dict:
     last_error = None
     for attempt in range(1, max_attempts + 1):
         try:
@@ -87,9 +85,9 @@ def _request_json_with_retry(req: urllib.request.Request, timeout: int, operatio
 
 
 def fetch_openrouter_models(
-    sessions_dir: Optional[Path] = None,
+    sessions_dir: Path | None = None,
     force_refresh: bool = False,
-) -> Dict:
+) -> dict:
     """Fetch available models from OpenRouter API.
 
     Uses a local cache to avoid excessive API calls.
@@ -163,13 +161,13 @@ def fetch_openrouter_models(
 
 
 def filter_models(
-    models: List[Dict],
-    search: Optional[str] = None,
-    provider: Optional[str] = None,
-    max_price_per_million: Optional[float] = None,
-    context_length_min: Optional[int] = None,
+    models: list[dict],
+    search: str | None = None,
+    provider: str | None = None,
+    max_price_per_million: float | None = None,
+    context_length_min: int | None = None,
     is_free: bool = False,
-) -> List[Dict]:
+) -> list[dict]:
     """Filter models by various criteria.
 
     Args:
@@ -202,7 +200,7 @@ def filter_models(
         ]
 
     if max_price_per_million is not None:
-        def get_total_price(m: Dict) -> float:
+        def get_total_price(m: dict) -> float:
             pricing = m.get("pricing", {})
             input_price = float(pricing.get("prompt", 0))
             output_price = float(pricing.get("completion", 0))
@@ -226,7 +224,7 @@ def filter_models(
     return results
 
 
-def format_model_summary(model: Dict) -> str:
+def format_model_summary(model: dict) -> str:
     """Format a model dict into a human-readable summary string."""
     lines = []
     lines.append(f"ID: {model.get('id', 'unknown')}")
@@ -265,7 +263,7 @@ def format_model_summary(model: Dict) -> str:
     return "\n".join(lines)
 
 
-def get_recommended_models_for_task(task_type: str) -> List[str]:
+def get_recommended_models_for_task(task_type: str) -> list[str]:
     """Get recommended model IDs for a given task type.
 
     Args:

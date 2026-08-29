@@ -9,12 +9,11 @@ with custom templates persisted to disk as JSON files.
 
 from __future__ import annotations
 
-import json
 import functools
+import json
 import os
 import re
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from openlmlib.co_scientist.templates import (
     CO_SCIENTIST_GENERATE_TEMPLATE,
@@ -23,7 +22,7 @@ from openlmlib.co_scientist.templates import (
 
 TEMPLATE_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 
-TEMPLATES: Dict[str, Dict] = {
+TEMPLATES: dict[str, dict] = {
     "deep_research": {
         "name": "Deep Research",
         "description": "Comprehensive research on a topic with literature review, analysis, and synthesis",
@@ -117,7 +116,7 @@ TEMPLATES: Dict[str, Dict] = {
     "co_scientist_verify": CO_SCIENTIST_VERIFY_TEMPLATE,
 }
 
-_custom_templates_dir: Optional[Path] = None
+_custom_templates_dir: Path | None = None
 
 
 def _validate_template_id(template_id: str) -> str:
@@ -164,7 +163,7 @@ def _get_custom_templates_dir() -> Path:
 
 
 @functools.lru_cache(maxsize=1)
-def _load_custom_templates() -> Dict[str, Dict]:
+def _load_custom_templates() -> dict[str, dict]:
     """Load custom templates from disk JSON files.
     
     Cached with lru_cache. Call _clear_template_cache() to invalidate.
@@ -199,7 +198,7 @@ def _template_file_path(template_id: str) -> Path:
     return fpath
 
 
-def _save_custom_template(template_id: str, data: Dict) -> Path:
+def _save_custom_template(template_id: str, data: dict) -> Path:
     """Save a custom template to disk as JSON."""
     fpath = _template_file_path(template_id)
     fpath.parent.mkdir(parents=True, exist_ok=True)
@@ -224,7 +223,7 @@ def _delete_custom_template(template_id: str) -> bool:
     return False
 
 
-def list_templates() -> List[Dict]:
+def list_templates() -> list[dict]:
     """List all available session templates (built-in + custom)."""
     custom = _load_custom_templates()
     all_templates = {**TEMPLATES, **custom}
@@ -241,7 +240,7 @@ def list_templates() -> List[Dict]:
     ]
 
 
-def get_template(template_id: str) -> Optional[Dict]:
+def get_template(template_id: str) -> dict | None:
     """Get a session template by ID (checks custom then built-in)."""
     custom = _load_custom_templates()
     if template_id in custom:
@@ -271,9 +270,9 @@ def create_template(
     template_id: str,
     name: str,
     description: str,
-    plan: List[Dict],
-    rules: Optional[Dict] = None,
-) -> Dict:
+    plan: list[dict],
+    rules: dict | None = None,
+) -> dict:
     """Register a custom session template and persist to disk.
 
     Args:

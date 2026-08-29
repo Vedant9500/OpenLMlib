@@ -1,22 +1,35 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+import hashlib
 import json
 import logging
+import os
 import re
 import shutil
 import sqlite3
 import tempfile
 import uuid
-import hashlib
-import os
 from datetime import datetime, timezone
+from pathlib import Path
 from time import monotonic
+from typing import Any
 from uuid import uuid4
 
-from .settings import load_settings, write_default_settings
 from . import db
+from .embeddings import (
+    EmbeddingCache,
+    SentenceTransformerEmbedder,
+    build_contextual_chunk,
+)
+from .evaluation import evaluate_retrieval, faithfulness_score, relevance_alignment
+from .retrieval import (
+    Phase4Options,
+    RetrievalEngine,
+    RetrievalFilters,
+    _claim_similarity,
+)
+from .runtime import get_runtime, mark_dirty, maybe_flush
+from .sanitization import render_untrusted_context
 from .schema import (
     Finding,
     FindingAudit,
@@ -28,19 +41,14 @@ from .schema import (
     new_finding_id,
     utc_now_iso,
 )
-from .embeddings import EmbeddingCache, SentenceTransformerEmbedder
-from .embeddings import build_contextual_chunk
-from .retrieval import RetrievalEngine, RetrievalFilters, Phase4Options, _claim_similarity
-from .sanitization import render_untrusted_context
-from .evaluation import evaluate_retrieval, faithfulness_score, relevance_alignment
-from .runtime import get_runtime, mark_dirty, maybe_flush
+from .settings import load_settings, write_default_settings
 from .vector_store import create_vector_store, load_vector_store, save_vector_store
 from .write_gate import WriteGate, _cosine_similarity
 
 logger = logging.getLogger(__name__)
 
 
-def init_library(settings_path: Path) -> Dict[str, Any]:
+def init_library(settings_path: Path) -> dict[str, Any]:
     write_default_settings(settings_path)
     settings = load_settings(settings_path)
     settings.data_root.mkdir(parents=True, exist_ok=True)
@@ -62,7 +70,7 @@ def init_library(settings_path: Path) -> Dict[str, Any]:
     }
 
 
-def rebuild_vector_index(settings_path: Path) -> Dict[str, Any]:
+def rebuild_vector_index(settings_path: Path) -> dict[str, Any]:
     settings = load_settings(settings_path)
     conn = db.connect(settings.db_path)
     db.init_db(conn)
@@ -177,15 +185,15 @@ def _sha256_file(path: Path) -> str:
 BACKUP_MANIFEST_VERSION = 2
 
 
-def backup_library(settings_path: Path, output_dir: Optional[Path] = None) -> Dict[str, Any]:
+def backup_library(settings_path: Path, output_dir: Path | None = None) -> dict[str, Any]:
     settings = load_settings(settings_path)
     root = output_dir or (settings.data_root / "backups")
     backup_dir = _create_backup_dir(root)
 
-    copied_files: List[str] = []
-    copied_dirs: List[str] = []
+    copied_files: list[str] = []
+    copied_dirs: list[str] = []
 
-    manifest_files: List[Dict[str, Any]] = []
+    manifest_files: list[dict[str, Any]] = []
 
     def _record(dest: Path, relative: str) -> None:
         manifest_files.append({
@@ -272,7 +280,7 @@ def restore_library(
     backup_dir: Path,
     confirm: bool = False,
     create_pre_restore_backup: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     if not confirm:
         return {
             "status": "confirmation_required",
@@ -294,7 +302,7 @@ def restore_library(
 
     # Integrity gate (M-13): v2+ manifests list canonical relative paths with
     # checksums. Every entry must verify before live data is touched.
-    problems: List[str] = []
+    problems: list[str] = []
     if int(manifest.get("format_version") or 1) >= 2:
         for entry in manifest.get("files", []):
             relative = str(entry.get("path", ""))
@@ -340,12 +348,12 @@ def restore_library(
         (settings.embeddings_cache_path.name, backup_dir / settings.embeddings_cache_path.name, settings.embeddings_cache_path),
     ]
 
-    restored_files: List[str] = []
+    restored_files: list[str] = []
     staging_root = Path(tempfile.mkdtemp(prefix="openlmlib-restore-stage-"))
     try:
         # Phase 1 — stage every source copy up front. Failures here abort the
         # restore before any live file is touched (M-6).
-        staged_mapping: List[tuple[Path, Path]] = []
+        staged_mapping: list[tuple[Path, Path]] = []
         for _name, source, target in mapping:
             if source.exists():
                 staged_source = staging_root / "sources" / target.name
@@ -354,7 +362,7 @@ def restore_library(
                 staged_mapping.append((staged_source, target))
 
         findings_source = backup_dir / "findings"
-        staged_findings: Optional[Path] = None
+        staged_findings: Path | None = None
         if findings_source.exists() and findings_source.is_dir():
             staged_findings = staging_root / "sources" / "findings"
             shutil.copytree(findings_source, staged_findings)
@@ -363,8 +371,8 @@ def restore_library(
         # can put them back exactly as they were.
         rollback_dir = staging_root / "rollback"
         rollback_dir.mkdir()
-        moved_aside: List[tuple[Path, Path]] = []  # (saved_path, original_path)
-        committed: List[Path] = []
+        moved_aside: list[tuple[Path, Path]] = []  # (saved_path, original_path)
+        committed: list[Path] = []
 
         def _rollback() -> None:
             for written in committed:
@@ -449,7 +457,7 @@ def _hydrate_finding_from_json(settings, finding: Finding) -> Finding:
     return finding
 
 
-def _serialize_issues(issues) -> List[Dict[str, str]]:
+def _serialize_issues(issues) -> list[dict[str, str]]:
     return [
         {"field": issue.field, "message": issue.message, "severity": issue.severity}
         for issue in issues
@@ -485,10 +493,10 @@ def _claim_semantic_similarity(candidate: str, existing: str, embedder) -> float
 
 
 def _check_duplicate_warning(
-    similar_findings: Optional[List[Dict[str, Any]]],
+    similar_findings: list[dict[str, Any]] | None,
     claim: str,
     embedder=None,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Check if similar findings suggest this might be a duplicate.
 
     Returns a warning dict if a very similar finding exists, otherwise None.
@@ -525,27 +533,27 @@ def add_finding(
     project: str,
     claim: str,
     confidence: float,
-    evidence: Optional[List[str]] = None,
+    evidence: list[str] | None = None,
     reasoning: str = "",
-    caveats: Optional[List[str]] = None,
-    tags: Optional[List[str]] = None,
+    caveats: list[str] | None = None,
+    tags: list[str] | None = None,
     full_text: str = "",
     proposed_by: str = "",
-    finding_id: Optional[str] = None,
+    finding_id: str | None = None,
     confirm: bool = False,
     # New fields for richer context
     domain: str = "",
     paper_title: str = "",
     paper_url: str = "",
-    paper_also_covers: Optional[List[str]] = None,
-    related_papers: Optional[List[Dict[str, str]]] = None,
+    paper_also_covers: list[str] | None = None,
+    related_papers: list[dict[str, str]] | None = None,
     # Read-before-write: similar findings check (safety net)
-    similar_findings: Optional[List[Dict[str, Any]]] = None,
-    session_warning: Optional[str] = None,  # Deprecated, kept for backward compat
+    similar_findings: list[dict[str, Any]] | None = None,
+    session_warning: str | None = None,  # Deprecated, kept for backward compat
     # Trusted export path (collab / co-scientist): still require hard fields,
     # but skip claim/evidence embedding similarity rejection.
     trusted_export: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     if not confirm:
         return {
             "status": "confirmation_required",
@@ -807,7 +815,7 @@ def _clamp_limit(value: Any, default: int, maximum: int = FINDINGS_LIMIT_MAX) ->
     return min(limit, maximum)
 
 
-def list_findings(settings_path: Path, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
+def list_findings(settings_path: Path, limit: int = 50, offset: int = 0) -> dict[str, Any]:
     settings = load_settings(settings_path)
     conn = db.connect(settings.db_path)
     db.init_db(conn)
@@ -820,7 +828,7 @@ def list_findings(settings_path: Path, limit: int = 50, offset: int = 0) -> Dict
     return {"status": "ok", "items": rows}
 
 
-def get_finding(settings_path: Path, finding_id: str) -> Dict[str, Any]:
+def get_finding(settings_path: Path, finding_id: str) -> dict[str, Any]:
     settings = load_settings(settings_path)
     conn = db.connect(settings.db_path)
     db.init_db(conn)
@@ -834,7 +842,7 @@ def get_finding(settings_path: Path, finding_id: str) -> Dict[str, Any]:
     return {"status": "ok", "finding": finding.to_content_dict()}
 
 
-def search_fts(settings_path: Path, query: str, limit: int = 10) -> Dict[str, Any]:
+def search_fts(settings_path: Path, query: str, limit: int = 10) -> dict[str, Any]:
     settings = load_settings(settings_path)
     conn = db.connect(settings.db_path)
     db.init_db(conn)
@@ -846,15 +854,15 @@ def search_fts(settings_path: Path, query: str, limit: int = 10) -> Dict[str, An
 def retrieve_findings(
     settings_path: Path,
     query: str,
-    project: Optional[str] = None,
-    tags: Optional[List[str]] = None,
-    created_after: Optional[str] = None,
-    created_before: Optional[str] = None,
-    confidence_min: Optional[float] = None,
-    semantic_k: Optional[int] = None,
-    lexical_k: Optional[int] = None,
-    final_k: Optional[int] = None,
-) -> Dict[str, Any]:
+    project: str | None = None,
+    tags: list[str] | None = None,
+    created_after: str | None = None,
+    created_before: str | None = None,
+    confidence_min: float | None = None,
+    semantic_k: int | None = None,
+    lexical_k: int | None = None,
+    final_k: int | None = None,
+) -> dict[str, Any]:
     runtime = get_runtime(settings_path)
     settings = runtime.settings
     conn = runtime.conn
@@ -904,16 +912,16 @@ def retrieve_findings(
 def retrieve_findings_enhanced(
     settings_path: Path,
     query: str,
-    project: Optional[str] = None,
-    tags: Optional[List[str]] = None,
-    created_after: Optional[str] = None,
-    created_before: Optional[str] = None,
-    confidence_min: Optional[float] = None,
-    semantic_k: Optional[int] = None,
-    lexical_k: Optional[int] = None,
-    final_k: Optional[int] = None,
+    project: str | None = None,
+    tags: list[str] | None = None,
+    created_after: str | None = None,
+    created_before: str | None = None,
+    confidence_min: float | None = None,
+    semantic_k: int | None = None,
+    lexical_k: int | None = None,
+    final_k: int | None = None,
     rerank: bool = True,
-    rerank_top_k: Optional[int] = None,
+    rerank_top_k: int | None = None,
     expand_query: bool = False,
     decompose: bool = True,
     deduplicate: bool = True,
@@ -921,7 +929,7 @@ def retrieve_findings_enhanced(
     pack_context: bool = False,
     max_context_tokens: int = 4000,
     reasoning_trace: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Enhanced retrieval with Phase 4 features: reranking, query expansion, decomposition, dedup, packing."""
     runtime = get_runtime(settings_path)
     settings = runtime.settings
@@ -986,11 +994,11 @@ def retrieve_findings_enhanced(
 def retrieve_prompt_context(
     settings_path: Path,
     query: str,
-    project: Optional[str] = None,
-    tags: Optional[List[str]] = None,
-    confidence_min: Optional[float] = None,
-    final_k: Optional[int] = None,
-) -> Dict[str, Any]:
+    project: str | None = None,
+    tags: list[str] | None = None,
+    confidence_min: float | None = None,
+    final_k: int | None = None,
+) -> dict[str, Any]:
     retrieval = retrieve_findings(
         settings_path=settings_path,
         query=query,
@@ -1017,7 +1025,7 @@ def evaluate_dataset(
     settings_path: Path,
     dataset_path: Path,
     final_k: int = 10,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     runtime = get_runtime(settings_path)
     settings = runtime.settings
 
@@ -1064,12 +1072,12 @@ def evaluate_dataset(
     store = runtime.store
     engine = RetrievalEngine(conn=conn, embedder=embedder, vector_store=store, settings=settings)
 
-    query_results: List[Dict[str, Any]] = []
-    precision5_values: List[float] = []
-    recall5_values: List[float] = []
-    recall10_values: List[float] = []
-    faithfulness_values: List[float] = []
-    alignment_values: List[float] = []
+    query_results: list[dict[str, Any]] = []
+    precision5_values: list[float] = []
+    recall5_values: list[float] = []
+    recall10_values: list[float] = []
+    faithfulness_values: list[float] = []
+    alignment_values: list[float] = []
 
     for idx, row in enumerate(dataset):
         if not isinstance(row, dict):
@@ -1104,7 +1112,7 @@ def evaluate_dataset(
         recall10_values.append(r10)
 
         answer = str(row.get("answer") or "")
-        faith: Optional[float] = None
+        faith: float | None = None
         if answer:
             faith = float(faithfulness_score(answer, items))
             faithfulness_values.append(faith)
@@ -1127,7 +1135,7 @@ def evaluate_dataset(
 
     maybe_flush(runtime)
 
-    def _avg(values: List[float]) -> float:
+    def _avg(values: list[float]) -> float:
         if not values:
             return 0.0
         return sum(values) / len(values)
@@ -1147,7 +1155,7 @@ def evaluate_dataset(
     }
 
 
-def delete_finding(settings_path: Path, finding_id: str, confirm: bool = False) -> Dict[str, Any]:
+def delete_finding(settings_path: Path, finding_id: str, confirm: bool = False) -> dict[str, Any]:
     if not confirm:
         return {
             "status": "confirmation_required",
@@ -1176,7 +1184,7 @@ def delete_finding(settings_path: Path, finding_id: str, confirm: bool = False) 
     return {"status": "ok", "id": finding.id}
 
 
-def health(settings_path: Path) -> Dict[str, Any]:
+def health(settings_path: Path) -> dict[str, Any]:
     settings = load_settings(settings_path)
     status = {
         "db_path": str(settings.db_path),
@@ -1207,8 +1215,8 @@ def health(settings_path: Path) -> Dict[str, Any]:
 
 def find_stale_findings(
     settings_path: Path,
-    validity_days: Optional[int] = None,
-) -> Dict[str, Any]:
+    validity_days: int | None = None,
+) -> dict[str, Any]:
     """Find findings that exceed the validity window and need review."""
     from .maintenance import MaintenanceEngine, MaintenanceSettings
 
@@ -1243,8 +1251,8 @@ def find_stale_findings(
 
 def mark_findings_for_review(
     settings_path: Path,
-    finding_ids: List[str],
-) -> Dict[str, Any]:
+    finding_ids: list[str],
+) -> dict[str, Any]:
     """Mark findings as pending_review."""
     from .maintenance import MaintenanceEngine
 
@@ -1261,10 +1269,10 @@ def mark_findings_for_review(
 
 def run_consolidation(
     settings_path: Path,
-    similarity_threshold: Optional[float] = None,
-    project: Optional[str] = None,
+    similarity_threshold: float | None = None,
+    project: str | None = None,
     auto_consolidate: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Find and optionally consolidate similar findings."""
     from .maintenance import MaintenanceEngine
 
@@ -1288,8 +1296,8 @@ def log_finding_failure(
     finding_id: str,
     task_id: str,
     failure_reason: str,
-    confidence_decay: Optional[float] = None,
-) -> Dict[str, Any]:
+    confidence_decay: float | None = None,
+) -> dict[str, Any]:
     """Log a task failure related to a finding and decay its confidence."""
     from .maintenance import MaintenanceEngine
 
@@ -1311,9 +1319,9 @@ def log_finding_failure(
 
 def get_failure_ledger(
     settings_path: Path,
-    finding_id: Optional[str] = None,
+    finding_id: str | None = None,
     limit: int = 50,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Get failure ledger entries."""
     from .maintenance import MaintenanceEngine
 
@@ -1333,7 +1341,7 @@ def archive_finding(
     finding_id: str,
     reason: str = "",
     confirm: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Soft-archive a finding."""
     if not confirm:
         return {
@@ -1357,7 +1365,7 @@ def archive_finding(
 def restore_finding(
     settings_path: Path,
     finding_id: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Restore an archived finding."""
     from .maintenance import MaintenanceEngine
 
@@ -1374,8 +1382,8 @@ def restore_finding(
 
 def get_maintenance_summary(
     settings_path: Path,
-    validity_days: Optional[int] = None,
-) -> Dict[str, Any]:
+    validity_days: int | None = None,
+) -> dict[str, Any]:
     """Get a summary of library health and maintenance status."""
     from .maintenance import MaintenanceEngine, MaintenanceSettings
 
@@ -1394,8 +1402,8 @@ def get_maintenance_summary(
 
 
 def generate_cluster_summary(
-    findings: List[Dict[str, Any]],
-) -> Dict[str, Any]:
+    findings: list[dict[str, Any]],
+) -> dict[str, Any]:
     """Generate a summary for a cluster of findings."""
     from .summary_gen import SummaryGenerator
 

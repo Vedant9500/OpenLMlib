@@ -8,13 +8,13 @@ Test the new progressive knowledge recap flow:
 Demonstrates the knowledge-level progressive disclosure.
 """
 
-from pathlib import Path
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 sys.path.insert(0, str(Path.cwd()))
 
-from openlmlib.memory import SessionManager, MemoryStorage, extract_knowledge
+from openlmlib.memory import MemoryStorage, SessionManager
 from openlmlib.runtime import get_runtime
 
 

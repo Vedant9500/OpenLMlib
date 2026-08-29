@@ -7,14 +7,15 @@ indexed if cross-run querying becomes necessary.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List
 import re
 import uuid
+from collections.abc import Iterable
+from dataclasses import dataclass, field
+from typing import Any
 
 from openlmlib.schema import ValidationIssue
-from .evidence import EVIDENCE_LABELS, EVIDENCE_QUALITY_LEVELS
 
+from .evidence import EVIDENCE_LABELS, EVIDENCE_QUALITY_LEVELS
 
 HYPOTHESIS_ID_RE = re.compile(r"^hyp_[a-f0-9]{12}$")
 RUN_ID_RE = re.compile(r"^cosci_[a-f0-9]{12}$")
@@ -45,7 +46,7 @@ class HypothesisEvidence:
     label: str = "support"
     quality: str = "secondary_analysis"
 
-    def to_dict(self) -> Dict[str, object]:
+    def to_dict(self) -> dict[str, object]:
         return {
             "source": self.source,
             "summary": self.summary,
@@ -58,11 +59,11 @@ class HypothesisEvidence:
 
 @dataclass(frozen=True)
 class HypothesisLineage:
-    parent_hypothesis_ids: List[str] = field(default_factory=list)
+    parent_hypothesis_ids: list[str] = field(default_factory=list)
     version: int = 1
     generated_by: str = ""
 
-    def to_dict(self) -> Dict[str, object]:
+    def to_dict(self) -> dict[str, object]:
         return {
             "parent_hypothesis_ids": list(self.parent_hypothesis_ids),
             "version": self.version,
@@ -77,18 +78,18 @@ class HypothesisPacket:
     title: str
     claim: str
     rationale: str
-    assumptions: List[str]
-    evidence: List[HypothesisEvidence]
-    citations: List[str]
+    assumptions: list[str]
+    evidence: list[HypothesisEvidence]
+    citations: list[str]
     novelty_score: float
     plausibility_score: float
     impact_score: float
     testability_score: float
-    safety_notes: List[str]
+    safety_notes: list[str]
     lineage: HypothesisLineage
     status: str = "draft"
 
-    def to_dict(self) -> Dict[str, object]:
+    def to_dict(self) -> dict[str, object]:
         return {
             "hypothesis_id": self.hypothesis_id,
             "run_id": self.run_id,
@@ -108,7 +109,7 @@ class HypothesisPacket:
         }
 
     @classmethod
-    def from_dict(cls, payload: Dict[str, Any]) -> "HypothesisPacket":
+    def from_dict(cls, payload: dict[str, Any]) -> HypothesisPacket:
         issues = validate_hypothesis_packet(payload)
         if issues:
             message = "; ".join(f"{issue.field}: {issue.message}" for issue in issues)
@@ -162,7 +163,7 @@ def new_hypothesis_id() -> str:
     return "hyp_" + uuid.uuid4().hex[:12]
 
 
-def get_hypothesis_packet_schema() -> Dict[str, object]:
+def get_hypothesis_packet_schema() -> dict[str, object]:
     """Return a JSON-schema-like description of a hypothesis packet."""
     return {
         "type": "object",
@@ -202,9 +203,9 @@ def get_hypothesis_packet_schema() -> Dict[str, object]:
     }
 
 
-def validate_hypothesis_packet(payload: Any) -> List[ValidationIssue]:
+def validate_hypothesis_packet(payload: Any) -> list[ValidationIssue]:
     """Validate a hypothesis packet and return actionable issues."""
-    issues: List[ValidationIssue] = []
+    issues: list[ValidationIssue] = []
     if not isinstance(payload, dict):
         return [
             ValidationIssue(
@@ -254,7 +255,7 @@ def hypothesis_packet_is_valid(payload: Any) -> bool:
     return not validate_hypothesis_packet(payload)
 
 
-def validation_issues_to_dicts(issues: Iterable[ValidationIssue]) -> List[Dict[str, str]]:
+def validation_issues_to_dicts(issues: Iterable[ValidationIssue]) -> list[dict[str, str]]:
     return [
         {
             "field": issue.field,
@@ -269,7 +270,7 @@ def _validate_id(
     value: Any,
     field_name: str,
     pattern: re.Pattern[str],
-    issues: List[ValidationIssue],
+    issues: list[ValidationIssue],
 ) -> None:
     if not isinstance(value, str) or not pattern.match(value.strip()):
         issues.append(
@@ -283,7 +284,7 @@ def _validate_id(
 def _validate_non_empty_string(
     value: Any,
     field_name: str,
-    issues: List[ValidationIssue],
+    issues: list[ValidationIssue],
 ) -> None:
     if not isinstance(value, str) or not value.strip():
         issues.append(
@@ -297,7 +298,7 @@ def _validate_non_empty_string(
 def _validate_string_list(
     value: Any,
     field_name: str,
-    issues: List[ValidationIssue],
+    issues: list[ValidationIssue],
     min_items: int,
 ) -> None:
     if not isinstance(value, list):
@@ -320,7 +321,7 @@ def _validate_string_list(
             )
 
 
-def _validate_score(value: Any, field_name: str, issues: List[ValidationIssue]) -> None:
+def _validate_score(value: Any, field_name: str, issues: list[ValidationIssue]) -> None:
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         issues.append(ValidationIssue(field=field_name, message="Must be a number"))
         return
@@ -333,7 +334,7 @@ def _validate_score(value: Any, field_name: str, issues: List[ValidationIssue]) 
         )
 
 
-def _validate_evidence(value: Any, issues: List[ValidationIssue]) -> None:
+def _validate_evidence(value: Any, issues: list[ValidationIssue]) -> None:
     if not isinstance(value, list):
         issues.append(ValidationIssue(field="evidence", message="Must be a list"))
         return
@@ -380,7 +381,7 @@ def _validate_evidence(value: Any, issues: List[ValidationIssue]) -> None:
             )
 
 
-def _validate_lineage(value: Any, issues: List[ValidationIssue]) -> None:
+def _validate_lineage(value: Any, issues: list[ValidationIssue]) -> None:
     if not isinstance(value, dict):
         issues.append(ValidationIssue(field="lineage", message="Must be an object"))
         return

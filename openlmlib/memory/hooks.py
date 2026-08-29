@@ -13,8 +13,9 @@ Inspired by claude-mem's 5-hook architecture:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +45,9 @@ class Hook:
     def __init__(
         self,
         hook_type: HookType,
-        handler: Callable[[Dict[str, Any]], Any],
+        handler: Callable[[dict[str, Any]], Any],
         priority: int = 0,
-        name: Optional[str] = None,
+        name: str | None = None,
     ):
         """
         Create a new hook.
@@ -71,7 +72,7 @@ class HookRegistry:
 
     def __init__(self):
         """Initialize empty hook registry."""
-        self.hooks: Dict[HookType, List[Hook]] = {
+        self.hooks: dict[HookType, list[Hook]] = {
             ht: [] for ht in HookType
         }
 
@@ -111,8 +112,8 @@ class HookRegistry:
     def trigger(
         self,
         hook_type: HookType,
-        context: Dict[str, Any]
-    ) -> List[Any]:
+        context: dict[str, Any]
+    ) -> list[Any]:
         """
         Trigger all hooks of a given type.
 
@@ -147,7 +148,7 @@ class HookRegistry:
 
         return results
 
-    def get_hooks(self, hook_type: HookType) -> List[Hook]:
+    def get_hooks(self, hook_type: HookType) -> list[Hook]:
         """
         Get all hooks of a given type.
 
@@ -159,7 +160,7 @@ class HookRegistry:
         """
         return self.hooks[hook_type].copy()
 
-    def clear(self, hook_type: Optional[HookType] = None) -> None:
+    def clear(self, hook_type: HookType | None = None) -> None:
         """
         Clear hooks.
 
@@ -172,7 +173,7 @@ class HookRegistry:
             for ht in HookType:
                 self.hooks[ht] = []
 
-    def stats(self) -> Dict[str, int]:
+    def stats(self) -> dict[str, int]:
         """
         Get hook statistics.
 
@@ -187,7 +188,7 @@ class HookRegistry:
 
 # Default hooks for common memory operations
 
-def default_session_start_handler(context: Dict[str, Any]) -> Dict[str, Any]:
+def default_session_start_handler(context: dict[str, Any]) -> dict[str, Any]:
     """
     Default handler for SessionStart hook.
     Returns context injection data.
@@ -199,7 +200,7 @@ def default_session_start_handler(context: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def default_post_tool_use_handler(context: Dict[str, Any]) -> Dict[str, Any]:
+def default_post_tool_use_handler(context: dict[str, Any]) -> dict[str, Any]:
     """
     Default handler for PostToolUse hook.
     Logs observation data.
@@ -212,7 +213,7 @@ def default_post_tool_use_handler(context: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def default_stop_handler(context: Dict[str, Any]) -> Dict[str, Any]:
+def default_stop_handler(context: dict[str, Any]) -> dict[str, Any]:
     """
     Default handler for Stop hook.
     Triggers session summarization.
@@ -224,7 +225,7 @@ def default_stop_handler(context: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def default_session_end_handler(context: Dict[str, Any]) -> Dict[str, Any]:
+def default_session_end_handler(context: dict[str, Any]) -> dict[str, Any]:
     """
     Default handler for SessionEnd hook.
     Finalizes persistence.

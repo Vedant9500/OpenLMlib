@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Iterable, List, Tuple
 import json
 import logging
-import math
 import os
+from collections.abc import Iterable
+from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -34,7 +33,7 @@ class VectorStoreMeta:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "VectorStoreMeta":
+    def from_dict(cls, data: dict) -> VectorStoreMeta:
         return cls(
             backend=data["backend"],
             dim=int(data["dim"]),
@@ -56,7 +55,7 @@ class VectorStore:
     def delete(self, ids: Iterable[int]) -> None:
         raise NotImplementedError
 
-    def search(self, query_vector: Iterable[float], k: int) -> List[Tuple[int, float]]:
+    def search(self, query_vector: Iterable[float], k: int) -> list[tuple[int, float]]:
         raise NotImplementedError
 
     def count(self) -> int:
@@ -112,14 +111,14 @@ class FaissVectorStore(VectorStore):
             self._pending_add_vectors.pop(int_id, None)
             self._pending_delete_ids.add(int_id)
 
-    def search(self, query_vector: Iterable[float], k: int) -> List[Tuple[int, float]]:
+    def search(self, query_vector: Iterable[float], k: int) -> list[tuple[int, float]]:
         query = np.asarray(list(query_vector), dtype=np.float32).reshape(1, -1)
         if query.shape[1] != self.dim:
             raise ValueError("Vector dimension mismatch")
         if self._normalize:
             faiss.normalize_L2(query)
         distances, ids = self._index.search(query, k)
-        results: List[Tuple[int, float]] = []
+        results: list[tuple[int, float]] = []
         for idx, dist in zip(ids[0], distances[0]):
             if idx < 0:
                 continue
@@ -139,7 +138,7 @@ class FaissVectorStore(VectorStore):
         self._pending_delete_ids.clear()
 
     @classmethod
-    def load(cls, index_path: Path, metric: str) -> "FaissVectorStore":
+    def load(cls, index_path: Path, metric: str) -> FaissVectorStore:
         if faiss is None:
             raise ImportError("faiss is not installed.")
         index = faiss.read_index(str(index_path))
@@ -172,12 +171,12 @@ class NumpyVectorStore(VectorStore):
             self._vectors.pop(idx, None)
             self._deleted_ids.add(idx)
 
-    def search(self, query_vector: Iterable[float], k: int) -> List[Tuple[int, float]]:
+    def search(self, query_vector: Iterable[float], k: int) -> list[tuple[int, float]]:
         query = np.asarray(list(query_vector), dtype=np.float32)
         if query.shape[0] != self.dim:
             raise ValueError("Vector dimension mismatch")
 
-        results: List[Tuple[int, float]] = []
+        results: list[tuple[int, float]] = []
         for idx, vec in self._vectors.items():
             score = _similarity(query, vec, self.metric)
             results.append((idx, score))
@@ -204,7 +203,7 @@ class NumpyVectorStore(VectorStore):
             )
 
     @classmethod
-    def load(cls, index_path: Path, metric: str) -> "NumpyVectorStore":
+    def load(cls, index_path: Path, metric: str) -> NumpyVectorStore:
         with np.load(index_path, allow_pickle=False) as payload:
             dim = int(payload["dim"][0])
             ids = payload["ids"].astype(np.int64)

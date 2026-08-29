@@ -13,20 +13,20 @@ Usage:
     python scripts/test_memory_workflow.py
 """
 
-import sys
 import sqlite3
-from pathlib import Path
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from openlmlib.memory import (
-    SessionManager,
+    ContextBuilder,
     MemoryStorage,
     ProgressiveRetriever,
-    ContextBuilder,
+    SessionManager,
     caveman_compress,
 )
 from openlmlib.memory.compressor import MemoryCompressor
@@ -61,7 +61,7 @@ def test_complete_workflow():
     print(f"   Starting session: {session_id}")
     result = session_mgr.on_session_start(session_id, "test_user")
     assert result["status"] == "started"
-    print(f"   ✓ Session started successfully")
+    print("   ✓ Session started successfully")
     
     # Test 2: Observation logging
     print_section("TEST 2: Observation Logging")
@@ -115,7 +115,7 @@ def test_complete_workflow():
     print(f"   Original: '{test_text}'")
     print(f"   Compressed: '{compressed}'")
     print(f"   Reduction: {stats['reduction_percent']}%")
-    print(f"   ✓ Caveman compression working")
+    print("   ✓ Caveman compression working")
     
     # Test 5: Progressive retrieval
     print_section("TEST 5: Progressive Retrieval (3 Layers)")
@@ -125,18 +125,18 @@ def test_complete_workflow():
     print(f"   Found {len(index)} results")
     if index:
         print(f"   First result: {index[0].title[:60]}")
-        print(f"   ✓ Layer 1 complete")
+        print("   ✓ Layer 1 complete")
     
     if index:
         print("\n   Layer 2: Timeline")
         timeline = retriever.layer2_timeline([index[0].id])
         print(f"   Retrieved {len(timeline)} timeline entries")
-        print(f"   ✓ Layer 2 complete")
+        print("   ✓ Layer 2 complete")
         
         print("\n   Layer 3: Full Details")
         details = retriever.layer3_full_details([index[0].id])
         print(f"   Retrieved {len(details)} full observations")
-        print(f"   ✓ Layer 3 complete")
+        print("   ✓ Layer 3 complete")
     
     # Test 6: Context building
     print_section("TEST 6: Context Building")
@@ -148,7 +148,7 @@ def test_complete_workflow():
     print(f"   Context length: {context_length} chars")
     if context_length > 0:
         print(f"   First 100 chars: {context[:100]}...")
-        print(f"   ✓ Context built successfully")
+        print("   ✓ Context built successfully")
     
     # Test 7: Session end
     print_section("TEST 7: Session End & Summarization")
@@ -157,7 +157,7 @@ def test_complete_workflow():
     print(f"   Observations: {result['observation_count']}")
     print(f"   Summary generated: {result.get('summary_generated', False)}")
     print(f"   Duration: {result.get('duration_seconds', 0):.2f}s")
-    print(f"   ✓ Session ended successfully")
+    print("   ✓ Session ended successfully")
     
     # Test 8: New session with context
     print_section("TEST 8: New Session with Context Injection")
@@ -172,7 +172,7 @@ def test_complete_workflow():
     print(f"   Context injected: {bool(context)}")
     if context:
         print(f"   Context length: {len(context)} chars")
-        print(f"   ✓ Context injection working")
+        print("   ✓ Context injection working")
     
     session_mgr.on_session_end(new_session_id)
     
@@ -180,13 +180,13 @@ def test_complete_workflow():
     print_section("TEST SUMMARY")
     print("   ✅ All tests passed!")
     print(f"   Completed at: {datetime.now(timezone.utc).isoformat()}")
-    print(f"\n   Workflow tested:")
-    print(f"   • Session lifecycle management")
-    print(f"   • Observation logging with privacy filtering")
-    print(f"   • Memory compression (extractive + caveman)")
-    print(f"   • Progressive disclosure (3 layers)")
-    print(f"   • Context building and injection")
-    print(f"   • Session summarization")
+    print("\n   Workflow tested:")
+    print("   • Session lifecycle management")
+    print("   • Observation logging with privacy filtering")
+    print("   • Memory compression (extractive + caveman)")
+    print("   • Progressive disclosure (3 layers)")
+    print("   • Context building and injection")
+    print("   • Session summarization")
     
     # Cleanup
     conn.close()

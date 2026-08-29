@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
 import os
-from pathlib import Path
 import time
-from typing import Iterator, Optional
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
 
 
-def _lock_owner_pid(lock_path: Path) -> Optional[int]:
+def _lock_owner_pid(lock_path: Path) -> int | None:
     try:
         raw = lock_path.read_text(encoding="utf-8").strip()
     except Exception:
@@ -63,7 +63,7 @@ def interprocess_lock(
     """
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     deadline = time.monotonic() + max(0.1, timeout_sec)
-    fd: Optional[int] = None
+    fd: int | None = None
 
     while True:
         try:

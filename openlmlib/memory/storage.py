@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import uuid4
 
 from .privacy import sanitize_for_storage
@@ -181,7 +181,7 @@ class MemoryStorage:
         self.close()
         return False
 
-    def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+    def get_session(self, session_id: str) -> dict[str, Any] | None:
         """Return session row metadata, or None if missing."""
         cursor = self.conn.cursor()
         cursor.execute(
@@ -207,8 +207,8 @@ class MemoryStorage:
     def create_session(
         self,
         session_id: str,
-        user_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+        user_id: str | None = None
+    ) -> dict[str, Any]:
         """
         Create or resume a session record.
 
@@ -279,7 +279,7 @@ class MemoryStorage:
         self.conn.commit()
         return cursor.rowcount > 0
 
-    def add_observation(self, observation: Dict[str, Any]) -> str:
+    def add_observation(self, observation: dict[str, Any]) -> str:
         """
         Add an observation record.
 
@@ -364,7 +364,7 @@ class MemoryStorage:
     def update_observation_compression(
         self,
         obs_id: str,
-        compressed: Dict[str, Any]
+        compressed: dict[str, Any]
     ) -> bool:
         """
         Update observation with compressed summary data.
@@ -402,7 +402,7 @@ class MemoryStorage:
 
     def update_observations_compression_bulk(
         self,
-        updates: List[tuple[str, Dict[str, Any]]]
+        updates: list[tuple[str, dict[str, Any]]]
     ) -> int:
         """
         Update multiple observations with compressed summary data in one transaction.
@@ -445,9 +445,9 @@ class MemoryStorage:
     def get_session_observations(
         self,
         session_id: str,
-        limit: Optional[int] = 100,
+        limit: int | None = 100,
         include_compressed: bool = True
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get observations for a session.
 
@@ -513,8 +513,8 @@ class MemoryStorage:
 
     def get_observations_by_ids(
         self,
-        ids: List[str]
-    ) -> List[Dict[str, Any]]:
+        ids: list[str]
+    ) -> list[dict[str, Any]]:
         """
         Get observations by their IDs.
 
@@ -569,7 +569,7 @@ class MemoryStorage:
     def save_summary(
         self,
         session_id: str,
-        summary: Dict[str, Any]
+        summary: dict[str, Any]
     ) -> bool:
         """
         Save session summary.
@@ -608,7 +608,7 @@ class MemoryStorage:
     def get_session_summary(
         self,
         session_id: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Get summary for a session.
 
@@ -644,7 +644,7 @@ class MemoryStorage:
     def save_knowledge(
         self,
         session_id: str,
-        knowledge: Dict[str, Any]
+        knowledge: dict[str, Any]
     ) -> bool:
         """
         Save synthesized knowledge for a session.
@@ -687,9 +687,9 @@ class MemoryStorage:
 
     def get_knowledge(
         self,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
         limit: int = 10
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get synthesized knowledge for a session or recent sessions.
 
@@ -756,8 +756,8 @@ class MemoryStorage:
         self,
         query: str,
         limit: int = 50,
-        filters: Optional[Dict[str, Any]] = None
-    ) -> List[Dict[str, Any]]:
+        filters: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         """
         Search observations by query text.
 
@@ -843,10 +843,10 @@ class MemoryStorage:
     def get_recent_observations(
         self,
         limit: int = 50,
-        session_id: Optional[str] = None,
-        user_id: Optional[str] = None,
-        exclude_session_id: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        session_id: str | None = None,
+        user_id: str | None = None,
+        exclude_session_id: str | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Get most recent observations across all sessions or a specific session.
 
@@ -912,7 +912,7 @@ class MemoryStorage:
         """Escape LIKE special characters to prevent wildcard matching."""
         return s.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
 
-    def get_session_stats(self, session_id: str) -> Dict[str, Any]:
+    def get_session_stats(self, session_id: str) -> dict[str, Any]:
         """
         Get statistics for a session.
 

@@ -12,15 +12,15 @@ import argparse
 import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 import time
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, TextIO
-
-import sqlite3
+from typing import Any, TextIO
 
 from openlmlib.collab import db as collab_db
 from openlmlib.collab.db import connect_collab_db, init_collab_db
@@ -28,7 +28,6 @@ from openlmlib.collab.message_bus import MessageBus
 from openlmlib.collab.session import join_collab_session
 from openlmlib.schema import utc_now_iso
 from openlmlib.settings import load_settings, resolve_global_settings_path
-
 
 WORKER_RUN_PREFIX = "cowork_"
 WORKER_STATUS_VALUES = frozenset({
@@ -53,7 +52,7 @@ PROTECTED_WORKER_ENV_KEYS = frozenset({
 })
 
 
-def _worker_allowed_executables() -> "set[str]":
+def _worker_allowed_executables() -> set[str]:
     """Executables a worker spec may launch.
 
     Default: only the current Python interpreter (workers are Python
@@ -61,7 +60,7 @@ def _worker_allowed_executables() -> "set[str]":
     OPENLMLIB_WORKER_ALLOWED_COMMANDS (comma-separated absolute paths or
     PATH-resolvable names).
     """
-    allowed: "set[str]" = set()
+    allowed: set[str] = set()
     if sys.executable:
         allowed.add(os.path.abspath(sys.executable))
     configured = os.environ.get("OPENLMLIB_WORKER_ALLOWED_COMMANDS", "")
@@ -84,10 +83,10 @@ class WorkerBudget:
     """Budget controls passed to external worker commands."""
 
     timeout_seconds: int = 900
-    max_tokens: Optional[int] = None
-    max_cost_usd: Optional[float] = None
+    max_tokens: int | None = None
+    max_cost_usd: float | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "timeout_seconds": self.timeout_seconds,
             "max_tokens": self.max_tokens,
@@ -102,17 +101,17 @@ class WorkerLaunchSpec:
     session_id: str
     agent_role: str
     task_prompt: str
-    command: List[str]
+    command: list[str]
     model: str = "external-worker"
-    capabilities: List[str] = field(default_factory=list)
+    capabilities: list[str] = field(default_factory=list)
     budget: WorkerBudget = field(default_factory=WorkerBudget)
     read_only: bool = True
-    env: Dict[str, str] = field(default_factory=dict)
-    cwd: Optional[Path] = None
+    env: dict[str, str] = field(default_factory=dict)
+    cwd: Path | None = None
     prompt_to_stdin: bool = True
 
     @classmethod
-    def from_dict(cls, payload: Dict[str, Any]) -> "WorkerLaunchSpec":
+    def from_dict(cls, payload: dict[str, Any]) -> WorkerLaunchSpec:
         if not isinstance(payload, dict):
             raise WorkerRunnerError("Worker spec must be an object")
 
@@ -140,7 +139,7 @@ class WorkerLaunchSpec:
         )
 
     def validate(self) -> None:
-        issues: List[str] = []
+        issues: list[str] = []
         if not self.session_id:
             issues.append("session_id is required")
         if not self.agent_role:
@@ -212,7 +211,7 @@ class WorkerResult:
     session_id: str
     agent_id: str
     status: str
-    returncode: Optional[int]
+    returncode: int | None
     timed_out: bool
     cancelled: bool
     duration_seconds: float
@@ -221,7 +220,7 @@ class WorkerResult:
     status_path: str
     worker_dir: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "worker_run_id": self.worker_run_id,
             "session_id": self.session_id,
@@ -247,7 +246,7 @@ class ExternalWorkerRunner:
         sessions_dir: Path,
         workers_dir: Path,
         *,
-        settings_path: Optional[Path] = None,
+        settings_path: Path | None = None,
     ):
         self.conn = conn
         self.sessions_dir = sessions_dir
@@ -393,10 +392,10 @@ class ExternalWorkerRunner:
         *,
         heartbeat_interval_seconds: float = 5.0,
         terminate_grace_seconds: float = 2.0,
-    ) -> List[WorkerResult]:
+    ) -> list[WorkerResult]:
         if not specs:
             raise WorkerRunnerError("At least one worker spec is required")
-        workers: List[WorkerProcess] = []
+        workers: list[WorkerProcess] = []
         try:
             for spec in specs:
                 workers.append(self.start_worker(spec))
@@ -422,9 +421,9 @@ class ExternalWorkerRunner:
         *,
         heartbeat_interval_seconds: float = 5.0,
         terminate_grace_seconds: float = 2.0,
-    ) -> List[WorkerResult]:
+    ) -> list[WorkerResult]:
         pending = list(workers)
-        results: List[WorkerResult] = []
+        results: list[WorkerResult] = []
         heartbeat_interval_seconds = max(0.05, float(heartbeat_interval_seconds))
 
         while pending:
@@ -588,13 +587,13 @@ def request_worker_cancel(worker_dir: Path, *, reason: str = "cancelled", reques
     return cancel_path
 
 
-def load_worker_specs(spec_path: Path) -> List[WorkerLaunchSpec]:
+def load_worker_specs(spec_path: Path) -> list[WorkerLaunchSpec]:
     payload = json.loads(Path(spec_path).read_text(encoding="utf-8"))
     items = payload if isinstance(payload, list) else [payload]
     return [WorkerLaunchSpec.from_dict(item) for item in items]
 
 
-def worker_paths_from_settings(settings_path: Path) -> Dict[str, Path]:
+def worker_paths_from_settings(settings_path: Path) -> dict[str, Path]:
     settings = load_settings(settings_path)
     data_root = settings.data_root
     return {
@@ -607,9 +606,9 @@ def worker_paths_from_settings(settings_path: Path) -> Dict[str, Path]:
 def run_worker_specs_from_settings(
     specs: Sequence[WorkerLaunchSpec],
     *,
-    settings_path: Optional[Path] = None,
+    settings_path: Path | None = None,
     heartbeat_interval_seconds: float = 5.0,
-) -> List[WorkerResult]:
+) -> list[WorkerResult]:
     settings_path = settings_path or resolve_global_settings_path()
     paths = worker_paths_from_settings(settings_path)
     paths["sessions_dir"].mkdir(parents=True, exist_ok=True)
@@ -631,7 +630,7 @@ def run_worker_specs_from_settings(
         conn.close()
 
 
-def _worker_capabilities(spec: WorkerLaunchSpec) -> List[str]:
+def _worker_capabilities(spec: WorkerLaunchSpec) -> list[str]:
     capabilities = list(dict.fromkeys([
         *spec.capabilities,
         "co_scientist_external_worker",
@@ -657,7 +656,7 @@ def _status_payload(
     status: str,
     timestamp: str,
     **extra: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     if status not in WORKER_STATUS_VALUES:
         raise WorkerRunnerError(f"Invalid worker status: {status}")
     payload = {
@@ -681,7 +680,7 @@ def _heartbeat_payload(
     agent_id: str,
     status: str,
     timestamp: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     return {
         "worker_run_id": worker_run_id,
         "session_id": spec.session_id,
@@ -735,7 +734,7 @@ def _terminate_process(process: subprocess.Popen, grace_seconds: float) -> None:
         process.wait(timeout=max(0.1, grace_seconds))
 
 
-def _write_json(path: Path, payload: Dict[str, Any]) -> None:
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
@@ -792,7 +791,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.command_name == "cancel":

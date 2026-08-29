@@ -13,8 +13,6 @@ Design principles applied:
 
 from __future__ import annotations
 
-from typing import Dict
-
 ORCHESTRATOR_SYSTEM_PROMPT = """\
 You are the ORCHESTRATOR of a collaboration session.
 
@@ -87,7 +85,7 @@ RESPONSIBILITIES:
 5. Never assign tasks or modify session state.
 """
 
-PROMPT_TEMPLATES: Dict[str, str] = {
+PROMPT_TEMPLATES: dict[str, str] = {
     "orchestrator": ORCHESTRATOR_SYSTEM_PROMPT,
     "worker": WORKER_SYSTEM_PROMPT,
     "observer": OBSERVER_SYSTEM_PROMPT,

@@ -11,34 +11,38 @@ Inspired by claude-mem architecture, adapted for MCP-native workflow.
 Caveman compression adds 60% additional token reduction.
 """
 
-from .hooks import HookType, HookRegistry, Hook
-from .session_manager import SessionManager
-from .observation_queue import ObservationQueue
-from .memory_retriever import ProgressiveRetriever
-from .storage import MemoryStorage
+from .caveman_compress import (
+    caveman_compress,
+    compress_context_block,
+    compress_observation_summary,
+)
 from .context_builder import ContextBuilder
-from .caveman_compress import caveman_compress, compress_context_block, compress_observation_summary
+from .hooks import Hook, HookRegistry, HookType
 from .knowledge_extractor import (
     KnowledgeExtractor,
     SessionKnowledge,
     extract_knowledge,
 )
+from .memory_retriever import ProgressiveRetriever
+from .observation_queue import ObservationQueue
 from .retrogit_ingest import retroactive_ingest
+from .session_manager import SessionManager
+from .storage import MemoryStorage
 
 __all__ = [
-    "HookType",
-    "HookRegistry",
+    "ContextBuilder",
     "Hook",
-    "SessionManager",
+    "HookRegistry",
+    "HookType",
+    "KnowledgeExtractor",
+    "MemoryStorage",
     "ObservationQueue",
     "ProgressiveRetriever",
-    "MemoryStorage",
-    "ContextBuilder",
+    "SessionKnowledge",
+    "SessionManager",
     "caveman_compress",
     "compress_context_block",
     "compress_observation_summary",
-    "KnowledgeExtractor",
-    "SessionKnowledge",
     "extract_knowledge",
     "retroactive_ingest",
 ]

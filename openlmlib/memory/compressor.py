@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Dict, List
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class MemoryCompressor:
         self.caveman_enabled = caveman_enabled
         self.caveman_intensity = caveman_intensity
 
-    def compress(self, observation: Dict[str, Any]) -> Dict[str, Any]:
+    def compress(self, observation: dict[str, Any]) -> dict[str, Any]:
         """
         Compress raw observation into semantic summary.
 
@@ -201,7 +201,7 @@ class MemoryCompressor:
 
         return narrative
 
-    def _extract_facts(self, output: str) -> List[str]:
+    def _extract_facts(self, output: str) -> list[str]:
         """
         Extract key factual statements.
 
@@ -240,7 +240,7 @@ class MemoryCompressor:
 
         return facts[:self.max_facts]
 
-    def _extract_concepts(self, output: str) -> List[str]:
+    def _extract_concepts(self, output: str) -> list[str]:
         """
         Extract key concepts and technical terms.
 

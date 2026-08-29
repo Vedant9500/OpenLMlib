@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from . import db
 from .embeddings import build_contextual_query
@@ -10,19 +10,19 @@ from .embeddings import build_contextual_query
 
 @dataclass
 class RetrievalFilters:
-    project: Optional[str] = None
-    tags: Optional[List[str]] = None
-    created_after: Optional[str] = None
-    created_before: Optional[str] = None
-    confidence_min: Optional[float] = None
-    status: Optional[str] = "active"
+    project: str | None = None
+    tags: list[str] | None = None
+    created_after: str | None = None
+    created_before: str | None = None
+    confidence_min: float | None = None
+    status: str | None = "active"
 
 
 @dataclass
 class Phase4Options:
     """Optional Phase 4 retrieval enhancements."""
     rerank: bool = True
-    rerank_top_k: Optional[int] = None
+    rerank_top_k: int | None = None
     expand_query: bool = False
     decompose: bool = True
     deduplicate: bool = True
@@ -42,11 +42,11 @@ class RetrievalEngine:
     def search(
         self,
         query: str,
-        filters: Optional[RetrievalFilters] = None,
-        semantic_k: Optional[int] = None,
-        lexical_k: Optional[int] = None,
-        final_k: Optional[int] = None,
-    ) -> Dict[str, Any]:
+        filters: RetrievalFilters | None = None,
+        semantic_k: int | None = None,
+        lexical_k: int | None = None,
+        final_k: int | None = None,
+    ) -> dict[str, Any]:
         filters = filters or RetrievalFilters()
         if semantic_k is None:
             semantic_k = self._settings.retrieval.semantic_k
@@ -85,24 +85,24 @@ class RetrievalEngine:
     def search_enhanced(
         self,
         query: str,
-        filters: Optional[RetrievalFilters] = None,
-        options: Optional[Phase4Options] = None,
-        semantic_k: Optional[int] = None,
-        lexical_k: Optional[int] = None,
-        final_k: Optional[int] = None,
-    ) -> Dict[str, Any]:
+        filters: RetrievalFilters | None = None,
+        options: Phase4Options | None = None,
+        semantic_k: int | None = None,
+        lexical_k: int | None = None,
+        final_k: int | None = None,
+    ) -> dict[str, Any]:
         """Enhanced search with Phase 4 features: reranking, query expansion, decomposition, packing."""
         from time import monotonic
 
         options = options or Phase4Options()
         filters = filters or RetrievalFilters()
-        timings: Dict[str, float] = {}
+        timings: dict[str, float] = {}
 
         # Step 1: Query expansion (optional)
         t0 = monotonic()
         effective_query = query
-        expansion_info: Dict[str, Any] = {}
-        expanded_items: Optional[List[Dict[str, Any]]] = None
+        expansion_info: dict[str, Any] = {}
+        expanded_items: list[dict[str, Any]] | None = None
         if options.expand_query:
             expansion_info = self._expand_query(query, filters)
             effective_query = expansion_info.get("primary_query", query)
@@ -146,7 +146,7 @@ class RetrievalEngine:
 
         # Step 3: Reranking (optional)
         t2 = monotonic()
-        rerank_info: Dict[str, Any] = {}
+        rerank_info: dict[str, Any] = {}
         if options.rerank and candidates:
             rerank_top_k = options.rerank_top_k or self._settings.phase4.reranking.top_k
             candidates, rerank_info = self._rerank(query, candidates, rerank_top_k)
@@ -156,7 +156,7 @@ class RetrievalEngine:
         if final_k is None:
             final_k = self._settings.retrieval.final_k
         t3 = monotonic()
-        decomposition_info: Dict[str, Any] = {}
+        decomposition_info: dict[str, Any] = {}
         if options.decompose and candidates:
             candidates, decomposition_info = self._decompose(
                 query,
@@ -167,7 +167,7 @@ class RetrievalEngine:
 
         # Step 5: Deduplication (optional)
         t4 = monotonic()
-        dedup_info: Dict[str, Any] = {}
+        dedup_info: dict[str, Any] = {}
         if options.deduplicate and candidates:
             candidates, dedup_info = self._deduplicate(candidates, options.dedup_threshold)
         timings["deduplication"] = monotonic() - t4
@@ -180,7 +180,7 @@ class RetrievalEngine:
             top = self._add_reasoning_trace(top, query)
 
         # Step 8: Context packing (optional, affects rendering not the items themselves)
-        packing_info: Dict[str, Any] = {}
+        packing_info: dict[str, Any] = {}
         if options.pack_context and top:
             top, packing_info = self._pack_context(top, options=options)
 
@@ -218,9 +218,9 @@ class RetrievalEngine:
 
     def _deduplicate(
         self,
-        candidates: List[Dict[str, Any]],
+        candidates: list[dict[str, Any]],
         threshold: float = 0.85,
-    ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Merge similar findings across projects to reduce redundancy.
 
         Uses claim text similarity (Jaccard token overlap) to detect near-duplicates.
@@ -234,10 +234,10 @@ class RetrievalEngine:
         for candidate in candidates:
             candidate_tokens.append(set(_tokenize_for_trace(candidate.get("claim", ""))))
 
-        kept: List[Dict[str, Any]] = []
-        kept_tokens: List[set[str]] = []
+        kept: list[dict[str, Any]] = []
+        kept_tokens: list[set[str]] = []
         duplicates_removed = 0
-        merged_from: Dict[str, List[str]] = {}  # kept_id → [merged_ids]
+        merged_from: dict[str, list[str]] = {}  # kept_id → [merged_ids]
 
         for idx, candidate in enumerate(candidates):
             is_duplicate = False
@@ -284,9 +284,9 @@ class RetrievalEngine:
 
     def _add_reasoning_trace(
         self,
-        items: List[Dict[str, Any]],
+        items: list[dict[str, Any]],
         query: str,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Add a reasoning trace explaining why each finding was retrieved.
 
         The trace includes which retrieval path matched (semantic/lexical/both),
@@ -295,7 +295,7 @@ class RetrievalEngine:
         query_tokens = set(_tokenize_for_trace(query))
 
         for item in items:
-            trace: Dict[str, Any] = {}
+            trace: dict[str, Any] = {}
 
             # Which retrieval paths matched
             has_semantic = "semantic_score" in item
@@ -337,7 +337,7 @@ class RetrievalEngine:
         self,
         query: str,
         filters: RetrievalFilters,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Expand query and retrieve with multiple variants, merging results."""
         try:
             from .query_expansion import QueryExpander
@@ -350,7 +350,7 @@ class RetrievalEngine:
         )
         variants = expander.expand(query, strategy=self._settings.phase4.query_expansion.strategy)
 
-        all_items: Dict[str, Dict[str, Any]] = {}
+        all_items: dict[str, dict[str, Any]] = {}
         semantic_candidate_count = 0
         lexical_candidate_count = 0
         for variant in variants:
@@ -395,9 +395,9 @@ class RetrievalEngine:
     def _rerank(
         self,
         query: str,
-        candidates: List[Dict[str, Any]],
+        candidates: list[dict[str, Any]],
         top_k: int,
-    ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Rerank candidates using cross-encoder."""
         rerank_settings = self._settings.phase4.reranking
         if not rerank_settings.enabled:
@@ -433,9 +433,9 @@ class RetrievalEngine:
     def _decompose(
         self,
         query: str,
-        candidates: List[Dict[str, Any]],
-        max_findings: Optional[int] = None,
-    ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        candidates: list[dict[str, Any]],
+        max_findings: int | None = None,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Decompose and recompose candidates to filter low-relevance sections."""
         decomp_settings = self._settings.phase4.decomposition
         if not decomp_settings.enabled:
@@ -474,9 +474,9 @@ class RetrievalEngine:
 
     def _pack_context(
         self,
-        items: List[Dict[str, Any]],
-        options: Optional[Phase4Options] = None,
-    ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        items: list[dict[str, Any]],
+        options: Phase4Options | None = None,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Apply position-aware context packing."""
         pack_settings = self._settings.phase4.packing
         if not pack_settings.enabled:
@@ -515,7 +515,7 @@ class RetrievalEngine:
         query: str,
         filters: RetrievalFilters,
         semantic_k: int,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         if self._vector_store.dim <= 0 or self._vector_store.count() <= 0:
             return []
 
@@ -531,7 +531,7 @@ class RetrievalEngine:
             [embedding_id for embedding_id, _ in matches],
         )
 
-        items: List[Dict[str, Any]] = []
+        items: list[dict[str, Any]] = []
         for embedding_id, score in matches:
             row = rows_by_embedding_id.get(embedding_id)
             if row is None:
@@ -550,7 +550,7 @@ class RetrievalEngine:
         query: str,
         filters: RetrievalFilters,
         lexical_k: int,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         rows = db.search_findings_filtered(
             self._conn,
             query=query,
@@ -563,7 +563,7 @@ class RetrievalEngine:
             status=filters.status,
         )
 
-        items: List[Dict[str, Any]] = []
+        items: list[dict[str, Any]] = []
         for row in rows:
             item = _to_result(row, validity_days=self._settings.retrieval.validity_days)
             lexical_rank = float(row.get("lexical_rank", 0.0))
@@ -573,10 +573,10 @@ class RetrievalEngine:
 
     def _merge_results(
         self,
-        semantic_items: List[Dict[str, Any]],
-        lexical_items: List[Dict[str, Any]],
-    ) -> Dict[str, Dict[str, Any]]:
-        merged: Dict[str, Dict[str, Any]] = {}
+        semantic_items: list[dict[str, Any]],
+        lexical_items: list[dict[str, Any]],
+    ) -> dict[str, dict[str, Any]]:
+        merged: dict[str, dict[str, Any]] = {}
 
         for item in semantic_items:
             merged[item["id"]] = item
@@ -588,7 +588,7 @@ class RetrievalEngine:
             else:
                 existing["lexical_score"] = item.get("lexical_score")
 
-        lexical_by_id: Dict[str, float] = {
+        lexical_by_id: dict[str, float] = {
             item_id: float(item.get("lexical_score", 0.0))
             for item_id, item in merged.items()
             if "lexical_score" in item
@@ -616,7 +616,7 @@ class RetrievalEngine:
         return merged
 
 
-def _to_result(row: Dict[str, Any], validity_days: int = 90) -> Dict[str, Any]:
+def _to_result(row: dict[str, Any], validity_days: int = 90) -> dict[str, Any]:
     created_at = row.get("created_at")
     created_dt = _parse_utc(created_at or "")
     stale, age_days = _staleness_from_dt(created_dt, validity_days=validity_days)
@@ -637,7 +637,7 @@ def _to_result(row: Dict[str, Any], validity_days: int = 90) -> Dict[str, Any]:
     }
 
 
-def _staleness_from_dt(created_dt: Optional[datetime], validity_days: int = 90) -> tuple[bool, int]:
+def _staleness_from_dt(created_dt: datetime | None, validity_days: int = 90) -> tuple[bool, int]:
     """Compute staleness from already-parsed datetime."""
     if created_dt is None:
         return (False, 0)
@@ -645,7 +645,7 @@ def _staleness_from_dt(created_dt: Optional[datetime], validity_days: int = 90) 
     return (age_days >= validity_days, age_days)
 
 
-def _recency_score_from_dt(created_dt: Optional[datetime]) -> float:
+def _recency_score_from_dt(created_dt: datetime | None) -> float:
     """Compute recency score from already-parsed datetime."""
     if created_dt is None:
         return 0.0
@@ -653,7 +653,7 @@ def _recency_score_from_dt(created_dt: Optional[datetime]) -> float:
     return 1.0 / (1.0 + (age_days / 30.0))
 
 
-def _parse_utc(value: str) -> Optional[datetime]:
+def _parse_utc(value: str) -> datetime | None:
     if not value:
         return None
     try:
@@ -675,7 +675,7 @@ def _recency_score(created_at: str) -> float:
     return 1.0 / (1.0 + (age_days / 30.0))
 
 
-def _passes_filters(row: Dict[str, Any], filters: RetrievalFilters) -> bool:
+def _passes_filters(row: dict[str, Any], filters: RetrievalFilters) -> bool:
     if filters.status is not None and row.get("status") != filters.status:
         return False
 
@@ -707,7 +707,7 @@ def _passes_filters(row: Dict[str, Any], filters: RetrievalFilters) -> bool:
     return True
 
 
-def _staleness(created_at: Optional[str], validity_days: int = 90) -> tuple[bool, int]:
+def _staleness(created_at: str | None, validity_days: int = 90) -> tuple[bool, int]:
     created = _parse_utc(created_at or "")
     if created is None:
         return (False, 0)
@@ -726,7 +726,7 @@ _STOPWORDS_TRACE = {
 }
 
 
-def _tokenize_for_trace(text: str) -> List[str]:
+def _tokenize_for_trace(text: str) -> list[str]:
     """Simple tokenizer for reasoning trace matching."""
     import re
     tokens = re.findall(r"[a-zA-Z0-9]+", text.lower())
@@ -751,7 +751,7 @@ def _claim_similarity(claim_a: str, claim_b: str) -> float:
     return _jaccard_similarity(tokens_a, tokens_b)
 
 
-def _normalize_map(values: Dict[str, float]) -> Dict[str, float]:
+def _normalize_map(values: dict[str, float]) -> dict[str, float]:
     """Min-max normalize keyed scores to [0, 1]."""
     if not values:
         return {}

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import sys
 import traceback
+from pathlib import Path
 
 from . import __version__
 from .library import (
@@ -13,7 +13,6 @@ from .library import (
     backup_library,
     evaluate_dataset,
     find_stale_findings,
-    generate_cluster_summary,
     get_failure_ledger,
     get_finding,
     get_maintenance_summary,
@@ -21,7 +20,6 @@ from .library import (
     init_library,
     list_findings,
     log_finding_failure,
-    mark_findings_for_review,
     rebuild_vector_index,
     restore_finding,
     restore_library,
@@ -142,7 +140,7 @@ def _warm_embedding_model(settings_path: Path) -> dict:
     cache = EmbeddingCache(settings.embeddings_cache_path)
     
     print(f"  Downloading embedding model: {settings.embedding_model}...", file=sys.stderr)
-    print(f"  (This may take a minute on first run)", file=sys.stderr)
+    print("  (This may take a minute on first run)", file=sys.stderr)
     
     embedder = SentenceTransformerEmbedder(
         settings.embedding_model,
@@ -150,11 +148,11 @@ def _warm_embedding_model(settings_path: Path) -> dict:
         normalize=settings.embedding_metric == "cosine",
     )
     
-    print(f"  Warming up model...", file=sys.stderr)
+    print("  Warming up model...", file=sys.stderr)
     _ = embedder.encode(["openlmlib setup warmup"])
     cache.save()
     
-    print(f"  ✓ Model ready", file=sys.stderr)
+    print("  ✓ Model ready", file=sys.stderr)
     return {"status": "ok", "model": settings.embedding_model}
 
 
@@ -577,7 +575,12 @@ def cmd_collab_join(args) -> int:
 
 
 def cmd_collab_state(args) -> int:
-    from openlmlib.collab.db import get_session, get_session_state, get_session_tasks, get_session_agents
+    from openlmlib.collab.db import (
+        get_session,
+        get_session_agents,
+        get_session_state,
+        get_session_tasks,
+    )
     conn, _ = _collab_connection(Path(args.settings))
     try:
         session = get_session(conn, args.session_id)
@@ -684,11 +687,11 @@ def cmd_collab_timeline(args) -> int:
 
 
 def cmd_collab_compact(args) -> int:
-    from openlmlib.collab.db import get_session_state, get_max_seq
-    from openlmlib.collab.message_bus import MessageBus
     from openlmlib.collab.artifact_store import ArtifactStore
-    from openlmlib.collab.state_manager import StateManager
     from openlmlib.collab.compactor import SessionCompactor
+    from openlmlib.collab.db import get_session_state
+    from openlmlib.collab.message_bus import MessageBus
+    from openlmlib.collab.state_manager import StateManager
     conn, sessions_dir = _collab_connection(Path(args.settings))
     try:
         state = get_session_state(conn, args.session_id)
@@ -727,6 +730,7 @@ def cmd_collab_terminate(args) -> int:
 
 def cmd_collab_export(args) -> int:
     import shutil
+
     from openlmlib.collab.db import get_session
     from openlmlib.collab.security import validate_session_id
 
@@ -773,8 +777,12 @@ def cmd_collab_export(args) -> int:
 
 def cmd_collab_inspect(args) -> int:
     from openlmlib.collab.db import (
-        get_session, get_session_state, get_session_tasks,
-        get_session_agents, get_session_artifacts, get_max_seq,
+        get_max_seq,
+        get_session,
+        get_session_agents,
+        get_session_artifacts,
+        get_session_state,
+        get_session_tasks,
     )
     conn, _ = _collab_connection(Path(args.settings))
     try:
@@ -807,7 +815,7 @@ def cmd_collab_inspect(args) -> int:
 
 
 def cmd_collab_templates(args) -> int:
-    from openlmlib.collab.templates import list_templates, get_template
+    from openlmlib.collab.templates import get_template, list_templates
     if args.template:
         tpl = get_template(args.template)
         if tpl is None:
@@ -821,8 +829,8 @@ def cmd_collab_templates(args) -> int:
 
 
 def cmd_collab_create_from_template(args) -> int:
-    from openlmlib.collab.templates import get_template
     from openlmlib.collab.session import create_collab_session
+    from openlmlib.collab.templates import get_template
     template = get_template(args.template_id)
     if template is None:
         print(f"Template '{args.template_id}' not found")
@@ -864,7 +872,7 @@ def cmd_collab_export_library(args) -> int:
 
 
 def cmd_collab_search(args) -> int:
-    from openlmlib.collab.db import list_sessions, grep_messages, get_session_artifacts
+    from openlmlib.collab.db import get_session_artifacts, grep_messages, list_sessions
     conn, sessions_dir = _collab_connection(Path(args.settings))
     try:
         sessions = list_sessions(conn, status=args.status, limit=args.limit)

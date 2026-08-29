@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from openlmlib import db
-from openlmlib.retrieval import RetrievalEngine, RetrievalFilters, Phase4Options
+from openlmlib.retrieval import Phase4Options, RetrievalEngine, RetrievalFilters
 from openlmlib.schema import Finding, FindingAudit, FindingText, compute_content_hash
 from openlmlib.settings import (
     DecompositionSettings,

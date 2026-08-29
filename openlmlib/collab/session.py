@@ -10,26 +10,22 @@ from __future__ import annotations
 import json
 import logging
 import re
+import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
-
-import sqlite3
 
 from ..schema import utc_now_iso
 from . import db
-from .message_bus import MessageBus
 from .artifact_store import ArtifactStore
-from .state_manager import StateManager
-from .context_compiler import ContextCompiler
-from .rules_engine import RulesEngine
 from .errors import (
     AgentNotFoundError,
     SessionFullError,
     SessionNotActiveError,
     SessionNotFoundError,
 )
+from .message_bus import MessageBus
+from .rules_engine import RulesEngine
 
 logger = logging.getLogger(__name__)
 
@@ -60,11 +56,11 @@ def create_collab_session(
     sessions_dir: Path,
     title: str,
     created_by: str,
-    description: Optional[str] = None,
-    plan: Optional[List[Dict]] = None,
-    rules: Optional[Dict] = None,
-    created_at: Optional[str] = None,
-) -> Dict:
+    description: str | None = None,
+    plan: list[dict] | None = None,
+    rules: dict | None = None,
+    created_at: str | None = None,
+) -> dict:
     """Create a new collaboration session.
 
     Args:
@@ -176,9 +172,9 @@ def join_collab_session(
     session_id: str,
     model: str,
     role: str = "worker",
-    capabilities: Optional[List[str]] = None,
-    joined_at: Optional[str] = None,
-) -> Dict:
+    capabilities: list[str] | None = None,
+    joined_at: str | None = None,
+) -> dict:
     """Join an existing collaboration session.
 
     Args:
@@ -268,8 +264,8 @@ def leave_collab_session(
     conn: sqlite3.Connection,
     sessions_dir: Path,
     agent_id: str,
-    reason: Optional[str] = None,
-    left_at: Optional[str] = None,
+    reason: str | None = None,
+    left_at: str | None = None,
 ) -> bool:
     """Leave a collaboration session gracefully.
 
@@ -324,9 +320,9 @@ def terminate_collab_session(
     conn: sqlite3.Connection,
     sessions_dir: Path,
     session_id: str,
-    summary: Optional[str] = None,
-    terminated_at: Optional[str] = None,
-) -> Dict:
+    summary: str | None = None,
+    terminated_at: str | None = None,
+) -> dict:
     """Terminate a collaboration session.
 
     Args:

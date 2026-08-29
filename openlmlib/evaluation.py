@@ -1,17 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Sequence
 
 from .write_gate import _cosine_similarity
 
 
 @dataclass
 class RetrievalMetrics:
-    precision_at_k: Dict[int, float]
-    recall_at_k: Dict[int, float]
+    precision_at_k: dict[int, float]
+    recall_at_k: dict[int, float]
 
-    def to_dict(self) -> Dict[str, Dict[str, float]]:
+    def to_dict(self) -> dict[str, dict[str, float]]:
         return {
             "precision_at_k": {str(k): v for k, v in self.precision_at_k.items()},
             "recall_at_k": {str(k): v for k, v in self.recall_at_k.items()},
@@ -24,8 +24,8 @@ def evaluate_retrieval(
     k_values: Sequence[int] = (5, 10),
 ) -> RetrievalMetrics:
     expected_set = set(expected_ids)
-    precision: Dict[int, float] = {}
-    recall: Dict[int, float] = {}
+    precision: dict[int, float] = {}
+    recall: dict[int, float] = {}
 
     for k in k_values:
         top_k = list(retrieved_ids[:k])
@@ -36,7 +36,7 @@ def evaluate_retrieval(
     return RetrievalMetrics(precision_at_k=precision, recall_at_k=recall)
 
 
-def faithfulness_score(answer: str, retrieved_items: Iterable[Dict]) -> float:
+def faithfulness_score(answer: str, retrieved_items: Iterable[dict]) -> float:
     answer_lower = answer.lower()
     if not answer_lower.strip():
         return 0.0
@@ -60,7 +60,7 @@ def faithfulness_score(answer: str, retrieved_items: Iterable[Dict]) -> float:
 
 def relevance_alignment(
     query: str,
-    retrieved_items: Iterable[Dict],
+    retrieved_items: Iterable[dict],
     embedder,
 ) -> float:
     items = list(retrieved_items)
@@ -68,7 +68,7 @@ def relevance_alignment(
         return 0.0
 
     query_vec = embedder.encode([query])[0]
-    sims: List[float] = []
+    sims: list[float] = []
     for item in items:
         text = " ".join(
             [

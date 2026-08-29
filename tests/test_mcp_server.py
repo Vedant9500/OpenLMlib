@@ -1,5 +1,5 @@
-import unittest
 import os
+import unittest
 from pathlib import Path
 from unittest.mock import patch
 
@@ -169,14 +169,14 @@ class TestMcpServerTools(unittest.TestCase):
 
         tools = set(mcp_server.mcp._tool_manager._tools)
         self.assertGreaterEqual(len(tools), 76)
-        for tool_name in {
+        for tool_name in (
             "query_memory",
             "screen_co_scientist_scope",
             "create_co_scientist_run",
             "start_hypothesis_verification",
             "get_co_scientist_report",
             "create_co_scientist_final_report",
-        }:
+        ):
             self.assertIn(tool_name, tools)
 
         help_result = mcp_server.help_library("create_co_scientist_run")

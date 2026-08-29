@@ -11,7 +11,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if (REPO_ROOT / "openlmlib" / "mcp_server.py").exists():
     sys.path.insert(0, str(REPO_ROOT))
@@ -118,9 +117,9 @@ def _print_group(label: str, expected: set[str], found: set[str]) -> None:
 def main() -> int:
     try:
         from openlmlib.mcp_server import (
-            mcp,
             _register_collab_tools,
             _register_memory_tools,
+            mcp,
         )
 
         _register_memory_tools()

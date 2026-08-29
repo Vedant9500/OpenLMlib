@@ -15,19 +15,22 @@ Or run standalone to test session creation:
 __test__ = False
 
 import json
-import sys
 import os
+import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from openlmlib.collab.db import connect_collab_db, init_collab_db, get_session, list_sessions
-from openlmlib.collab.session import create_collab_session, join_collab_session
-from openlmlib.collab.message_bus import MessageBus
 from openlmlib.collab.artifact_store import ArtifactStore
 from openlmlib.collab.context_compiler import ContextCompiler
+from openlmlib.collab.db import connect_collab_db, get_session, init_collab_db
+from openlmlib.collab.message_bus import MessageBus
+from openlmlib.collab.session import (
+    create_collab_session,
+    join_collab_session,
+    terminate_collab_session,
+)
 from openlmlib.collab.state_manager import StateManager
-from openlmlib.collab.session import terminate_collab_session
 
 
 def init_test_environment():
@@ -141,7 +144,7 @@ def test_message_exchange(session_id, orchestrator_id, worker_id, sessions_dir):
     
     # Read messages
     messages = bus.tail(session_id, 5)
-    print(f"\nLast 5 messages:")
+    print("\nLast 5 messages:")
     for msg in messages:
         to = msg.get("to_agent") or "all"
         content_preview = msg['content'][:60].replace('\n', ' ')

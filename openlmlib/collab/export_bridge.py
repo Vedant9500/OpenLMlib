@@ -6,13 +6,11 @@ preserving provenance, tags, and session context.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from ..library import add_finding
-from .db import get_session, get_session_artifacts
 from .artifact_store import ArtifactStore
+from .db import get_session
 from .security import validate_artifact_id
 
 # Sessions in these states can still receive new artifacts from members, so
@@ -21,7 +19,7 @@ from .security import validate_artifact_id
 LIVE_SESSION_STATUSES = frozenset({"active", "paused"})
 
 
-def _live_session_rejection(session: Dict) -> Optional[Dict]:
+def _live_session_rejection(session: dict) -> dict | None:
     """Return an export-rejection payload when the session is still live."""
     status = str(session.get("status") or "").lower()
     if status in LIVE_SESSION_STATUSES:
@@ -37,13 +35,13 @@ def _live_session_rejection(session: Dict) -> Optional[Dict]:
     return None
 
 
-def _validate_artifact_filter_ids(artifact_ids: Optional[List[str]]) -> Optional[List[str]]:
+def _validate_artifact_filter_ids(artifact_ids: list[str] | None) -> list[str] | None:
     if artifact_ids is None:
         return None
     return [validate_artifact_id(artifact_id) for artifact_id in artifact_ids]
 
 
-def _format_add_finding_failure(result: Dict) -> Dict:
+def _format_add_finding_failure(result: dict) -> dict:
     """Map library.add_finding non-ok payloads into export failure fields."""
     status = result.get("status")
     issues = result.get("issues")
@@ -57,7 +55,7 @@ def _format_add_finding_failure(result: Dict) -> Dict:
         ) if issues else None)
         or "export rejected"
     )
-    payload: Dict = {"reason": reason}
+    payload: dict = {"reason": reason}
     if status is not None:
         payload["status"] = status
     if issues is not None:
@@ -104,11 +102,11 @@ def export_session_to_library(
     session_id: str,
     collab_conn,
     sessions_dir: Path,
-    project: Optional[str] = None,
+    project: str | None = None,
     confidence: float = 0.8,
-    tags: Optional[List[str]] = None,
-    artifact_ids: Optional[List[str]] = None,
-) -> Dict:
+    tags: list[str] | None = None,
+    artifact_ids: list[str] | None = None,
+) -> dict:
     """Export session artifacts as findings in the main OpenLMLib library.
 
     Args:
@@ -221,8 +219,8 @@ def export_session_summary_as_finding(
     session_id: str,
     collab_conn,
     sessions_dir: Path,
-    project: Optional[str] = None,
-) -> Dict:
+    project: str | None = None,
+) -> dict:
     """Export the session summary as a single finding.
 
     Args:

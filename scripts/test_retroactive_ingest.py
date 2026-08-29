@@ -4,8 +4,8 @@ Test retroactive git-based ingestion for the current session.
 This should pick up all files we modified today WITHOUT manual logging.
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 sys.path.insert(0, str(Path.cwd()))
 
@@ -44,7 +44,7 @@ def main():
     
     if 'knowledge' in result:
         knowledge = result['knowledge']
-        print(f"\n2. Synthesized knowledge:")
+        print("\n2. Synthesized knowledge:")
         print(f"   Summary: {knowledge.get('summary', 'N/A')}")
         print(f"   Files touched: {len(knowledge.get('files_touched', []))}")
         for f in knowledge.get('files_touched', [])[:5]:

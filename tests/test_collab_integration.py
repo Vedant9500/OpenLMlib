@@ -16,41 +16,25 @@ Tests cover:
 
 from __future__ import annotations
 
-import json
-import os
 import sqlite3
 import tempfile
 import threading
-import time
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
 
+from openlmlib.collab.artifact_store import ArtifactStore
+from openlmlib.collab.compactor import SessionCompactor
+from openlmlib.collab.context_compiler import ContextCompiler
 from openlmlib.collab.db import (
     connect_collab_db,
-    init_collab_db,
     get_session,
-    get_session_agents,
     get_session_tasks,
-    get_messages,
+    init_collab_db,
 )
-from openlmlib.collab.session import (
-    create_collab_session,
-    join_collab_session,
-    leave_collab_session,
-    terminate_collab_session,
-)
-from openlmlib.collab.message_bus import MessageBus
-from openlmlib.collab.artifact_store import ArtifactStore
-from openlmlib.collab.context_compiler import ContextCompiler
-from openlmlib.collab.state_manager import StateManager
-from openlmlib.collab.compactor import SessionCompactor
-from openlmlib.collab.rules_engine import RulesEngine, DEFAULT_RULES
-from openlmlib.collab.prompts import get_system_prompt, list_available_roles
 from openlmlib.collab.errors import (
-    AgentNotFoundError,
     AgentNotAuthorizedError,
+    AgentNotFoundError,
     CollabError,
     InvalidMessageTypeError,
     MessageTooLongError,
@@ -60,16 +44,24 @@ from openlmlib.collab.errors import (
     SessionNotFoundError,
     StateConflictError,
 )
+from openlmlib.collab.message_bus import MessageBus
+from openlmlib.collab.prompts import get_system_prompt, list_available_roles
+from openlmlib.collab.rules_engine import DEFAULT_RULES, RulesEngine
 from openlmlib.collab.security import (
-    validate_session_id,
+    sanitize_content,
     validate_agent_id,
     validate_artifact_id,
     validate_message_type,
+    validate_session_id,
     verify_agent_in_session,
-    verify_orchestrator,
     verify_session_exists_and_active,
-    sanitize_content,
 )
+from openlmlib.collab.session import (
+    create_collab_session,
+    join_collab_session,
+    terminate_collab_session,
+)
+from openlmlib.collab.state_manager import StateManager
 
 
 class SimulatedAgent:
@@ -100,11 +92,11 @@ class SimulatedAgent:
         self.artifacts_created = 0
         self.messages_sent = 0
 
-    def read_context(self, session_id: str, max_messages: int = 20) -> Dict:
+    def read_context(self, session_id: str, max_messages: int = 20) -> dict:
         """Read compiled session context."""
         return self.compiler.compile_context(session_id, self.agent_id, max_messages)
 
-    def read_new_messages(self, session_id: str, limit: int = 50) -> List[Dict]:
+    def read_new_messages(self, session_id: str, limit: int = 50) -> list[dict]:
         """Read messages since last check."""
         msgs = self.bus.read_new(session_id, self.last_seq, limit=limit)
         if msgs:
@@ -116,9 +108,9 @@ class SimulatedAgent:
         session_id: str,
         msg_type: str,
         content: str,
-        to_agent: Optional[str] = None,
-        metadata: Optional[Dict] = None,
-    ) -> Dict:
+        to_agent: str | None = None,
+        metadata: dict | None = None,
+    ) -> dict:
         """Send a message to the session."""
         now = datetime.now(timezone.utc).isoformat()
         result = self.bus.send(
@@ -138,10 +130,10 @@ class SimulatedAgent:
         session_id: str,
         title: str,
         content: str,
-        artifact_type: Optional[str] = None,
-        tags: Optional[List[str]] = None,
+        artifact_type: str | None = None,
+        tags: list[str] | None = None,
         shared: bool = False,
-    ) -> Dict:
+    ) -> dict:
         """Create an artifact."""
         now = datetime.now(timezone.utc).isoformat()
         result = self.store.save(
@@ -157,7 +149,7 @@ class SimulatedAgent:
         self.artifacts_created += 1
         return result
 
-    def process_assigned_tasks(self, session_id: str) -> List[Dict]:
+    def process_assigned_tasks(self, session_id: str) -> list[dict]:
         """Find and process tasks assigned to this agent."""
         tasks = get_session_tasks(self.conn, session_id)
         my_tasks = [
@@ -358,6 +350,7 @@ class TestSimulatedAgentSession(unittest.TestCase):
         rules = RulesEngine(DEFAULT_RULES)
 
         from datetime import timedelta
+
         from openlmlib.collab.rules_engine import _parse_iso
         active_time = "2026-04-06T10:00:00Z"
         before = _parse_iso(active_time)
@@ -520,12 +513,10 @@ class TestSecurityHardening(unittest.TestCase):
             validate_message_content("x" * 9000, max_length=8000)
 
     def test_path_traversal_in_session_id(self):
-        from openlmlib.collab.security import validate_session_id
         with self.assertRaises(Exception):
             validate_session_id("../../etc/passwd")
 
     def test_path_traversal_in_agent_id(self):
-        from openlmlib.collab.security import validate_agent_id
         with self.assertRaises(Exception):
             validate_agent_id("../../../etc")
 
@@ -732,7 +723,7 @@ class TestErrorRecovery(unittest.TestCase):
         self.assertIsNone(content)
 
     def test_error_response_format(self):
-        from openlmlib.collab.errors import make_error_response, error_from_exception
+        from openlmlib.collab.errors import error_from_exception, make_error_response
 
         resp = make_error_response("Session not found", "session_not_found")
         self.assertFalse(resp["success"])

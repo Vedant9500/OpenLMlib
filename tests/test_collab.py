@@ -9,42 +9,42 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from openlmlib.collab.artifact_store import ArtifactStore
+from openlmlib.collab.context_compiler import ContextCompiler
 from openlmlib.collab.db import (
+    complete_tasks_for_artifact_type,
     connect_collab_db,
-    init_collab_db,
     create_session,
-    get_session,
-    list_sessions,
-    update_session_status,
-    insert_agent,
-    get_session_agents,
-    insert_message,
+    get_max_seq,
+    get_message_range,
     get_messages,
     get_messages_since,
     get_messages_tail,
-    get_message_range,
-    grep_messages,
-    get_max_seq,
-    insert_task,
-    update_task_status,
-    complete_tasks_for_artifact_type,
-    get_session_tasks,
-    insert_artifact,
+    get_session,
+    get_session_agents,
     get_session_artifacts,
     get_session_state,
+    get_session_tasks,
+    grep_messages,
+    init_collab_db,
+    insert_agent,
+    insert_artifact,
+    insert_message,
+    insert_task,
+    list_sessions,
     update_session_state,
+    update_session_status,
+    update_task_status,
 )
+from openlmlib.collab.errors import SecurityError
 from openlmlib.collab.message_bus import MessageBus
-from openlmlib.collab.artifact_store import ArtifactStore
-from openlmlib.collab.state_manager import StateManager
-from openlmlib.collab.context_compiler import ContextCompiler
 from openlmlib.collab.session import (
     create_collab_session,
     join_collab_session,
     leave_collab_session,
     terminate_collab_session,
 )
-from openlmlib.collab.errors import SecurityError
+from openlmlib.collab.state_manager import StateManager
 
 
 class TestCollabDB(unittest.TestCase):
@@ -823,7 +823,7 @@ class TestRulesEngine(unittest.TestCase):
     """Test session rules engine."""
 
     def setUp(self):
-        from openlmlib.collab.rules_engine import RulesEngine, DEFAULT_RULES
+        from openlmlib.collab.rules_engine import DEFAULT_RULES, RulesEngine
         self.RulesEngine = RulesEngine
         self.DEFAULT_RULES = DEFAULT_RULES
 
@@ -1019,6 +1019,7 @@ class TestSessionTemplates(unittest.TestCase):
     def test_custom_templates_resolve_data_root_against_settings_parent(self):
         import json
         import os
+
         import openlmlib.collab.templates as templates_mod
 
         tmp = tempfile.TemporaryDirectory()
@@ -1069,7 +1070,11 @@ class TestMultiSession(unittest.TestCase):
     def setUp(self):
         import tempfile
         from pathlib import Path
-        from openlmlib.collab.db import connect_collab_db, init_collab_db, create_session
+
+        from openlmlib.collab.db import (
+            connect_collab_db,
+            init_collab_db,
+        )
         from openlmlib.collab.session import create_collab_session, join_collab_session
 
         self.tmp = tempfile.TemporaryDirectory()
@@ -1100,7 +1105,10 @@ class TestMultiSession(unittest.TestCase):
         self.assertEqual(sessions[0]["session_id"], self.r1["session_id"])
 
     def test_get_agent_sessions_matches_model_across_ephemeral_ids(self):
-        from openlmlib.collab.multi_session import get_agent_sessions, identities_share_model
+        from openlmlib.collab.multi_session import (
+            get_agent_sessions,
+            identities_share_model,
+        )
         from openlmlib.collab.session import create_collab_session, join_collab_session
 
         # Same model joins two sessions under different ephemeral agent_ids.
@@ -1302,8 +1310,8 @@ class TestExportBridge(unittest.TestCase):
     def test_export_rejects_live_session(self):
         """Live sessions (active/paused) must not export trusted findings (H-3)."""
         from openlmlib.collab.export_bridge import (
-            export_session_to_library,
             export_session_summary_as_finding,
+            export_session_to_library,
         )
 
         tmp = tempfile.TemporaryDirectory()

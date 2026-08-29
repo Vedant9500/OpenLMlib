@@ -4,14 +4,20 @@ Retrieve memories logged from the previous development session.
 Tests if memory injection persists across sessions.
 """
 
-from pathlib import Path
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 sys.path.insert(0, str(Path.cwd()))
 
+from openlmlib.memory import (
+    ContextBuilder,
+    MemoryStorage,
+    ProgressiveRetriever,
+    SessionManager,
+)
 from openlmlib.runtime import get_runtime
-from openlmlib.memory import SessionManager, MemoryStorage, ContextBuilder, ProgressiveRetriever
+
 
 def main():
     print("="*60)
@@ -41,7 +47,7 @@ def main():
     
     if context:
         print(f"   ✓ Context retrieved! ({len(context)} chars)")
-        print(f"\n   First 300 chars of injected context:")
+        print("\n   First 300 chars of injected context:")
         print(f"   {'-'*60}")
         print(f"   {context[:300]}...")
         print(f"   {'-'*60}")
@@ -64,7 +70,7 @@ def main():
             print(f"   Tool: {detail.tool_name}")
             print(f"   Type: {detail.obs_type}")
             print(f"   Summary: {detail.compressed_summary[:150] if detail.compressed_summary else 'N/A'}")
-            print(f"   ✓ Full details retrieved")
+            print("   ✓ Full details retrieved")
     
     # Test 4: Search for specific topics
     print("\n5. Searching for specific topics...")
@@ -76,7 +82,7 @@ def main():
     # End session
     print("\n6. Ending session...")
     result = session_mgr.on_session_end(new_session_id)
-    print(f"   ✓ Session ended")
+    print("   ✓ Session ended")
     
     print("\n" + "="*60)
     print("RETRIEVAL COMPLETE!")

@@ -11,6 +11,8 @@ from openlmlib.co_scientist import (
 )
 from openlmlib.collab.collab_mcp import (
     get_hypothesis_packet_schema as mcp_get_hypothesis_packet_schema,
+)
+from openlmlib.collab.collab_mcp import (
     validate_hypothesis_packet as mcp_validate_hypothesis_packet,
 )
 

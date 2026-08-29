@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
 import logging
 import re
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ class QueryExpander:
         self,
         query: str,
         strategy: str = "rule_based",
-    ) -> List[str]:
+    ) -> list[str]:
         """Expand a query into multiple variants.
 
         Args:
@@ -44,7 +44,7 @@ class QueryExpander:
         Returns:
             List of query variants (includes original if include_original=True).
         """
-        variants: List[str] = []
+        variants: list[str] = []
 
         if strategy == "rule_based":
             variants = self._rule_based_expand(query)
@@ -55,7 +55,7 @@ class QueryExpander:
 
         # Deduplicate while preserving order
         seen = set()
-        unique: List[str] = []
+        unique: list[str] = []
         for v in variants:
             normalized = v.strip().lower()
             if normalized and normalized not in seen:
@@ -73,9 +73,9 @@ class QueryExpander:
 
         return unique[: self.max_variants + (1 if self.include_original else 0)]
 
-    def _rule_based_expand(self, query: str) -> List[str]:
+    def _rule_based_expand(self, query: str) -> list[str]:
         """Generate query variants using rule-based transformations."""
-        variants: List[str] = [query]
+        variants: list[str] = [query]
 
         # Strategy 1: Keyword-focused variant (extract key terms)
         keywords = _extract_keywords(query)
@@ -96,7 +96,7 @@ class QueryExpander:
 
         return variants
 
-    def _llm_expand(self, query: str) -> List[str]:
+    def _llm_expand(self, query: str) -> list[str]:
         """LLM-based query expansion (placeholder for future integration).
 
         When an LLM client is available, this would prompt the model to
@@ -112,8 +112,8 @@ class QueryExpander:
         query: str,
         retrieve_fn,
         strategy: str = "rule_based",
-        final_k: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+        final_k: int | None = None,
+    ) -> list[dict[str, Any]]:
         """Expand query, retrieve for each variant, and merge results.
 
         Args:
@@ -126,7 +126,7 @@ class QueryExpander:
             Merged and deduplicated retrieval results.
         """
         variants = self.expand(query, strategy)
-        all_items: Dict[str, Dict[str, Any]] = {}
+        all_items: dict[str, dict[str, Any]] = {}
 
         for variant in variants:
             result = retrieve_fn(variant)
@@ -153,7 +153,7 @@ class QueryExpander:
         return merged
 
 
-def _extract_keywords(query: str) -> List[str]:
+def _extract_keywords(query: str) -> list[str]:
     """Extract content words from query, removing stopwords."""
     stopwords = {
         "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",

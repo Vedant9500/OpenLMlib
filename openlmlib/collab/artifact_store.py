@@ -6,11 +6,9 @@ and shared artifact directories.
 
 from __future__ import annotations
 
+import sqlite3
 import uuid
 from pathlib import Path
-from typing import Dict, List, Optional
-
-import sqlite3
 
 from . import db
 from .security import validate_artifact_id
@@ -72,12 +70,12 @@ class ArtifactStore:
         title: str,
         content: str,
         created_at: str,
-        artifact_type: Optional[str] = None,
-        tags: Optional[List[str]] = None,
+        artifact_type: str | None = None,
+        tags: list[str] | None = None,
         shared: bool = False,
-        referenced_in_messages: Optional[List[str]] = None,
-        artifact_id: Optional[str] = None,
-    ) -> Dict:
+        referenced_in_messages: list[str] | None = None,
+        artifact_id: str | None = None,
+    ) -> dict:
         """Save an artifact to disk and register in the index."""
         artifact_id = validate_artifact_id(artifact_id or f"art_{uuid.uuid4().hex[:8]}")
 
@@ -124,7 +122,7 @@ class ArtifactStore:
         session_id: str,
         summary: str,
         created_at: str,
-        summary_id: Optional[str] = None,
+        summary_id: str | None = None,
     ) -> str:
         """Save a session summary to the summaries directory."""
         summary_id = summary_id or f"sum_{uuid.uuid4().hex[:8]}"
@@ -133,7 +131,7 @@ class ArtifactStore:
         file_path.write_text(summary, encoding="utf-8")
         return str(file_path)
 
-    def get_content(self, artifact_id: str, session_id: Optional[str] = None) -> Optional[str]:
+    def get_content(self, artifact_id: str, session_id: str | None = None) -> str | None:
         """Read the full content of an artifact."""
         artifact = db.get_artifact(self.conn, artifact_id, session_id)
         if artifact is None:
@@ -143,35 +141,35 @@ class ArtifactStore:
             return file_path.read_text(encoding="utf-8")
         return None
 
-    def get_artifact(self, session_id: str, artifact_id: str) -> Optional[Dict]:
+    def get_artifact(self, session_id: str, artifact_id: str) -> dict | None:
         """Read artifact metadata by id within a session."""
         return db.get_artifact(self.conn, artifact_id, session_id)
 
     def get_content_by_id(
         self, session_id: str, artifact_id: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """Read artifact content by artifact_id within a session."""
         return self.get_content(artifact_id, session_id)
 
     def list_artifacts(
         self,
         session_id: str,
-        created_by: Optional[str] = None,
-        artifact_type: Optional[str] = None,
-    ) -> List[Dict]:
+        created_by: str | None = None,
+        artifact_type: str | None = None,
+    ) -> list[dict]:
         """List artifacts for a session."""
         return db.get_session_artifacts(
             self.conn, session_id, created_by, artifact_type
         )
 
-    def list_summaries(self, session_id: str) -> List[Path]:
+    def list_summaries(self, session_id: str) -> list[Path]:
         """List all summaries for a session."""
         summaries_dir = self._summaries_dir(session_id)
         if not summaries_dir.exists():
             return []
         return sorted(summaries_dir.glob("*.md"))
 
-    def get_latest_summary(self, session_id: str) -> Optional[str]:
+    def get_latest_summary(self, session_id: str) -> str | None:
         """Get the content of the most recent summary."""
         summaries = self.list_summaries(session_id)
         if not summaries:
@@ -182,9 +180,9 @@ class ArtifactStore:
         self,
         session_id: str,
         pattern: str,
-        created_by: Optional[str] = None,
+        created_by: str | None = None,
         limit: int = 20,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Search artifact content for a pattern.
 
         Returns matching artifacts with the matching lines.

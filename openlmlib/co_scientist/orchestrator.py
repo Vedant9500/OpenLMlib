@@ -9,10 +9,18 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterable
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any
 
+from openlmlib.collab import db as collab_db
+from openlmlib.collab.artifact_store import ArtifactStore
+from openlmlib.collab.errors import AgentNotAuthorizedError, AgentNotFoundError
+from openlmlib.collab.message_bus import MessageBus
+from openlmlib.collab.security import verify_agent_in_session
+from openlmlib.collab.session import create_collab_session
+from openlmlib.collab.templates import get_template
 from openlmlib.schema import utc_now_iso
 
 from .evidence import (
@@ -29,13 +37,6 @@ from .hypothesis import (
 from .policy import screen_co_scientist_scope
 from .ranking import score_hypothesis
 from .templates import VERIFICATION_VERDICTS
-from openlmlib.collab import db as collab_db
-from openlmlib.collab.artifact_store import ArtifactStore
-from openlmlib.collab.errors import AgentNotAuthorizedError, AgentNotFoundError
-from openlmlib.collab.message_bus import MessageBus
-from openlmlib.collab.security import verify_agent_in_session
-from openlmlib.collab.session import create_collab_session
-from openlmlib.collab.templates import get_template
 
 RUN_STATE_KEY = "co_scientist_run"
 
@@ -56,7 +57,7 @@ class CoScientistRunError(Exception):
         message: str,
         *,
         error_type: str = "co_scientist_run_error",
-        issues: Optional[List[Dict[str, str]]] = None,
+        issues: list[dict[str, str]] | None = None,
     ):
         super().__init__(message)
         self.error_type = error_type
@@ -67,11 +68,11 @@ def create_co_scientist_run(
     conn: sqlite3.Connection,
     sessions_dir: Path,
     topic: str,
-    constraints: Optional[List[str]] = None,
+    constraints: list[str] | None = None,
     created_by: str = "orchestrator",
     top_k: int = 5,
-    created_at: Optional[str] = None,
-) -> Dict[str, Any]:
+    created_at: str | None = None,
+) -> dict[str, Any]:
     """Create linked generation and verification sessions for one run."""
     if not isinstance(topic, str) or not topic.strip():
         raise CoScientistRunError(
@@ -171,10 +172,10 @@ def submit_hypothesis(
     conn: sqlite3.Connection,
     sessions_dir: Path,
     run_id: str,
-    hypothesis_packet: Dict[str, Any],
-    created_by: Optional[str] = None,
-    created_at: Optional[str] = None,
-) -> Dict[str, Any]:
+    hypothesis_packet: dict[str, Any],
+    created_by: str | None = None,
+    created_at: str | None = None,
+) -> dict[str, Any]:
     """Persist one validated hypothesis packet and index it in run state."""
     run_state, _ = _load_run_state(conn, run_id)
     created_at = created_at or utc_now_iso()
@@ -258,8 +259,8 @@ def submit_hypothesis(
 def list_hypotheses(
     conn: sqlite3.Connection,
     run_id: str,
-    status: Optional[str] = None,
-) -> Dict[str, Any]:
+    status: str | None = None,
+) -> dict[str, Any]:
     """List indexed hypothesis packet summaries for a run."""
     run_state, _ = _load_run_state(conn, run_id)
     hypotheses = [
@@ -282,11 +283,11 @@ def start_hypothesis_verification(
     conn: sqlite3.Connection,
     sessions_dir: Path,
     run_id: str,
-    hypothesis_ids: Optional[List[str]] = None,
-    top_k: Optional[int] = None,
-    created_by: Optional[str] = None,
-    created_at: Optional[str] = None,
-) -> Dict[str, Any]:
+    hypothesis_ids: list[str] | None = None,
+    top_k: int | None = None,
+    created_by: str | None = None,
+    created_at: str | None = None,
+) -> dict[str, Any]:
     """Create a compact verification handoff artifact for selected hypotheses."""
     run_state, _ = _load_run_state(conn, run_id)
     created_at = created_at or utc_now_iso()
@@ -388,10 +389,10 @@ def submit_verification(
     sessions_dir: Path,
     run_id: str,
     hypothesis_id: str,
-    verification_report: Dict[str, Any],
-    created_by: Optional[str] = None,
-    created_at: Optional[str] = None,
-) -> Dict[str, Any]:
+    verification_report: dict[str, Any],
+    created_by: str | None = None,
+    created_at: str | None = None,
+) -> dict[str, Any]:
     """Persist one verification report and update run state."""
     run_state, _ = _load_run_state(conn, run_id)
     created_at = created_at or utc_now_iso()
@@ -462,7 +463,7 @@ def submit_verification(
     run_state["hypotheses"][hypothesis_id]["verification_status"] = verdict
     run_state["hypotheses"][hypothesis_id]["verification_report_artifact_id"] = artifact["artifact_id"]
     run_state["hypotheses"][hypothesis_id]["status"] = _hypothesis_status_for_verdict(verdict)
-    completed_verification_tasks: List[Dict[str, Any]] = []
+    completed_verification_tasks: list[dict[str, Any]] = []
     if _selected_reports_complete(run_state):
         run_state["phase"] = "synthesis"
     run_state["updated_at"] = created_at
@@ -503,7 +504,7 @@ def submit_verification(
 def get_co_scientist_report(
     conn: sqlite3.Connection,
     run_id: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Return a synthesized run report from compact run state."""
     run_state, records = _load_run_state(conn, run_id)
     hypotheses = [
@@ -566,10 +567,10 @@ def get_co_scientist_report(
 
 def validate_verification_report(
     report: Any,
-    expected_hypothesis_id: Optional[str] = None,
-) -> List[Dict[str, str]]:
+    expected_hypothesis_id: str | None = None,
+) -> list[dict[str, str]]:
     """Validate a verification report payload."""
-    issues: List[Dict[str, str]] = []
+    issues: list[dict[str, str]] = []
     if not isinstance(report, dict):
         return [{"field": "verification_report", "message": "Must be an object", "severity": "error"}]
 
@@ -617,7 +618,7 @@ def validate_verification_report(
     return issues
 
 
-def _require_template(template_id: str) -> Dict[str, Any]:
+def _require_template(template_id: str) -> dict[str, Any]:
     template = get_template(template_id)
     if template is None:
         raise CoScientistRunError(
@@ -632,7 +633,7 @@ def _short_title(topic: str, max_len: int = 72) -> str:
     return text if len(text) <= max_len else text[: max_len - 3].rstrip() + "..."
 
 
-def _session_description(run_id: str, topic: str, constraints: List[str], role: str) -> str:
+def _session_description(run_id: str, topic: str, constraints: list[str], role: str) -> str:
     payload = {
         "run_id": run_id,
         "role": role,
@@ -642,7 +643,7 @@ def _session_description(run_id: str, topic: str, constraints: List[str], role: 
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 
-def _rules_with_run(rules: Dict[str, Any], run_id: str, role: str) -> Dict[str, Any]:
+def _rules_with_run(rules: dict[str, Any], run_id: str, role: str) -> dict[str, Any]:
     merged = dict(rules)
     merged["co_scientist_run_id"] = run_id
     merged["co_scientist_session_role"] = role
@@ -652,7 +653,7 @@ def _rules_with_run(rules: Dict[str, Any], run_id: str, role: str) -> Dict[str, 
 def _announce_run_created(
     conn: sqlite3.Connection,
     sessions_dir: Path,
-    run_state: Dict[str, Any],
+    run_state: dict[str, Any],
     created_at: str,
 ) -> None:
     bus = MessageBus(conn, sessions_dir)
@@ -682,7 +683,7 @@ def _announce_run_created(
 
 def _write_run_state_to_sessions(
     conn: sqlite3.Connection,
-    run_state: Dict[str, Any],
+    run_state: dict[str, Any],
     updated_by: str,
     updated_at: str,
 ) -> None:
@@ -692,7 +693,7 @@ def _write_run_state_to_sessions(
     leave generation updated while verification is stale (or the reverse).
     Callers that receive state_conflict must reload run state and retry.
     """
-    targets: List[Tuple[str, str, Dict[str, Any], int]] = []
+    targets: list[tuple[str, str, dict[str, Any], int]] = []
     for session_id, role in (
         (run_state["generation_session_id"], "generation"),
         (run_state["verification_session_id"], "verification"),
@@ -764,7 +765,7 @@ def _write_run_state_to_sessions(
 def _load_run_state(
     conn: sqlite3.Connection,
     run_id: str,
-) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     records = _find_run_records(conn, run_id)
     if not records:
         raise CoScientistRunError(
@@ -775,12 +776,12 @@ def _load_run_state(
     return deepcopy(generation["run_state"]), records
 
 
-def _find_run_records(conn: sqlite3.Connection, run_id: str) -> List[Dict[str, Any]]:
+def _find_run_records(conn: sqlite3.Connection, run_id: str) -> list[dict[str, Any]]:
     rows = conn.execute(
         "SELECT session_id, state_json, version FROM session_state WHERE state_json LIKE ?",
         (f"%{run_id}%",),
     ).fetchall()
-    records: List[Dict[str, Any]] = []
+    records: list[dict[str, Any]] = []
     for row in rows:
         try:
             state = json.loads(row["state_json"])
@@ -798,11 +799,11 @@ def _find_run_records(conn: sqlite3.Connection, run_id: str) -> List[Dict[str, A
 
 
 def _hypothesis_summary(
-    packet: Dict[str, Any],
+    packet: dict[str, Any],
     artifact_id: str,
     created_at: str,
     created_by: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     scores = {field: float(packet[field]) for field in SCORE_FIELDS}
     ranked_score = score_hypothesis(packet)
     evidence = packet.get("evidence", [])
@@ -830,10 +831,10 @@ def _hypothesis_summary(
 
 
 def _select_hypothesis_ids(
-    run_state: Dict[str, Any],
-    hypothesis_ids: Optional[List[str]],
-    top_k: Optional[int],
-) -> List[str]:
+    run_state: dict[str, Any],
+    hypothesis_ids: list[str] | None,
+    top_k: int | None,
+) -> list[str]:
     if hypothesis_ids:
         selected = list(dict.fromkeys(hypothesis_ids))
     else:
@@ -869,10 +870,10 @@ def _select_hypothesis_ids(
 
 def _validate_handoff_grounding(
     conn: sqlite3.Connection,
-    run_state: Dict[str, Any],
-    packets: Iterable[Dict[str, Any]],
-) -> List[Dict[str, str]]:
-    issues: List[Dict[str, str]] = []
+    run_state: dict[str, Any],
+    packets: Iterable[dict[str, Any]],
+) -> list[dict[str, str]]:
+    issues: list[dict[str, str]] = []
     for packet in packets:
         hypothesis_id = packet.get("hypothesis_id", "unknown")
         packet_issues = validate_hypothesis_grounding(
@@ -893,9 +894,9 @@ def _validate_handoff_grounding(
 def _load_hypothesis_packet(
     conn: sqlite3.Connection,
     sessions_dir: Path,
-    run_state: Dict[str, Any],
+    run_state: dict[str, Any],
     hypothesis_id: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     artifact_id = run_state["hypotheses"][hypothesis_id]["artifact_id"]
     content = ArtifactStore(conn, sessions_dir).get_content(
         artifact_id,
@@ -915,7 +916,7 @@ def _load_hypothesis_packet(
         ) from exc
 
 
-def _selected_reports_complete(run_state: Dict[str, Any]) -> bool:
+def _selected_reports_complete(run_state: dict[str, Any]) -> bool:
     selected = run_state.get("selected_hypothesis_ids", [])
     if not selected:
         return False
@@ -935,7 +936,7 @@ def _complete_open_session_tasks(
     *,
     completed_at: str,
     only_max_step: bool = False,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Close open tasks when a Co-Scientist phase boundary is crossed.
 
     When only_max_step is True, complete only open tasks at the highest step_num
@@ -947,7 +948,7 @@ def _complete_open_session_tasks(
     else:
         max_step = None
 
-    completed: List[Dict[str, Any]] = []
+    completed: list[dict[str, Any]] = []
     for task in tasks:
         if task.get("status") in {"completed", "cancelled"}:
             continue
@@ -968,15 +969,15 @@ def _complete_open_session_tasks(
 
 def _require_run_actor(
     conn: sqlite3.Connection,
-    run_state: Dict[str, Any],
-    created_by: Optional[str],
+    run_state: dict[str, Any],
+    created_by: str | None,
     *,
     session_key: str,
     default_agent_key: str,
     action: str,
     require_orchestrator: bool = False,
-    alternate_session_key: Optional[str] = None,
-    alternate_default_agent_key: Optional[str] = None,
+    alternate_session_key: str | None = None,
+    alternate_default_agent_key: str | None = None,
 ) -> str:
     """Ensure the acting agent is a real session member (and orchestrator if required).
 
@@ -1001,7 +1002,7 @@ def _require_run_actor(
             ],
         )
 
-    candidates: List[str] = [requested]
+    candidates: list[str] = [requested]
     # Resolve model/name identifiers to concrete agent_ids in run sessions.
     for session_id in session_ids:
         for row in conn.execute(
@@ -1020,7 +1021,7 @@ def _require_run_actor(
 
     membership = None
     actor = candidates[0]
-    last_error: Optional[Exception] = None
+    last_error: Exception | None = None
     for candidate in candidates:
         for session_id in session_ids:
             try:
@@ -1072,7 +1073,7 @@ def _require_run_actor(
 def _validate_non_empty_string_list(
     value: Any,
     field: str,
-    issues: List[Dict[str, str]],
+    issues: list[dict[str, str]],
 ) -> None:
     if not isinstance(value, list) or not value:
         issues.append({"field": field, "message": "Must be a non-empty list", "severity": "error"})

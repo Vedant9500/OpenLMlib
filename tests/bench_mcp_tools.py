@@ -18,8 +18,9 @@ import subprocess
 import sys
 import time
 import uuid
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, List
+from typing import Any
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -36,17 +37,17 @@ os.environ["OPENLMLIB_MCP_PREWARM"] = "0"
 os.environ["OPENLMLIB_EMBED_PREWARM"] = "0"
 
 SNAPSHOT_DIR: str | None = None
-STATE: Dict[str, Any] = {}
+STATE: dict[str, Any] = {}
 
-from openlmlib.mcp_server import (  # noqa: E402
-    mcp,
+import openlmlib.mcp_server
+from openlmlib.library import init_library as lib_init_library
+from openlmlib.mcp_server import (
     _get_memory_state,
     _register_collab_tools,
     _register_memory_tools,
+    mcp,
 )
-import openlmlib.mcp_server  # noqa: E402
-from openlmlib.library import init_library as lib_init_library  # noqa: E402
-from openlmlib.runtime import shutdown_runtime  # noqa: E402
+from openlmlib.runtime import shutdown_runtime
 
 MODEL_TRIGGER_TOOLS = {
     "save_finding",
@@ -78,7 +79,7 @@ def reset_mcp_state() -> None:
     shutdown_runtime(SETTINGS_PATH)
 
 
-def get_all_tools() -> Dict[str, Callable]:
+def get_all_tools() -> dict[str, Callable]:
     return {name: tool.fn for name, tool in mcp._tool_manager._tools.items()}
 
 
@@ -171,7 +172,7 @@ def restore_test_environment() -> None:
     shutil.copytree(SNAPSHOT_DIR, TMP_DIR, dirs_exist_ok=True)
 
 
-def get_custom_setup(tool_name: str, tools: Dict[str, Callable]) -> Callable | None:
+def get_custom_setup(tool_name: str, tools: dict[str, Callable]) -> Callable | None:
     def _create_finding():
         res = tools["save_finding"](
             project="bench",
@@ -262,7 +263,7 @@ def get_custom_setup(tool_name: str, tools: Dict[str, Callable]) -> Callable | N
     return None
 
 
-def generate_mock_args(tool_name: str) -> Dict[str, Any]:
+def generate_mock_args(tool_name: str) -> dict[str, Any]:
     if tool_name == "save_finding":
         return {"project": "bench", "claim": "Benchmarking is important.", "confirm": True}
     if tool_name in ["list_findings", "health", "init_library", "evaluate_retrieval", "get_usage_analytics", "help_library"]:
@@ -368,7 +369,7 @@ def generate_mock_args(tool_name: str) -> Dict[str, Any]:
     return {}
 
 
-def summarize_times(name: str, mode: str, times: List[float], successes: int, errors: int) -> Dict[str, Any]:
+def summarize_times(name: str, mode: str, times: list[float], successes: int, errors: int) -> dict[str, Any]:
     if not times:
         return {"error": "No iterations completed"}
 
@@ -393,8 +394,8 @@ def benchmark_tool(
     func: Callable,
     iterations: int = 20,
     warmup: int = 3,
-    tools_dict: Dict[str, Callable] | None = None,
-) -> Dict[str, Any]:
+    tools_dict: dict[str, Callable] | None = None,
+) -> dict[str, Any]:
     """Run steady-state warm benchmark in the current process."""
     setup_fn = get_custom_setup(name, tools_dict or {})
     base_kwargs = generate_mock_args(name)
@@ -406,7 +407,7 @@ def benchmark_tool(
         except Exception:
             pass
 
-    times: List[float] = []
+    times: list[float] = []
     successes = 0
     errors = 0
 
@@ -426,7 +427,7 @@ def benchmark_tool(
     return summarize_times(name, "warm", times, successes, errors)
 
 
-def run_cold_sample_subprocess(tool_name: str) -> Dict[str, Any]:
+def run_cold_sample_subprocess(tool_name: str) -> dict[str, Any]:
     if not SNAPSHOT_DIR:
         raise RuntimeError("Cold benchmark snapshot not initialized.")
 
@@ -478,15 +479,15 @@ def run_cold_sample_subprocess(tool_name: str) -> Dict[str, Any]:
     return payload
 
 
-def benchmark_tool_cold(name: str, iterations: int = 10) -> Dict[str, Any]:
+def benchmark_tool_cold(name: str, iterations: int = 10) -> dict[str, Any]:
     """Run true cold-start benchmark using one fresh subprocess per sample."""
     if name not in MODEL_TRIGGER_TOOLS:
         return {"error": f"{name} is not configured as a cold-start tool"}
 
-    times: List[float] = []
+    times: list[float] = []
     successes = 0
     errors = 0
-    failure_messages: List[str] = []
+    failure_messages: list[str] = []
 
     for _ in range(iterations):
         payload = run_cold_sample_subprocess(name)
@@ -509,10 +510,14 @@ def run_single_cold_sample(tool_name: str, sample_root: Path) -> int:
     os.environ["OPENLMLIB_MCP_PREWARM"] = "0"
     os.environ["OPENLMLIB_EMBED_PREWARM"] = "0"
 
+    from openlmlib.mcp_server import (
+        _register_collab_tools as register_collab,
+    )
+    from openlmlib.mcp_server import (
+        _register_memory_tools as register_memory,
+    )
     from openlmlib.mcp_server import (  # local import for subprocess isolation
         mcp as sample_mcp,
-        _register_collab_tools as register_collab,
-        _register_memory_tools as register_memory,
     )
 
     register_collab()
@@ -543,7 +548,7 @@ def run_single_cold_sample(tool_name: str, sample_root: Path) -> int:
     return 0 if success else 1
 
 
-def print_results(results: List[Dict[str, Any]]) -> None:
+def print_results(results: list[dict[str, Any]]) -> None:
     if not results:
         print("No results to display.")
         return
@@ -552,7 +557,7 @@ def print_results(results: List[Dict[str, Any]]) -> None:
     print(f"{'Tool Name':<28} | {'Mode':<5} | {'Success':<8} | {'Mean (ms)':<10} | {'Median':<10} | {'P95 (ms)':<10}")
     print(f"{'-'*125}")
 
-    grouped: Dict[str, List[Dict[str, Any]]] = {}
+    grouped: dict[str, list[dict[str, Any]]] = {}
     for result in results:
         grouped.setdefault(result["tool"], []).append(result)
 
@@ -569,7 +574,7 @@ def print_results(results: List[Dict[str, Any]]) -> None:
     print(f"{'-'*125}\n")
 
 
-def collect_environment_metadata() -> Dict[str, Any]:
+def collect_environment_metadata() -> dict[str, Any]:
     import platform
 
     return {
@@ -620,7 +625,7 @@ def main() -> int:
             selected_tools = [name for name in selected_tools if name in selected]
 
         print(f"Loaded {len(selected_tools)} tools.")
-        final_results: List[Dict[str, Any]] = []
+        final_results: list[dict[str, Any]] = []
 
         print("\n>>> Phase 1: WARM START PASS")
         for name in selected_tools:

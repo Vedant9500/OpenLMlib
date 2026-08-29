@@ -1,7 +1,7 @@
 import unittest
 
-from openlmlib.write_gate import WriteGate
 from openlmlib.schema import ValidationIssue
+from openlmlib.write_gate import WriteGate
 
 
 class FixedEmbedder:

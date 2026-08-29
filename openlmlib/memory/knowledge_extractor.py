@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -29,30 +29,30 @@ class SessionKnowledge:
     summary: str = ""
 
     # What was done
-    files_touched: List[Dict[str, str]] = field(default_factory=list)
+    files_touched: list[dict[str, str]] = field(default_factory=list)
     # [{path: "memory/storage.py", action: "modified", reason: "Fixed FK cascade"}]
 
-    decisions_made: List[str] = field(default_factory=list)
+    decisions_made: list[str] = field(default_factory=list)
     # ["Chose SQLite with CASCADE for FK management"]
 
-    phases_completed: List[str] = field(default_factory=list)
-    phases_remaining: List[str] = field(default_factory=list)
+    phases_completed: list[str] = field(default_factory=list)
+    phases_remaining: list[str] = field(default_factory=list)
 
     # What was discovered
-    conventions_found: List[str] = field(default_factory=list)
+    conventions_found: list[str] = field(default_factory=list)
     # ["Uses dataclasses for structured data", "Lazy-loading for heavy modules"]
 
-    architecture_notes: List[str] = field(default_factory=list)
+    architecture_notes: list[str] = field(default_factory=list)
     # ["MCP server uses FastMCP with lazy tool registration"]
 
     # What's next
-    open_questions: List[str] = field(default_factory=list)
-    next_steps: List[str] = field(default_factory=list)
+    open_questions: list[str] = field(default_factory=list)
+    next_steps: list[str] = field(default_factory=list)
 
     # Metadata
     tool_execution_count: int = 0
-    tool_breakdown: Dict[str, int] = field(default_factory=dict)
-    errors_encountered: List[str] = field(default_factory=list)
+    tool_breakdown: dict[str, int] = field(default_factory=dict)
+    errors_encountered: list[str] = field(default_factory=list)
 
     def format_quick_recap(self) -> str:
         """Format as a quick recap for the model (~150-250 tokens)."""
@@ -110,10 +110,10 @@ class SessionKnowledge:
         token_estimate = int(len(result.split()) * 1.3)
         return result
 
-    def format_detailed_context(self, topic: Optional[str] = None) -> str:
+    def format_detailed_context(self, topic: str | None = None) -> str:
         """Format as detailed context for a specific topic (~500-800 tokens)."""
         lines = []
-        lines.append(f"# Detailed Session Context")
+        lines.append("# Detailed Session Context")
         lines.append(f"Session: {self.session_id}")
         lines.append("")
 
@@ -220,7 +220,7 @@ class SessionKnowledge:
 
         return "\n".join(lines)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to dict for storage."""
         return {
             "session_id": self.session_id,
@@ -239,7 +239,7 @@ class SessionKnowledge:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "SessionKnowledge":
+    def from_dict(cls, data: dict[str, Any]) -> SessionKnowledge:
         """Deserialize from dict."""
         knowledge = cls(session_id=data.get("session_id", ""))
         knowledge.summary = data.get("summary", "")
@@ -313,7 +313,7 @@ class KnowledgeExtractor:
     def extract(
         self,
         session_id: str,
-        observations: List[Dict[str, Any]]
+        observations: list[dict[str, Any]]
     ) -> SessionKnowledge:
         """
         Extract knowledge from a list of observations.
@@ -333,7 +333,7 @@ class KnowledgeExtractor:
         knowledge.tool_execution_count = len(observations)
 
         # Track seen files to avoid duplicates
-        seen_files: Set[str] = set()
+        seen_files: set[str] = set()
 
         for obs in observations:
             tool_name = obs.get("tool_name", "").lower()
@@ -373,12 +373,12 @@ class KnowledgeExtractor:
 
     def _extract_files(
         self,
-        obs: Dict[str, Any],
+        obs: dict[str, Any],
         tool_name: str,
         tool_input: str,
         tool_output: str,
         knowledge: SessionKnowledge,
-        seen_files: Set[str]
+        seen_files: set[str]
     ):
         """Extract files touched from observation."""
         # Find all potential file paths in tool_input
@@ -494,7 +494,7 @@ class KnowledgeExtractor:
 
     def _extract_phases(
         self,
-        observations: List[Dict[str, Any]],
+        observations: list[dict[str, Any]],
         knowledge: SessionKnowledge
     ):
         """Extract phase information from observations."""
@@ -568,7 +568,7 @@ class KnowledgeExtractor:
 
 def extract_knowledge(
     session_id: str,
-    observations: List[Dict[str, Any]]
+    observations: list[dict[str, Any]]
 ) -> SessionKnowledge:
     """
     Convenience function to extract knowledge from observations.

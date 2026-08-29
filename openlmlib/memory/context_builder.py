@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .memory_retriever import ProgressiveRetriever
 
@@ -24,7 +24,7 @@ class ContextBuilder:
         retriever: ProgressiveRetriever,
         caveman_enabled: bool = True,
         caveman_intensity: str = 'ultra',
-        memory_settings: Optional[Any] = None,
+        memory_settings: Any | None = None,
     ):
         """
         Initialize context builder.
@@ -47,7 +47,7 @@ class ContextBuilder:
             return False
         return bool(self.caveman_enabled)
 
-    def _max_context_tokens(self) -> Optional[int]:
+    def _max_context_tokens(self) -> int | None:
         if self.memory_settings is None:
             return None
         try:
@@ -70,9 +70,9 @@ class ContextBuilder:
     def build_session_start_context(
         self,
         session_id: str,
-        query: Optional[str] = None,
+        query: str | None = None,
         limit: int = 50,
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
         *,
         as_dict: bool = False,
     ):
@@ -257,9 +257,9 @@ class ContextBuilder:
         session_id: str,
         user_prompt: str,
         layer: int = 1,
-        ids: Optional[List[str]] = None,
+        ids: list[str] | None = None,
         limit: int = 50
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Build context using progressive disclosure.
 

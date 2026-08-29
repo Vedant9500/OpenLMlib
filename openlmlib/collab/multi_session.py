@@ -7,7 +7,6 @@ participation tracking across multiple sessions.
 from __future__ import annotations
 
 import sqlite3
-from typing import Dict, List, Optional
 
 from .db import normalize_fts_query
 
@@ -15,10 +14,10 @@ from .db import normalize_fts_query
 def get_agent_sessions(
     conn: sqlite3.Connection,
     agent_id: str,
-    status: Optional[str] = None,
+    status: str | None = None,
     *,
     match_model: bool = True,
-) -> List[Dict]:
+) -> list[dict]:
     """Get sessions an agent has participated in.
 
     Args:
@@ -36,7 +35,7 @@ def get_agent_sessions(
     if not identity:
         return []
 
-    models: List[str] = []
+    models: list[str] = []
     if match_model:
         model_rows = conn.execute(
             """
@@ -78,7 +77,7 @@ def get_agent_sessions(
     cursor = conn.execute(query, params)
     rows = cursor.fetchall()
     # Prefer one row per session (latest matched agent membership).
-    by_session: Dict[str, Dict] = {}
+    by_session: dict[str, dict] = {}
     for row in rows:
         item = dict(row)
         sid = item["session_id"]
@@ -117,8 +116,8 @@ def identities_share_model(conn: sqlite3.Connection, identity_a: str, identity_b
 
 def get_active_sessions_summary(
     conn: sqlite3.Connection,
-    agent_id: Optional[str] = None,
-) -> Dict:
+    agent_id: str | None = None,
+) -> dict:
     """Get a summary of all active sessions.
 
     Returns:
@@ -162,9 +161,9 @@ def search_sessions_by_content(
     conn: sqlite3.Connection,
     query: str,
     limit: int = 20,
-    status: Optional[str] = None,
-    agent_id: Optional[str] = None,
-) -> List[Dict]:
+    status: str | None = None,
+    agent_id: str | None = None,
+) -> list[dict]:
     """Search across all sessions by message content using FTS5.
 
     Args:
@@ -207,8 +206,8 @@ def search_sessions_by_content(
 def get_session_relationships(
     conn: sqlite3.Connection,
     session_id: str,
-    agent_id: Optional[str] = None,
-) -> Dict:
+    agent_id: str | None = None,
+) -> dict:
     """Get related sessions based on shared agents or similar content.
 
     Args:
@@ -285,7 +284,7 @@ def get_session_relationships(
     }
 
 
-def get_cross_session_agent_activity(conn: sqlite3.Connection, agent_id: str, limit: int = 50) -> List[Dict]:
+def get_cross_session_agent_activity(conn: sqlite3.Connection, agent_id: str, limit: int = 50) -> list[dict]:
     """Get an agent's activity across all sessions.
 
     Args:
@@ -312,7 +311,7 @@ def get_cross_session_agent_activity(conn: sqlite3.Connection, agent_id: str, li
     return [dict(row) for row in cursor.fetchall()]
 
 
-def get_session_statistics(conn: sqlite3.Connection, session_id: str) -> Dict:
+def get_session_statistics(conn: sqlite3.Connection, session_id: str) -> dict:
     """Get detailed statistics for a session.
 
     Args:

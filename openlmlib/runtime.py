@@ -1,13 +1,12 @@
 from __future__ import annotations
 
+import logging
+import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import RLock
 from time import monotonic
-from typing import Optional
-import logging
-import os
-import sys
 
 from . import db
 from .embeddings import EmbeddingCache, SentenceTransformerEmbedder
@@ -29,7 +28,7 @@ class RuntimeState:
     writes_since_flush: int = 0
     last_flush_ts: float = 0.0
     write_lock: RLock = field(default_factory=RLock)
-    _embedder: Optional[SentenceTransformerEmbedder] = field(default=None, repr=False)
+    _embedder: SentenceTransformerEmbedder | None = field(default=None, repr=False)
 
     @property
     def embedder(self) -> SentenceTransformerEmbedder:

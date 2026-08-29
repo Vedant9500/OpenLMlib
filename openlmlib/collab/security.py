@@ -11,18 +11,17 @@ import os
 import re
 import sqlite3
 from pathlib import Path
-from typing import Optional
 
 from . import db
 from .errors import (
-    AgentNotFoundError,
+    VALID_MESSAGE_TYPES,
     AgentNotAuthorizedError,
+    AgentNotFoundError,
     InvalidMessageTypeError,
     MessageTooLongError,
     SecurityError,
-    SessionNotFoundError,
     SessionNotActiveError,
-    VALID_MESSAGE_TYPES,
+    SessionNotFoundError,
 )
 
 SESSION_ID_RE = re.compile(r"^sess_\d{8}_[a-f0-9]{8}$")

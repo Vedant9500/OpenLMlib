@@ -17,82 +17,100 @@ import traceback
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict
 
 from mcp.server.fastmcp import FastMCP
 
-from .db import connect_collab_db, init_collab_db
-from .session import (
-    create_collab_session,
-    join_collab_session,
-    leave_collab_session,
-    terminate_collab_session,
+from openlmlib.co_scientist import (
+    get_co_scientist_scope_policy as _get_co_scientist_scope_policy,
 )
-from .message_bus import MessageBus
-from .artifact_store import ArtifactStore
-from .state_manager import StateManager
-from .context_compiler import ContextCompiler
-from .compactor import SessionCompactor
+from openlmlib.co_scientist import (
+    get_evidence_quality_rubric as _get_evidence_quality_rubric,
+)
+from openlmlib.co_scientist import (
+    get_hypothesis_packet_schema as _get_hypothesis_packet_schema,
+)
+from openlmlib.co_scientist import (
+    screen_co_scientist_scope as _screen_co_scientist_scope,
+)
+from openlmlib.co_scientist import (
+    validate_hypothesis_packet as _validate_hypothesis_packet,
+)
+from openlmlib.co_scientist import (
+    validation_issues_to_dicts as _validation_issues_to_dicts,
+)
+from openlmlib.co_scientist import (
+    verify_citations as _verify_citations,
+)
+from openlmlib.co_scientist.evaluation import (
+    compare_workflows as _compare_workflows,
+)
+from openlmlib.co_scientist.evaluation import (
+    evaluate_run as _evaluate_co_scientist_run,
+)
+from openlmlib.co_scientist.evaluation import (
+    get_benchmark_tasks as _get_co_scientist_benchmark_tasks,
+)
+from openlmlib.co_scientist.orchestrator import (
+    CoScientistRunError,
+)
+from openlmlib.co_scientist.orchestrator import (
+    create_co_scientist_run as _create_co_scientist_run,
+)
+from openlmlib.co_scientist.orchestrator import (
+    get_co_scientist_report as _get_co_scientist_report,
+)
+from openlmlib.co_scientist.orchestrator import (
+    list_hypotheses as _list_hypotheses,
+)
+from openlmlib.co_scientist.orchestrator import (
+    start_hypothesis_verification as _start_hypothesis_verification,
+)
+from openlmlib.co_scientist.orchestrator import (
+    submit_hypothesis as _submit_hypothesis,
+)
+from openlmlib.co_scientist.orchestrator import (
+    submit_verification as _submit_verification,
+)
+from openlmlib.co_scientist.reporting import (
+    create_final_report as _create_final_report,
+)
+from openlmlib.co_scientist.reporting import (
+    export_supported_findings as _export_supported_findings,
+)
+
 from . import db as collab_db
+from .artifact_store import ArtifactStore
+from .compactor import SessionCompactor
+from .context_compiler import ContextCompiler
+from .db import connect_collab_db, init_collab_db
 from .errors import (
-    AgentNotAuthorizedError,
-    AgentNotFoundError,
-    ArtifactNotFoundError,
     CollabError,
     DatabaseError,
-    FilesystemError,
-    InvalidMessageTypeError,
-    MessageTooLongError,
     SecurityError,
-    SessionFullError,
-    SessionNotActiveError,
     SessionNotFoundError,
-    StateConflictError,
-    TemplateNotFoundError,
     error_from_exception,
 )
+from .message_bus import MessageBus
+from .notification import wait_for_notification, write_notification
 from .security import (
     sanitize_content,
     validate_agent_id,
     validate_artifact_id,
     validate_message_content,
     validate_message_type,
-    validate_safe_path,
     validate_session_id,
     verify_agent_in_session,
     verify_orchestrator,
     verify_session_exists_and_active,
 )
-from .rules_engine import RulesEngine
-from .notification import write_notification
-from .notification import wait_for_notification, clear_notification
-from openlmlib.co_scientist import (
-    get_evidence_quality_rubric as _get_evidence_quality_rubric,
-    get_co_scientist_scope_policy as _get_co_scientist_scope_policy,
-    get_hypothesis_packet_schema as _get_hypothesis_packet_schema,
-    screen_co_scientist_scope as _screen_co_scientist_scope,
-    validate_hypothesis_packet as _validate_hypothesis_packet,
-    validation_issues_to_dicts as _validation_issues_to_dicts,
-    verify_citations as _verify_citations,
+from .session import (
+    create_collab_session,
+    join_collab_session,
+    leave_collab_session,
+    terminate_collab_session,
 )
-from openlmlib.co_scientist.orchestrator import (
-    CoScientistRunError,
-    create_co_scientist_run as _create_co_scientist_run,
-    get_co_scientist_report as _get_co_scientist_report,
-    list_hypotheses as _list_hypotheses,
-    start_hypothesis_verification as _start_hypothesis_verification,
-    submit_hypothesis as _submit_hypothesis,
-    submit_verification as _submit_verification,
-)
-from openlmlib.co_scientist.reporting import (
-    create_final_report as _create_final_report,
-    export_supported_findings as _export_supported_findings,
-)
-from openlmlib.co_scientist.evaluation import (
-    compare_workflows as _compare_workflows,
-    evaluate_run as _evaluate_co_scientist_run,
-    get_benchmark_tasks as _get_co_scientist_benchmark_tasks,
-)
+from .state_manager import StateManager
 
 logger = logging.getLogger(__name__)
 
@@ -104,9 +122,9 @@ Dict = dict  # type: ignore[assignment]
 # Cache identity includes the resolved settings path: two distinct settings
 # files can share an mtime, and keying on mtime alone would hand the second
 # file's callers the first file's DB/sessions paths (M-8).
-_cached_paths: Optional[tuple] = None
+_cached_paths: tuple | None = None
 _cached_paths_mtime: float = 0.0
-_cached_paths_settings: Optional[str] = None
+_cached_paths_settings: str | None = None
 
 
 def _get_collab_paths() -> tuple[Path, Path]:
@@ -250,14 +268,14 @@ def _handle_tool_error(func_name: str, exc: Exception) -> Dict:
         logger.error("Database error in %s: %s", func_name, exc)
         return {
             "success": False,
-            "error": f"Database error: {str(exc)}",
+            "error": f"Database error: {exc!s}",
             "error_type": "database_error",
         }
     elif isinstance(exc, (OSError, IOError)):
         logger.error("Filesystem error in %s: %s", func_name, exc)
         return {
             "success": False,
-            "error": f"Filesystem error: {str(exc)}",
+            "error": f"Filesystem error: {exc!s}",
             "error_type": "filesystem_error",
         }
     else:
@@ -267,7 +285,7 @@ def _handle_tool_error(func_name: str, exc: Exception) -> Dict:
         )
         return {
             "success": False,
-            "error": f"Internal error: {str(exc)}",
+            "error": f"Internal error: {exc!s}",
             "error_type": "internal_error",
         }
 
@@ -311,7 +329,7 @@ def _maybe_auto_compact(
     conn: sqlite3.Connection,
     sessions_dir: Path,
     session_id: str,
-) -> Optional[Dict]:
+) -> Dict | None:
     """Run SessionCompactor when session rules exceed auto_compact threshold."""
     session = collab_db.get_session(conn, session_id)
     if session is None:
@@ -342,61 +360,61 @@ collab_mcp = FastMCP("OpenLMlib CollabSessions")
 
 __all__ = [
     "collab_mcp",
-    "create_session",
-    "join_session",
-    "list_sessions",
-    "get_session_state",
-    "update_session_state",
-    "send_message",
-    "read_messages",
-    "tail_messages",
-    "read_message_range",
-    "grep_messages",
-    "session_context",
-    "save_artifact",
-    "list_artifacts",
-    "get_artifact",
-    "grep_artifacts",
-    "leave_session",
-    "terminate_session",
-    "export_to_library",
-    "list_templates",
-    "get_template",
+    "compare_co_scientist_workflows",
+    "create_co_scientist_final_report",
+    "create_co_scientist_run",
     "create_from_template",
+    "create_session",
+    "evaluate_co_scientist_run",
+    "export_co_scientist_findings",
+    "export_to_library",
     "get_agent_sessions",
-    "sessions_summary",
+    "get_artifact",
+    "get_co_scientist_benchmark_tasks",
+    "get_co_scientist_report",
+    "get_co_scientist_scope_policy",
+    "get_evidence_quality_rubric",
+    "get_hypothesis_packet_schema",
+    "get_model_details",
+    "get_session_state",
+    "get_template",
+    "grep_artifacts",
+    "grep_messages",
+    "help_collab",
+    "join_session",
+    "leave_session",
+    "list_artifacts",
+    "list_hypotheses",
+    "list_models",
+    "list_sessions",
+    "list_templates",
+    "read_message_range",
+    "read_messages",
+    "recommended_models",
+    "save_artifact",
+    "screen_co_scientist_scope",
     "search_sessions",
+    "send_message",
+    "session_context",
     "session_relationships",
     "session_statistics",
-    "list_models",
-    "get_model_details",
-    "recommended_models",
-    "get_co_scientist_scope_policy",
-    "screen_co_scientist_scope",
-    "get_hypothesis_packet_schema",
-    "get_evidence_quality_rubric",
-    "verify_co_scientist_citations",
-    "validate_hypothesis_packet",
-    "create_co_scientist_run",
-    "submit_hypothesis",
-    "list_hypotheses",
+    "sessions_summary",
     "start_hypothesis_verification",
+    "submit_hypothesis",
     "submit_verification",
-    "create_co_scientist_final_report",
-    "export_co_scientist_findings",
-    "evaluate_co_scientist_run",
-    "get_co_scientist_benchmark_tasks",
-    "compare_co_scientist_workflows",
-    "get_co_scientist_report",
-    "help_collab",
+    "tail_messages",
+    "terminate_session",
+    "update_session_state",
+    "validate_hypothesis_packet",
+    "verify_co_scientist_citations",
 ]
 
 @collab_mcp.tool()
 def create_session(
     title: str,
     task_description: str,
-    plan: Optional[List[Dict]] = None,
-    rules: Optional[Dict] = None,
+    plan: list[Dict] | None = None,
+    rules: Dict | None = None,
     created_by: str = "orchestrator",
 ) -> Dict:
     """Create a new collaboration session for multi-agent research.
@@ -459,7 +477,7 @@ def create_session(
 def join_session(
     session_id: str,
     model: str,
-    capabilities: Optional[List[str]] = None,
+    capabilities: list[str] | None = None,
 ) -> Dict:
     """Join an existing collaboration session as an agent.
 
@@ -522,7 +540,7 @@ def join_session(
 
 @collab_mcp.tool()
 def list_sessions(
-    status: Optional[str] = None,
+    status: str | None = None,
     limit: int = 20,
 ) -> Dict:
     """List collaboration sessions. Browse sessions you've participated in.
@@ -552,7 +570,7 @@ def list_sessions(
 
 
 @collab_mcp.tool()
-def collab_claim_task(session_id: str, agent_id: str, task_id: Optional[str] = None) -> Dict:
+def collab_claim_task(session_id: str, agent_id: str, task_id: str | None = None) -> Dict:
     """Claim a pending task in a collaboration session.
 
     AUTOMATIC TRIGGERS - Call this when:
@@ -687,8 +705,8 @@ def send_message(
     session_id: str,
     msg_type: str,
     content: str,
-    to_agent: Optional[str] = None,
-    metadata: Optional[Dict] = None,
+    to_agent: str | None = None,
+    metadata: Dict | None = None,
     from_agent: str = "",
 ) -> Dict:
     # NOTE: from_agent should ideally be required for non-system calls
@@ -759,7 +777,11 @@ def send_message(
             if msg_type == "complete" and metadata and "task_id" in metadata:
                 task_id = metadata["task_id"]
                 # Mark DB status
-                from .db import update_task_status, log_task_performance, get_session_tasks
+                from .db import (
+                    get_session_tasks,
+                    log_task_performance,
+                    update_task_status,
+                )
                 update_task_status(conn, task_id, "completed", completed_at=now)
                 
                 # Fetch task started_at to compute latency
@@ -833,8 +855,8 @@ def read_messages(
     session_id: str,
     agent_id: str,
     limit: int = 50,
-    msg_types: Optional[List[str]] = None,
-    from_agent: Optional[str] = None,
+    msg_types: list[str] | None = None,
+    from_agent: str | None = None,
 ) -> Dict:
     """Read new messages from a session. Returns only unseen messages (offset-tracked).
 
@@ -898,8 +920,8 @@ def poll_messages(
     agent_id: str,
     timeout: float = 30.0,
     limit: int = 50,
-    msg_types: Optional[List[str]] = None,
-    from_agent: Optional[str] = None,
+    msg_types: list[str] | None = None,
+    from_agent: str | None = None,
 ) -> Dict:
     """Wait for and read new messages from a session. AUTONOMOUS LOOP tool for agent communication.
 
@@ -1160,7 +1182,7 @@ def grep_messages(
     pattern: str,
     agent_id: str,
     limit: int = 50,
-    msg_types: Optional[List[str]] = None,
+    msg_types: list[str] | None = None,
 ) -> Dict:
     """Search session messages by keyword. FTS5 full-text search across all messages.
 
@@ -1268,8 +1290,8 @@ def save_artifact(
     title: str,
     content: str,
     created_by: str,
-    artifact_type: Optional[str] = None,
-    tags: Optional[List[str]] = None,
+    artifact_type: str | None = None,
+    tags: list[str] | None = None,
     shared: bool = False,
 ) -> Dict:
     """Save a research artifact (finding, analysis, summary) to the session.
@@ -1364,8 +1386,8 @@ def save_artifact(
 def list_artifacts(
     session_id: str,
     agent_id: str,
-    created_by: Optional[str] = None,
-    artifact_type: Optional[str] = None,
+    created_by: str | None = None,
+    artifact_type: str | None = None,
 ) -> Dict:
     """List artifacts in a session. Browse saved work products, analyses, and summaries.
 
@@ -1444,7 +1466,7 @@ def grep_artifacts(
     session_id: str,
     pattern: str,
     agent_id: str,
-    created_by: Optional[str] = None,
+    created_by: str | None = None,
 ) -> Dict:
     """Search artifact content by keyword. Find saved work by topic or term.
 
@@ -1481,7 +1503,7 @@ def grep_artifacts(
 def leave_session(
     session_id: str,
     agent_id: str,
-    reason: Optional[str] = None,
+    reason: str | None = None,
 ) -> Dict:
     """Leave a collaboration session gracefully. Clean exit for an agent.
 
@@ -1521,7 +1543,7 @@ def leave_session(
 def terminate_session(
     session_id: str,
     orchestrator_id: str,
-    summary: Optional[str] = None,
+    summary: str | None = None,
 ) -> Dict:
     """Terminate and complete a collaboration session. Orchestrator only.
 
@@ -1569,10 +1591,10 @@ def terminate_session(
 def export_to_library(
     session_id: str,
     agent_id: str = "",
-    project: Optional[str] = None,
+    project: str | None = None,
     confidence: float = 0.8,
-    tags: Optional[List[str]] = None,
-    artifact_ids: Optional[List[str]] = None,
+    tags: list[str] | None = None,
+    artifact_ids: list[str] | None = None,
     include_summary: bool = True,
 ) -> Dict:
     """Export session artifacts as findings in the main OpenLMLib library.
@@ -1615,7 +1637,10 @@ def export_to_library(
                     "error_type": "authorization_error",
                 }
             settings_path = _get_settings_path()
-            from .export_bridge import export_session_to_library, export_session_summary_as_finding
+            from .export_bridge import (
+                export_session_summary_as_finding,
+                export_session_to_library,
+            )
 
             result = export_session_to_library(
                 settings_path=settings_path,
@@ -1755,7 +1780,7 @@ def create_from_template(
 def get_agent_sessions(
     agent_id: str,
     requesting_agent_id: str,
-    status: Optional[str] = None,
+    status: str | None = None,
 ) -> Dict:
     """Get all sessions an agent has participated in. Track agent's work history.
 
@@ -1828,7 +1853,7 @@ def sessions_summary(agent_id: str) -> Dict:
 def search_sessions(
     query: str,
     agent_id: str,
-    status: Optional[str] = None,
+    status: str | None = None,
     limit: int = 20,
 ) -> Dict:
     """Search across all sessions by message content.
@@ -1915,10 +1940,10 @@ def session_statistics(session_id: str, agent_id: str) -> Dict:
 
 @collab_mcp.tool()
 def list_models(
-    search: Optional[str] = None,
-    provider: Optional[str] = None,
-    max_price_per_million: Optional[float] = None,
-    context_length_min: Optional[int] = None,
+    search: str | None = None,
+    provider: str | None = None,
+    max_price_per_million: float | None = None,
+    context_length_min: int | None = None,
     is_free: bool = False,
     force_refresh: bool = False,
 ) -> Dict:
@@ -1941,7 +1966,10 @@ def list_models(
     """
     try:
         sessions_dir = _get_sessions_dir()
-        from .openrouter_client import fetch_openrouter_models, filter_models, format_model_summary
+        from .openrouter_client import (
+            fetch_openrouter_models,
+            filter_models,
+        )
 
         result = fetch_openrouter_models(sessions_dir, force_refresh)
         if result.get("error"):
@@ -2027,7 +2055,11 @@ def recommended_models(task_type: str) -> Dict:
     """
     try:
         sessions_dir = _get_sessions_dir()
-        from .openrouter_client import get_recommended_models_for_task, fetch_openrouter_models, format_model_summary
+        from .openrouter_client import (
+            fetch_openrouter_models,
+            format_model_summary,
+            get_recommended_models_for_task,
+        )
 
         recommended_ids = get_recommended_models_for_task(task_type)
         result = fetch_openrouter_models(sessions_dir, force_refresh=False)
@@ -2084,7 +2116,7 @@ def get_co_scientist_scope_policy() -> Dict:
 @collab_mcp.tool()
 def screen_co_scientist_scope(
     topic: str,
-    constraints: Optional[List[str]] = None,
+    constraints: list[str] | None = None,
 ) -> Dict:
     """Screen a proposed Co-Scientist run before creating sessions.
 
@@ -2140,8 +2172,8 @@ def get_evidence_quality_rubric() -> Dict:
 
 @collab_mcp.tool()
 def verify_co_scientist_citations(
-    citations: List[str],
-    session_ids: Optional[List[str]] = None,
+    citations: list[str],
+    session_ids: list[str] | None = None,
 ) -> Dict:
     """Verify Co-Scientist citations against URLs, artifacts, or local files.
 
@@ -2199,7 +2231,7 @@ def validate_hypothesis_packet(packet: Dict) -> Dict:
 @collab_mcp.tool()
 def create_co_scientist_run(
     topic: str,
-    constraints: Optional[List[str]] = None,
+    constraints: list[str] | None = None,
     created_by: str = "orchestrator",
     top_k: int = 5,
 ) -> Dict:
@@ -2242,7 +2274,7 @@ def create_co_scientist_run(
 def submit_hypothesis(
     run_id: str,
     hypothesis_packet: Dict,
-    created_by: Optional[str] = None,
+    created_by: str | None = None,
 ) -> Dict:
     """Submit a validated hypothesis packet to a Co-Scientist run.
 
@@ -2276,7 +2308,7 @@ def submit_hypothesis(
 
 
 @collab_mcp.tool()
-def list_hypotheses(run_id: str, status: Optional[str] = None) -> Dict:
+def list_hypotheses(run_id: str, status: str | None = None) -> Dict:
     """List compact hypothesis summaries for a Co-Scientist run.
 
     AUTOMATIC TRIGGERS - Call this when:
@@ -2301,9 +2333,9 @@ def list_hypotheses(run_id: str, status: Optional[str] = None) -> Dict:
 @collab_mcp.tool()
 def start_hypothesis_verification(
     run_id: str,
-    hypothesis_ids: Optional[List[str]] = None,
-    top_k: Optional[int] = None,
-    created_by: Optional[str] = None,
+    hypothesis_ids: list[str] | None = None,
+    top_k: int | None = None,
+    created_by: str | None = None,
 ) -> Dict:
     """Send selected Co-Scientist hypotheses to the verification session.
 
@@ -2343,7 +2375,7 @@ def submit_verification(
     run_id: str,
     hypothesis_id: str,
     verification_report: Dict,
-    created_by: Optional[str] = None,
+    created_by: str | None = None,
 ) -> Dict:
     """Submit a verification report for one Co-Scientist hypothesis.
 
@@ -2400,7 +2432,7 @@ def get_co_scientist_report(run_id: str) -> Dict:
 @collab_mcp.tool()
 def create_co_scientist_final_report(
     run_id: str,
-    created_by: Optional[str] = None,
+    created_by: str | None = None,
     mark_complete: bool = True,
 ) -> Dict:
     """Create the final Co-Scientist report artifact for a verified run.
@@ -2439,9 +2471,9 @@ def create_co_scientist_final_report(
 def export_co_scientist_findings(
     run_id: str,
     created_by: str,
-    project: Optional[str] = None,
-    tags: Optional[List[str]] = None,
-    proposed_by: Optional[str] = None,
+    project: str | None = None,
+    tags: list[str] | None = None,
+    proposed_by: str | None = None,
 ) -> Dict:
     """Export supported Co-Scientist claims into the main knowledge library.
 
@@ -2503,10 +2535,10 @@ def export_co_scientist_findings(
 @collab_mcp.tool()
 def evaluate_co_scientist_run(
     run_id: str,
-    token_count: Optional[int] = None,
-    cost_usd: Optional[float] = None,
-    human_edits_needed: Optional[int] = None,
-    expert_accepted: Optional[bool] = None,
+    token_count: int | None = None,
+    cost_usd: float | None = None,
+    human_edits_needed: int | None = None,
+    expert_accepted: bool | None = None,
 ) -> Dict:
     """Evaluate a completed or in-progress Co-Scientist run.
 
@@ -2552,7 +2584,7 @@ def get_co_scientist_benchmark_tasks() -> Dict:
 
 
 @collab_mcp.tool()
-def compare_co_scientist_workflows(results: List[Dict]) -> Dict:
+def compare_co_scientist_workflows(results: list[Dict]) -> Dict:
     """Compare benchmark results across workflow types.
 
     AUTOMATIC TRIGGERS - Call this when:
@@ -2570,7 +2602,7 @@ def compare_co_scientist_workflows(results: List[Dict]) -> Dict:
 
 
 @collab_mcp.tool()
-def help_collab(tool_name: Optional[str] = None) -> Dict:
+def help_collab(tool_name: str | None = None) -> Dict:
     """Get help about all collab MCP tools or a specific tool.
 
     Call this with no arguments to see all available tools and their purposes.

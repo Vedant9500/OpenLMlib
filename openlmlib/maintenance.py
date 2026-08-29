@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
 import json
 import logging
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +33,10 @@ class StaleFinding:
 class ConsolidationGroup:
     """A group of similar findings that can be consolidated."""
     representative_id: str
-    member_ids: List[str]
-    similarity_scores: List[float]
-    claims: List[str]
-    projects: List[str]
+    member_ids: list[str]
+    similarity_scores: list[float]
+    claims: list[str]
+    projects: list[str]
 
 
 @dataclass
@@ -58,7 +58,7 @@ class MaintenanceEngine:
         conn,
         embedder=None,
         vector_store=None,
-        settings: Optional[MaintenanceSettings] = None,
+        settings: MaintenanceSettings | None = None,
     ) -> None:
         self._conn = conn
         self._embedder = embedder
@@ -67,9 +67,9 @@ class MaintenanceEngine:
 
     def find_stale_findings(
         self,
-        validity_days: Optional[int] = None,
-        status_filter: Optional[str] = None,
-    ) -> List[StaleFinding]:
+        validity_days: int | None = None,
+        status_filter: str | None = None,
+    ) -> list[StaleFinding]:
         """Find findings that exceed the validity window and need review."""
         days = validity_days or self._settings.validity_days
         cutoff = datetime.now(timezone.utc).replace(microsecond=0)
@@ -92,7 +92,7 @@ class MaintenanceEngine:
         query += " ORDER BY f.created_at ASC"
 
         rows = self._conn.execute(query, params).fetchall()
-        stale_findings: List[StaleFinding] = []
+        stale_findings: list[StaleFinding] = []
 
         for row in rows:
             created = _parse_utc(row["created_at"])
@@ -119,7 +119,7 @@ class MaintenanceEngine:
         )
         return stale_findings
 
-    def mark_for_review(self, finding_ids: List[str]) -> Dict[str, Any]:
+    def mark_for_review(self, finding_ids: list[str]) -> dict[str, Any]:
         """Mark findings as pending_review by updating their status."""
         marked = 0
         for finding_id in finding_ids:
@@ -140,9 +140,9 @@ class MaintenanceEngine:
 
     def find_consolidation_groups(
         self,
-        similarity_threshold: Optional[float] = None,
-        project: Optional[str] = None,
-    ) -> List[ConsolidationGroup]:
+        similarity_threshold: float | None = None,
+        project: str | None = None,
+    ) -> list[ConsolidationGroup]:
         """Find groups of similar findings that could be consolidated.
 
         Uses embedding similarity to cluster findings. Groups with high
@@ -163,7 +163,7 @@ class MaintenanceEngine:
 
         # Build claim list for similarity comparison
         claims = [(row["id"], row["claim"]) for row in rows]
-        groups: List[ConsolidationGroup] = []
+        groups: list[ConsolidationGroup] = []
         used_ids: set = set()
 
         for i, (id_a, claim_a) in enumerate(claims):
@@ -209,8 +209,8 @@ class MaintenanceEngine:
     def consolidate_group(
         self,
         group: ConsolidationGroup,
-        keep_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        keep_id: str | None = None,
+    ) -> dict[str, Any]:
         """Consolidate a group of similar findings into one.
 
         Keeps keep_id when provided (and present in the group); otherwise
@@ -250,7 +250,7 @@ class MaintenanceEngine:
             best = max(rows, key=lambda r: float(r["confidence"] or 0.0))
             target_id = best["id"]
 
-        def _load_list(raw: Any) -> List[Any]:
+        def _load_list(raw: Any) -> list[Any]:
             if raw is None:
                 return []
             if isinstance(raw, list):
@@ -262,18 +262,18 @@ class MaintenanceEngine:
                 return []
 
         target_row = next(row for row in rows if row["id"] == target_id)
-        merged_tags: List[Any] = _load_list(target_row["tags"])
-        merged_evidence: List[Any] = _load_list(target_row["evidence"])
-        merged_caveats: List[Any] = _load_list(target_row["caveats"])
+        merged_tags: list[Any] = _load_list(target_row["tags"])
+        merged_evidence: list[Any] = _load_list(target_row["evidence"])
+        merged_caveats: list[Any] = _load_list(target_row["caveats"])
 
-        def _extend_unique(dst: List[Any], values: List[Any]) -> None:
+        def _extend_unique(dst: list[Any], values: list[Any]) -> None:
             for value in values:
                 if value not in dst:
                     dst.append(value)
 
         timestamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
         merged_count = 0
-        archived_ids: List[str] = []
+        archived_ids: list[str] = []
 
         for row in rows:
             if row["id"] == target_id:
@@ -344,10 +344,10 @@ class MaintenanceEngine:
 
     def run_consolidation(
         self,
-        similarity_threshold: Optional[float] = None,
-        project: Optional[str] = None,
+        similarity_threshold: float | None = None,
+        project: str | None = None,
         auto_consolidate: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Full consolidation workflow: find groups and optionally consolidate."""
         groups = self.find_consolidation_groups(
             similarity_threshold=similarity_threshold,
@@ -357,7 +357,7 @@ class MaintenanceEngine:
         if not groups:
             return {"status": "ok", "message": "No consolidation groups found", "groups": 0}
 
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         total_merged = 0
 
         for group in groups:
@@ -388,8 +388,8 @@ class MaintenanceEngine:
         finding_id: str,
         task_id: str,
         failure_reason: str,
-        confidence_decay: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        confidence_decay: float | None = None,
+    ) -> dict[str, Any]:
         """Log a task failure related to a finding and decay its confidence.
 
         After archive_on_failure_count failures, the finding is archived.
@@ -498,9 +498,9 @@ class MaintenanceEngine:
 
     def get_failure_ledger(
         self,
-        finding_id: Optional[str] = None,
+        finding_id: str | None = None,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get failure ledger entries, optionally filtered by finding_id."""
         if finding_id:
             audit_row = self._conn.execute(
@@ -521,7 +521,7 @@ class MaintenanceEngine:
             (limit,),
         ).fetchall()
 
-        ledger: List[Dict[str, Any]] = []
+        ledger: list[dict[str, Any]] = []
         import json
         for row in rows:
             try:
@@ -538,7 +538,7 @@ class MaintenanceEngine:
         self,
         finding_id: str,
         reason: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Soft-archive a finding (doesn't delete, just marks as archived)."""
         row = self._conn.execute(
             "SELECT id, status FROM findings WHERE id = ?",
@@ -563,7 +563,7 @@ class MaintenanceEngine:
     def restore_finding(
         self,
         finding_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Restore an archived finding back to active status."""
         row = self._conn.execute(
             "SELECT id, status FROM findings WHERE id = ?",
@@ -587,8 +587,8 @@ class MaintenanceEngine:
 
     def get_maintenance_summary(
         self,
-        validity_days: Optional[int] = None,
-    ) -> Dict[str, Any]:
+        validity_days: int | None = None,
+    ) -> dict[str, Any]:
         """Get a summary of library health and maintenance status."""
         days = validity_days or self._settings.validity_days
 
@@ -617,7 +617,7 @@ class MaintenanceEngine:
         }
 
 
-def _parse_utc(value: str) -> Optional[datetime]:
+def _parse_utc(value: str) -> datetime | None:
     if not value:
         return None
     try:

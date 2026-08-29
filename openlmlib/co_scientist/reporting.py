@@ -6,7 +6,7 @@ import json
 import sqlite3
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from openlmlib.collab.artifact_store import ArtifactStore
 from openlmlib.collab.message_bus import MessageBus
@@ -21,7 +21,6 @@ from .orchestrator import (
     _write_run_state_to_sessions,
 )
 
-
 FINAL_REPORT_ARTIFACT_TYPE = "co_scientist_report"
 SUPPORTED_EXPORT_VERDICTS = frozenset({"supported", "partially_supported"})
 REJECTED_REPORT_VERDICTS = frozenset({"contradicted", "unsafe_or_out_of_scope"})
@@ -32,10 +31,10 @@ def create_final_report(
     sessions_dir: Path,
     run_id: str,
     *,
-    created_by: Optional[str] = None,
-    created_at: Optional[str] = None,
+    created_by: str | None = None,
+    created_at: str | None = None,
     mark_complete: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Create a final Co-Scientist report artifact for a completed verification run."""
     run_state, _ = _load_run_state(conn, run_id)
     if not _selected_reports_complete(run_state):
@@ -141,8 +140,8 @@ def create_final_report(
 def synthesize_final_report_payload(
     conn: sqlite3.Connection,
     sessions_dir: Path,
-    run_state: Dict[str, Any],
-) -> Dict[str, Any]:
+    run_state: dict[str, Any],
+) -> dict[str, Any]:
     """Build a deterministic final report payload from run state and artifacts."""
     packets, reports = _load_run_payloads(conn, sessions_dir, run_state)
     hypotheses = [
@@ -159,8 +158,8 @@ def synthesize_final_report_payload(
     best_supported = []
     rejected = []
     remaining_unknowns = []
-    suggested_next_steps: List[str] = []
-    safety_notes: List[str] = []
+    suggested_next_steps: list[str] = []
+    safety_notes: list[str] = []
 
     for hypothesis in ranked:
         hypothesis_id = hypothesis["hypothesis_id"]
@@ -225,7 +224,7 @@ def synthesize_final_report_payload(
     }
 
 
-def render_final_report_markdown(report: Dict[str, Any]) -> str:
+def render_final_report_markdown(report: dict[str, Any]) -> str:
     """Render a final report payload as markdown."""
     lines = [
         f"# Co-Scientist Final Report: {report['run_id']}",
@@ -291,7 +290,7 @@ def render_final_report_markdown(report: Dict[str, Any]) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
-def render_run_memory_summary(report: Dict[str, Any]) -> str:
+def render_run_memory_summary(report: dict[str, Any]) -> str:
     """Render a compact run summary for future session recall."""
     supported = ", ".join(
         f"{item['hypothesis_id']}:{item['verdict']}"
@@ -318,18 +317,18 @@ def export_supported_findings(
     sessions_dir: Path,
     run_id: str,
     *,
-    project: Optional[str] = None,
-    tags: Optional[List[str]] = None,
-    proposed_by: Optional[str] = None,
-) -> Dict[str, Any]:
+    project: str | None = None,
+    tags: list[str] | None = None,
+    proposed_by: str | None = None,
+) -> dict[str, Any]:
     """Export only supported Co-Scientist claims into the main library."""
     run_state, _ = _load_run_state(conn, run_id)
     packets, reports = _load_run_payloads(conn, sessions_dir, run_state)
     base_tags = list(tags or [])
     project_name = project or f"Co-Scientist: {run_state['topic']}"
-    exported: List[Dict[str, Any]] = []
-    failed: List[Dict[str, Any]] = []
-    skipped: List[Dict[str, Any]] = []
+    exported: list[dict[str, Any]] = []
+    failed: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
 
     for hypothesis_id in run_state.get("selected_hypothesis_ids", []):
         summary = run_state.get("hypotheses", {}).get(hypothesis_id, {})
@@ -401,7 +400,7 @@ def export_supported_findings(
     }
 
 
-def get_supported_hypothesis_ids(run_state: Dict[str, Any]) -> List[str]:
+def get_supported_hypothesis_ids(run_state: dict[str, Any]) -> list[str]:
     return [
         hypothesis_id
         for hypothesis_id, report in run_state.get("verification_reports", {}).items()
@@ -409,7 +408,7 @@ def get_supported_hypothesis_ids(run_state: Dict[str, Any]) -> List[str]:
     ]
 
 
-def get_rejected_hypothesis_ids(run_state: Dict[str, Any]) -> List[str]:
+def get_rejected_hypothesis_ids(run_state: dict[str, Any]) -> list[str]:
     return [
         hypothesis_id
         for hypothesis_id, report in run_state.get("verification_reports", {}).items()
@@ -417,7 +416,7 @@ def get_rejected_hypothesis_ids(run_state: Dict[str, Any]) -> List[str]:
     ]
 
 
-def get_remaining_unknown_hypothesis_ids(run_state: Dict[str, Any]) -> List[str]:
+def get_remaining_unknown_hypothesis_ids(run_state: dict[str, Any]) -> list[str]:
     reports = run_state.get("verification_reports", {})
     return [
         hypothesis_id
@@ -430,13 +429,13 @@ def get_remaining_unknown_hypothesis_ids(run_state: Dict[str, Any]) -> List[str]
 def _load_run_payloads(
     conn: sqlite3.Connection,
     sessions_dir: Path,
-    run_state: Dict[str, Any],
-) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Dict[str, Any]]]:
-    packets: Dict[str, Dict[str, Any]] = {}
+    run_state: dict[str, Any],
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    packets: dict[str, dict[str, Any]] = {}
     for hypothesis_id in run_state.get("hypothesis_ids", []):
         packets[hypothesis_id] = _load_hypothesis_packet(conn, sessions_dir, run_state, hypothesis_id)
 
-    reports: Dict[str, Dict[str, Any]] = {}
+    reports: dict[str, dict[str, Any]] = {}
     store = ArtifactStore(conn, sessions_dir)
     for hypothesis_id, summary in run_state.get("verification_reports", {}).items():
         artifact_id = summary.get("artifact_id")
@@ -469,7 +468,7 @@ def _export_confidence(verdict: str, confidence: Any) -> float:
     return min(value, 0.9)
 
 
-def _format_export_failure(hypothesis_id: str, result: Dict[str, Any]) -> Dict[str, Any]:
+def _format_export_failure(hypothesis_id: str, result: dict[str, Any]) -> dict[str, Any]:
     """Map library.add_finding non-ok payloads into export failure fields."""
     issues = result.get("issues")
     reason = (
@@ -486,7 +485,7 @@ def _format_export_failure(hypothesis_id: str, result: Dict[str, Any]) -> Dict[s
         )
         or "export rejected"
     )
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "hypothesis_id": hypothesis_id,
         "reason": reason,
     }
@@ -498,11 +497,11 @@ def _format_export_failure(hypothesis_id: str, result: Dict[str, Any]) -> Dict[s
 
 
 def _export_evidence(
-    packet: Dict[str, Any],
-    report: Dict[str, Any],
+    packet: dict[str, Any],
+    report: dict[str, Any],
     *,
     claim: str = "",
-) -> List[str]:
+) -> list[str]:
     evidence = [str(item) for item in report.get("supporting_evidence", []) if str(item).strip()]
     citations = [str(item) for item in report.get("citations", []) if str(item).strip()]
     packet_sources = [
@@ -520,9 +519,9 @@ def _export_evidence(
 
 
 def _export_reasoning(
-    run_state: Dict[str, Any],
-    summary: Dict[str, Any],
-    report: Dict[str, Any],
+    run_state: dict[str, Any],
+    summary: dict[str, Any],
+    report: dict[str, Any],
 ) -> str:
     reasoning = "\n".join([
         f"Exported from Co-Scientist run {run_state['run_id']} on topic: {run_state['topic']}.",
@@ -542,8 +541,8 @@ def _export_reasoning(
     return reasoning
 
 
-def _dedupe_non_empty(items: List[Any]) -> List[str]:
-    result: List[str] = []
+def _dedupe_non_empty(items: list[Any]) -> list[str]:
+    result: list[str] = []
     seen = set()
     for item in items:
         text = str(item).strip()

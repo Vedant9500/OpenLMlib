@@ -7,16 +7,17 @@ creating generation or verification sessions.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
-from typing import Dict, Iterable, List, Optional, Pattern, Sequence
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
+from re import Pattern
 
 
 class CoScientistScopeError(ValueError):
     """Raised when a Co-Scientist request is outside the allowed scope."""
 
 
-ACCEPTED_DOMAINS: List[str] = [
+ACCEPTED_DOMAINS: list[str] = [
     "software architecture and codebase research",
     "safe technical literature review",
     "safe scientific and engineering ideation",
@@ -24,14 +25,14 @@ ACCEPTED_DOMAINS: List[str] = [
     "hypothesis generation followed by independent verification",
 ]
 
-BLOCKED_DOMAINS: List[str] = [
+BLOCKED_DOMAINS: list[str] = [
     "harmful biological, chemical, radiological, or weapons research",
     "exploit development, malware, credential theft, phishing, or stealth abuse",
     "privacy invasion, doxxing, stalking, or personal-data exfiltration",
     "instructions to bypass safety controls, access controls, or monitoring",
 ]
 
-PHASE_0_LIMITS: List[str] = [
+PHASE_0_LIMITS: list[str] = [
     "artifact/session orchestration only",
     "read-mostly research by default",
     "no autonomous Codex or external worker spawning",
@@ -39,7 +40,7 @@ PHASE_0_LIMITS: List[str] = [
     "no automatic export of speculative findings",
 ]
 
-APPROVAL_REQUIRED_ACTIONS: List[str] = [
+APPROVAL_REQUIRED_ACTIONS: list[str] = [
     "spending money or consuming paid external services",
     "running long jobs, benchmarks, or experiments",
     "modifying code, files, repositories, databases, or external systems",
@@ -60,14 +61,14 @@ class ScopeRule:
 class ScopeDecision:
     allowed: bool
     risk_level: str
-    categories: List[str]
-    reasons: List[str]
-    required_approvals: List[str]
-    accepted_domains: List[str]
-    blocked_domains: List[str]
-    phase_0_limits: List[str]
+    categories: list[str]
+    reasons: list[str]
+    required_approvals: list[str]
+    accepted_domains: list[str]
+    blocked_domains: list[str]
+    phase_0_limits: list[str]
 
-    def to_dict(self) -> Dict[str, object]:
+    def to_dict(self) -> dict[str, object]:
         return {
             "allowed": self.allowed,
             "risk_level": self.risk_level,
@@ -174,18 +175,18 @@ APPROVAL_RULES: Sequence[ScopeRule] = (
 )
 
 
-def _normalize_parts(topic: str, constraints: Optional[Iterable[str]]) -> str:
+def _normalize_parts(topic: str, constraints: Iterable[str] | None) -> str:
     parts = [topic or ""]
     if constraints:
         parts.extend(str(item) for item in constraints if item is not None)
     return "\n".join(parts).strip()
 
 
-def _matching_rules(text: str, rules: Sequence[ScopeRule]) -> List[ScopeRule]:
+def _matching_rules(text: str, rules: Sequence[ScopeRule]) -> list[ScopeRule]:
     return [rule for rule in rules if rule.pattern.search(text)]
 
 
-def get_co_scientist_scope_policy() -> Dict[str, object]:
+def get_co_scientist_scope_policy() -> dict[str, object]:
     """Return the Phase 0 Co-Scientist scope policy."""
     return {
         "accepted_domains": list(ACCEPTED_DOMAINS),
@@ -198,8 +199,8 @@ def get_co_scientist_scope_policy() -> Dict[str, object]:
 
 def screen_co_scientist_scope(
     topic: str,
-    constraints: Optional[List[str]] = None,
-) -> Dict[str, object]:
+    constraints: list[str] | None = None,
+) -> dict[str, object]:
     """Screen a proposed Co-Scientist run before session creation.
 
     The result is intentionally conservative: blocked topics return
@@ -254,8 +255,8 @@ def screen_co_scientist_scope(
 
 def ensure_co_scientist_scope_allowed(
     topic: str,
-    constraints: Optional[List[str]] = None,
-) -> Dict[str, object]:
+    constraints: list[str] | None = None,
+) -> dict[str, object]:
     """Return the screening decision or raise CoScientistScopeError if blocked."""
     decision = screen_co_scientist_scope(topic, constraints)
     if not decision.get("allowed"):

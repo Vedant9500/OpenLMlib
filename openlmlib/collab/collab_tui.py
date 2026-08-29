@@ -5,17 +5,17 @@ import json
 import os
 import sys
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
 try:
-    from openlmlib.collab.db import connect_collab_db, init_collab_db
-    from openlmlib.collab.session import create_collab_session, join_collab_session
-    from openlmlib.collab.message_bus import MessageBus
     from openlmlib.collab.artifact_store import ArtifactStore
     from openlmlib.collab.context_compiler import ContextCompiler
+    from openlmlib.collab.db import connect_collab_db, init_collab_db
+    from openlmlib.collab.message_bus import MessageBus
+    from openlmlib.collab.session import create_collab_session, join_collab_session
     from openlmlib.settings import resolve_global_settings_path
 except ImportError as e:
     print(f"Import error: {e}")
@@ -32,7 +32,7 @@ DEFAULT_HEADERS = {
 def get_api_key() -> str:
     key = os.environ.get("OPENROUTER_API_KEY")
     if key:
-        print(f"Using API key from environment")
+        print("Using API key from environment")
         return key
     return input("Enter your OpenRouter API key: ").strip()
 
@@ -183,15 +183,14 @@ def call_llm(api_key: str, model: str, system_prompt: str, user_prompt: str, max
     except urllib.error.HTTPError as e:
         return f"Error: {e.code} - {e.reason}"
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error: {e!s}"
 
 
 def _extract_json_object(text: str) -> dict:
     raw = text.strip()
     if raw.startswith("```"):
         raw = raw.split("\n", 1)[1] if "\n" in raw else ""
-        if raw.endswith("```"):
-            raw = raw[:-3]
+        raw = raw.removesuffix("```")
     start = raw.find("{")
     end = raw.rfind("}")
     if start == -1 or end == -1 or end <= start:
@@ -281,7 +280,7 @@ def run_real_session(
     compiler = ContextCompiler(conn, bus, store)
     
     # Create session
-    print(f"\n[1] Creating session...")
+    print("\n[1] Creating session...")
     result = create_collab_session(
         conn=conn,
         sessions_dir=sessions_dir,
@@ -455,7 +454,7 @@ def run_real_session(
             time.sleep(round_delay)
     
     # Show messages
-    print(f"\n[6] Session messages:")
+    print("\n[6] Session messages:")
     messages = bus.tail(session_id, 10)
     for msg in messages:
         to = msg.get("to_agent") or "all"

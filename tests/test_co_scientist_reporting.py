@@ -4,8 +4,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from openlmlib.collab import db as collab_db
-from openlmlib.collab.db import connect_collab_db, init_collab_db
 from openlmlib.co_scientist.hypothesis import new_hypothesis_id
 from openlmlib.co_scientist.orchestrator import (
     CoScientistRunError,
@@ -19,6 +17,8 @@ from openlmlib.co_scientist.reporting import (
     create_final_report,
     export_supported_findings,
 )
+from openlmlib.collab import db as collab_db
+from openlmlib.collab.db import connect_collab_db, init_collab_db
 
 
 def packet(run_id, title, score=0.8, hypothesis_id=None):
@@ -247,6 +247,7 @@ class TestCoScientistReporting(unittest.TestCase):
 
     def test_mcp_export_requires_orchestrator_created_by(self):
         import os
+
         import openlmlib.collab.collab_mcp as collab_mcp_module
 
         settings_path = self.root / "config" / "settings.json"

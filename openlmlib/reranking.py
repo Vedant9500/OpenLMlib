@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
 import logging
-
-import numpy as np
+from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +47,8 @@ class CrossEncoderReranker:
     def score_pairs(
         self,
         query: str,
-        documents: List[str],
-    ) -> List[float]:
+        documents: list[str],
+    ) -> list[float]:
         """Score (query, document) pairs and return raw cross-encoder scores."""
         if not documents:
             return []
@@ -67,11 +65,11 @@ class CrossEncoderReranker:
     def rerank(
         self,
         query: str,
-        candidates: List[Dict[str, Any]],
-        top_k: Optional[int] = None,
+        candidates: list[dict[str, Any]],
+        top_k: int | None = None,
         text_field: str = "claim",
         fallback_score_field: str = "final_score",
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Rerank candidate findings by cross-encoder relevance.
 
         Each candidate is scored by passing (query, candidate_text) through the
@@ -126,9 +124,9 @@ class CrossEncoderReranker:
         return reranked
 
     @staticmethod
-    def _build_document_text(item: Dict[str, Any], text_field: str) -> str:
+    def _build_document_text(item: dict[str, Any], text_field: str) -> str:
         """Build a text representation of a finding for cross-encoder scoring."""
-        parts: List[str] = []
+        parts: list[str] = []
 
         # Primary text field
         primary = item.get(text_field, "")
@@ -173,9 +171,9 @@ class HybridReranker:
     def rerank(
         self,
         query: str,
-        candidates: List[Dict[str, Any]],
-        top_k: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+        candidates: list[dict[str, Any]],
+        top_k: int | None = None,
+    ) -> list[dict[str, Any]]:
         """Rerank with blended scoring."""
         if not candidates:
             return []
@@ -204,7 +202,7 @@ class HybridReranker:
         return reranked
 
 
-def _normalize_scores(scores: List[float]) -> List[float]:
+def _normalize_scores(scores: list[float]) -> list[float]:
     """Min-max normalize scores to [0, 1]. Returns zeros for empty or uniform lists."""
     if not scores:
         return []

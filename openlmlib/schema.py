@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List
 import datetime
 import hashlib
 import json
 import uuid
+from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -13,21 +13,21 @@ class PaperContext:
     """Lightweight reference to source paper and what else it covers."""
     title: str = ""
     url: str = ""
-    also_covers: List[str] = field(default_factory=list)
+    also_covers: list[str] = field(default_factory=list)
 
 
 @dataclass
 class FindingText:
-    tags: List[str] = field(default_factory=list)
-    evidence: List[str] = field(default_factory=list)
-    caveats: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
+    evidence: list[str] = field(default_factory=list)
+    caveats: list[str] = field(default_factory=list)
     reasoning: str = ""
     # Domain/field for high-level categorization (e.g., "LLM", "Symbolic Regression")
     domain: str = ""
     # Source paper context (what else the paper mentions beyond this finding)
     paper: PaperContext = field(default_factory=PaperContext)
     # Related papers worth noting
-    related_papers: List[Dict[str, str]] = field(default_factory=list)  # [{title, url}]
+    related_papers: list[dict[str, str]] = field(default_factory=list)  # [{title, url}]
 
 
 @dataclass
@@ -35,8 +35,8 @@ class FindingAudit:
     proposed_by: str = ""
     evidence_provided: bool = False
     reasoning_length: int = 0
-    failure_log: List[Dict[str, Any]] = field(default_factory=list)
-    confidence_history: List[Dict[str, Any]] = field(default_factory=list)
+    failure_log: list[dict[str, Any]] = field(default_factory=list)
+    confidence_history: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -53,7 +53,7 @@ class Finding:
     audit: FindingAudit
     full_text: str = ""
 
-    def to_content_dict(self, include_hash: bool = True) -> Dict[str, Any]:
+    def to_content_dict(self, include_hash: bool = True) -> dict[str, Any]:
         data = {
             "id": self.id,
             "project": self.project,
@@ -102,7 +102,7 @@ def new_finding_id() -> str:
     return "fnd-" + uuid.uuid4().hex[:12]
 
 
-def compute_content_hash(data: Dict[str, Any]) -> str:
+def compute_content_hash(data: dict[str, Any]) -> str:
     payload = json.dumps(data, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 

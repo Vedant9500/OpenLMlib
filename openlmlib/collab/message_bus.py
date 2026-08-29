@@ -9,12 +9,10 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
-import threading
-from pathlib import Path
-from typing import Dict, List, Optional
-
 import sqlite3
+import threading
+import uuid
+from pathlib import Path
 
 from . import db
 from .errors import VALID_MESSAGE_TYPES, InvalidMessageTypeError, RulesViolationError
@@ -23,7 +21,7 @@ from .rules_engine import RulesEngine
 logger = logging.getLogger(__name__)
 
 # In-memory cache for agent offsets: {(session_id, agent_id): seq}
-_offset_cache: Dict[tuple[str, str], int] = {}
+_offset_cache: dict[tuple[str, str], int] = {}
 _offset_cache_lock = threading.Lock()
 
 
@@ -75,11 +73,11 @@ class MessageBus:
         msg_type: str,
         content: str,
         created_at: str,
-        to_agent: Optional[str] = None,
-        metadata: Optional[Dict] = None,
-        from_model: Optional[str] = None,
-        msg_id: Optional[str] = None,
-    ) -> Dict:
+        to_agent: str | None = None,
+        metadata: dict | None = None,
+        from_model: str | None = None,
+        msg_id: str | None = None,
+    ) -> dict:
         """Send a message to a session.
 
         Atomically inserts into SQLite and appends to JSONL shadow log.
@@ -105,7 +103,7 @@ class MessageBus:
 
         # Enforce session rules for all callers (MCP, library API, TUI).
         # System messages skip rules so lifecycle events always land.
-        rule_warnings: List[str] = []
+        rule_warnings: list[str] = []
         if from_agent != "system" and msg_type != "system":
             session = db.get_session(self.conn, session_id) or {}
             engine = RulesEngine(session.get("rules") or {})
@@ -194,10 +192,10 @@ class MessageBus:
         session_id: str,
         last_seq: int,
         limit: int = 50,
-        msg_types: Optional[List[str]] = None,
-        from_agent: Optional[str] = None,
-        reader_agent: Optional[str] = None,
-    ) -> List[Dict]:
+        msg_types: list[str] | None = None,
+        from_agent: str | None = None,
+        reader_agent: str | None = None,
+    ) -> list[dict]:
         """Read messages since last_seq with optional filters."""
         return db.get_messages_since(
             self.conn,
@@ -209,7 +207,7 @@ class MessageBus:
             reader_agent=reader_agent,
         )
 
-    def tail(self, session_id: str, n: int = 20, reader_agent: Optional[str] = None) -> List[Dict]:
+    def tail(self, session_id: str, n: int = 20, reader_agent: str | None = None) -> list[dict]:
         """Get the last N messages."""
         return db.get_messages_tail(self.conn, session_id, n, reader_agent=reader_agent)
 
@@ -218,9 +216,9 @@ class MessageBus:
         session_id: str,
         pattern: str,
         limit: int = 50,
-        msg_types: Optional[List[str]] = None,
-        reader_agent: Optional[str] = None,
-    ) -> List[Dict]:
+        msg_types: list[str] | None = None,
+        reader_agent: str | None = None,
+    ) -> list[dict]:
         """Search messages by keyword using FTS5."""
         return db.grep_messages(
             self.conn, session_id, pattern, limit, msg_types, reader_agent=reader_agent
@@ -231,12 +229,12 @@ class MessageBus:
         session_id: str,
         start_seq: int,
         end_seq: int,
-        reader_agent: Optional[str] = None,
-    ) -> List[Dict]:
+        reader_agent: str | None = None,
+    ) -> list[dict]:
         """Read messages in a sequence range."""
         return db.get_message_range(self.conn, session_id, start_seq, end_seq, reader_agent=reader_agent)
 
-    def _append_jsonl(self, session_id: str, entry: Dict) -> None:
+    def _append_jsonl(self, session_id: str, entry: dict) -> None:
         """Append a single JSON line to the shadow log."""
         jsonl_path = self._jsonl_path(session_id)
         jsonl_path.parent.mkdir(parents=True, exist_ok=True)

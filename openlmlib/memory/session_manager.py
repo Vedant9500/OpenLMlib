@@ -14,8 +14,9 @@ from __future__ import annotations
 import atexit
 import logging
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 from uuid import uuid4
 
 from .hooks import (
@@ -39,8 +40,8 @@ class SessionManager:
     def __init__(
         self,
         storage: MemoryStorage,
-        observation_callback: Optional[Callable] = None,
-        memory_settings: Optional[Any] = None,
+        observation_callback: Callable | None = None,
+        memory_settings: Any | None = None,
     ):
         """
         Initialize session manager.
@@ -54,7 +55,7 @@ class SessionManager:
         self.storage = storage
         self.observation_callback = observation_callback
         self.hooks = HookRegistry()
-        self.active_sessions: Dict[str, Dict[str, Any]] = {}
+        self.active_sessions: dict[str, dict[str, Any]] = {}
 
         # Register default hooks
         self._register_default_hooks()
@@ -97,7 +98,7 @@ class SessionManager:
         hook_type: HookType,
         handler: Callable,
         priority: int = 0,
-        name: Optional[str] = None
+        name: str | None = None
     ) -> None:
         """
         Register a custom lifecycle hook.
@@ -114,9 +115,9 @@ class SessionManager:
     def on_session_start(
         self,
         session_id: str,
-        user_id: Optional[str] = None,
-        query: Optional[str] = None
-    ) -> Dict[str, Any]:
+        user_id: str | None = None,
+        query: str | None = None
+    ) -> dict[str, Any]:
         """
         Called when a new session starts (MCP client connects).
 
@@ -194,7 +195,7 @@ class SessionManager:
         tool_name: str,
         tool_input: str,
         tool_output: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Called after MCP tool execution (PostToolUse hook).
 
@@ -292,8 +293,8 @@ class SessionManager:
     def on_stop(
         self,
         session_id: str,
-        summary_data: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        summary_data: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Called when session pauses (Stop hook).
 
@@ -344,7 +345,7 @@ class SessionManager:
         self,
         session_id: str,
         generate_summary: bool = True
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Called when session ends (SessionEnd hook).
 
@@ -499,7 +500,7 @@ class SessionManager:
             logger.error(f"Failed to check memory storage during cleanup: {exc}")
             return False
 
-    def get_active_sessions(self) -> List[Dict[str, Any]]:
+    def get_active_sessions(self) -> list[dict[str, Any]]:
         """
         Get all active sessions.
 
@@ -517,7 +518,7 @@ class SessionManager:
             for sid, data in self.active_sessions.items()
         ]
 
-    def get_session_info(self, session_id: str) -> Optional[Dict[str, Any]]:
+    def get_session_info(self, session_id: str) -> dict[str, Any] | None:
         """
         Get info about an active session.
 
@@ -541,7 +542,7 @@ class SessionManager:
 
     def _compress_observations(
         self,
-        observations: List[Dict[str, Any]]
+        observations: list[dict[str, Any]]
     ) -> int:
         """
         Compress observations that don't have summaries yet.
@@ -591,8 +592,8 @@ class SessionManager:
 
     def _generate_session_summary(
         self,
-        observations: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        observations: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """
         Generate a simple summary from session observations.
 

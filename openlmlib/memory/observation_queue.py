@@ -10,7 +10,8 @@ from __future__ import annotations
 import logging
 import queue
 import threading
-from typing import Any, Callable, Dict, Optional
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ class ObservationQueue:
 
     def __init__(
         self,
-        processor: Optional[Callable[[Dict[str, Any]], Any]] = None,
+        processor: Callable[[dict[str, Any]], Any] | None = None,
         maxsize: int = 1000,
         worker_name: str = "memory-worker"
     ):
@@ -95,7 +96,7 @@ class ObservationQueue:
         )
         return True
 
-    def enqueue(self, observation: Dict[str, Any], timeout: float = 5.0) -> bool:
+    def enqueue(self, observation: dict[str, Any], timeout: float = 5.0) -> bool:
         """
         Add observation to processing queue.
 
@@ -183,7 +184,7 @@ class ObservationQueue:
         """Check if queue is empty."""
         return self.queue.empty()
 
-    def join(self, timeout: Optional[float] = None) -> bool:
+    def join(self, timeout: float | None = None) -> bool:
         """
         Wait for all items to be processed.
 
@@ -201,7 +202,6 @@ class ObservationQueue:
 
         # Use a thread to call queue.join() with timeout
         import threading
-        import time
         evt = threading.Event()
 
         def _join():
@@ -212,7 +212,7 @@ class ObservationQueue:
         t.start()
         return evt.wait(timeout)
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         """Get queue statistics."""
         return {
             "running": self.running,
@@ -225,7 +225,7 @@ class ObservationQueue:
 
 # Default processor for observations
 
-def default_observation_processor(observation: Dict[str, Any]) -> None:
+def default_observation_processor(observation: dict[str, Any]) -> None:
     """
     Default processor for observations.
     Compresses and updates observation in storage.
@@ -239,7 +239,6 @@ def default_observation_processor(observation: Dict[str, Any]) -> None:
         observation: Observation data dict
     """
     from .compressor import MemoryCompressor
-    from .storage import MemoryStorage
 
     # This is a simplified example
     # In reality, you'd inject storage and compressor instances

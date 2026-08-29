@@ -1,6 +1,10 @@
 import unittest
 
-from openlmlib.decomposition import DocumentDecomposer, DecomposedFinding, _component_relevance
+from openlmlib.decomposition import (
+    DecomposedFinding,
+    DocumentDecomposer,
+    _component_relevance,
+)
 
 
 class TestComponentRelevance(unittest.TestCase):

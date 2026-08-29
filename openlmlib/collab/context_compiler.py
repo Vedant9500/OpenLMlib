@@ -9,13 +9,11 @@ Inspired by Google ADK's "context as a compiled view" pattern.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
-
 import sqlite3
 
 from . import db
-from .message_bus import MessageBus
 from .artifact_store import ArtifactStore
+from .message_bus import MessageBus
 
 MODEL_PROFILES = {
     "claude": {
@@ -63,7 +61,7 @@ class ContextCompiler:
         session_id: str,
         agent_id: str,
         max_messages: int = 5,
-    ) -> Dict:
+    ) -> dict:
         """Compile a complete context view for an agent.
 
         Returns a structured dict containing:
@@ -162,7 +160,7 @@ class ContextCompiler:
             "autonomous_instructions": self.autonomous_instructions(),
         }
 
-    def format_context_for_prompt(self, context: Dict) -> str:
+    def format_context_for_prompt(self, context: dict) -> str:
         """Format a compiled context dict into a prompt-ready string."""
         if "error" in context:
             return f"ERROR: {context['error']}"
@@ -244,7 +242,7 @@ class ContextCompiler:
         self,
         session_id: str,
         agent_id: str,
-        agents: List[Dict],
+        agents: list[dict],
     ) -> str:
         """Return role-specific behavioral instructions for this agent.
 
@@ -393,7 +391,7 @@ class ContextCompiler:
             return "[Structured Findings]:\n" + content
         return content
 
-    def _format_messages(self, messages: List[Dict], current_agent_id: str, receiver_family: str = "default") -> List[str]:
+    def _format_messages(self, messages: list[dict], current_agent_id: str, receiver_family: str = "default") -> list[str]:
         """Format messages with clear attribution for the current agent and staged loading."""
         formatted = []
         total_msgs = len(messages)

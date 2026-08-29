@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import copy
-from typing import Any, Dict, List, Optional
 import logging
+from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -13,9 +13,9 @@ class DecomposedFinding:
     """A finding decomposed into its core components."""
     id: str
     claim: str
-    evidence: List[str]
+    evidence: list[str]
     reasoning: str
-    caveats: List[str]
+    caveats: list[str]
     relevance_score: float = 0.0
     filtered: bool = False
     filter_reason: str = ""
@@ -44,7 +44,7 @@ class DocumentDecomposer:
 
     def decompose(
         self,
-        finding: Dict[str, Any],
+        finding: dict[str, Any],
         query: str,
     ) -> DecomposedFinding:
         """Decompose a single finding into structured components.
@@ -100,18 +100,18 @@ class DocumentDecomposer:
 
     def decompose_many(
         self,
-        findings: List[Dict[str, Any]],
+        findings: list[dict[str, Any]],
         query: str,
-    ) -> List[DecomposedFinding]:
+    ) -> list[DecomposedFinding]:
         """Decompose multiple findings."""
         return [self.decompose(f, query) for f in findings]
 
     def recompose(
         self,
-        decomposed: List[DecomposedFinding],
-        originals_by_id: Optional[Dict[str, Dict[str, Any]]] = None,
+        decomposed: list[DecomposedFinding],
+        originals_by_id: dict[str, dict[str, Any]] | None = None,
         max_findings: int = 5,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Recompose decomposed findings back into context-ready dicts.
 
         Filters out low-relevance findings and rebuilds compact representations.
@@ -130,7 +130,7 @@ class DocumentDecomposer:
         active.sort(key=lambda d: d.relevance_score, reverse=True)
         active = active[:max_findings]
 
-        recomposed: List[Dict[str, Any]] = []
+        recomposed: list[dict[str, Any]] = []
         for d in active:
             item = copy.deepcopy((originals_by_id or {}).get(d.id, {}))
             item["id"] = d.id
@@ -151,10 +151,10 @@ class DocumentDecomposer:
 
     def decompose_and_recompose(
         self,
-        findings: List[Dict[str, Any]],
+        findings: list[dict[str, Any]],
         query: str,
         max_findings: int = 5,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Full decompose-then-recompose pipeline."""
         originals_by_id = {
             str(item.get("id")): item
@@ -194,7 +194,7 @@ def _component_relevance(query: str, text: str) -> float:
     return float(min(1.0, score))
 
 
-def _tokenize(text: str) -> List[str]:
+def _tokenize(text: str) -> list[str]:
     """Simple tokenizer for relevance scoring."""
     import re
     stopwords = {

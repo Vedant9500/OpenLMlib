@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import datetime as _dt
 import sqlite3
+from collections.abc import Iterable
 from copy import deepcopy
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
 
 from openlmlib.collab import db as collab_db
 
 from .orchestrator import _load_run_state
-
 
 WORKFLOW_TYPES = frozenset({
     "single_agent",
@@ -18,7 +18,7 @@ WORKFLOW_TYPES = frozenset({
     "two_session_co_scientist",
 })
 
-DEFAULT_BENCHMARK_TASKS: List[Dict[str, Any]] = [
+DEFAULT_BENCHMARK_TASKS: list[dict[str, Any]] = [
     {
         "task_id": "cosci_bench_001",
         "title": "MCP tool discoverability regression",
@@ -55,7 +55,7 @@ DEFAULT_BENCHMARK_TASKS: List[Dict[str, Any]] = [
 ]
 
 
-def get_benchmark_tasks() -> Dict[str, Any]:
+def get_benchmark_tasks() -> dict[str, Any]:
     """Return the built-in Phase 9 benchmark task set."""
     return {
         "tasks": deepcopy(DEFAULT_BENCHMARK_TASKS),
@@ -68,11 +68,11 @@ def evaluate_run(
     conn: sqlite3.Connection,
     run_id: str,
     *,
-    token_count: Optional[int] = None,
-    cost_usd: Optional[float] = None,
-    human_edits_needed: Optional[int] = None,
-    expert_accepted: Optional[bool] = None,
-) -> Dict[str, Any]:
+    token_count: int | None = None,
+    cost_usd: float | None = None,
+    human_edits_needed: int | None = None,
+    expert_accepted: bool | None = None,
+) -> dict[str, Any]:
     """Evaluate a two-session Co-Scientist run from persisted run state."""
     run_state, _ = _load_run_state(conn, run_id)
     hypotheses = list(run_state.get("hypotheses", {}).values())
@@ -129,7 +129,7 @@ def evaluate_run(
     }
 
 
-def evaluate_workflow_result(result: Dict[str, Any]) -> Dict[str, Any]:
+def evaluate_workflow_result(result: dict[str, Any]) -> dict[str, Any]:
     """Normalize one manually supplied benchmark workflow result."""
     workflow_type = result.get("workflow_type")
     if workflow_type not in WORKFLOW_TYPES:
@@ -172,13 +172,13 @@ def evaluate_workflow_result(result: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def compare_workflows(results: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+def compare_workflows(results: Iterable[dict[str, Any]]) -> dict[str, Any]:
     """Compare benchmark results by workflow type and recommend a default."""
     evaluated = [
         item if "quality_score" in item and "traceability_score" in item else evaluate_workflow_result(item)
         for item in results
     ]
-    grouped: Dict[str, List[Dict[str, Any]]] = {workflow: [] for workflow in WORKFLOW_TYPES}
+    grouped: dict[str, list[dict[str, Any]]] = {workflow: [] for workflow in WORKFLOW_TYPES}
     for item in evaluated:
         grouped[item["workflow_type"]].append(item)
 
@@ -195,7 +195,7 @@ def compare_workflows(results: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def _workflow_summary(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _workflow_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "runs": len(items),
         "mean_quality_score": _mean(item["quality_score"] for item in items),
@@ -206,7 +206,7 @@ def _workflow_summary(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def _recommend_workflow(summaries: Dict[str, Dict[str, Any]]) -> Dict[str, str]:
+def _recommend_workflow(summaries: dict[str, dict[str, Any]]) -> dict[str, str]:
     cosci = summaries.get("two_session_co_scientist")
     simpler_candidates = [
         summaries[workflow]
@@ -242,7 +242,7 @@ def _recommend_workflow(summaries: Dict[str, Dict[str, Any]]) -> Dict[str, str]:
     }
 
 
-def _duration_seconds(run_state: Dict[str, Any]) -> Optional[float]:
+def _duration_seconds(run_state: dict[str, Any]) -> float | None:
     start = _parse_iso(run_state.get("created_at"))
     report_times = [
         _parse_iso(report.get("created_at"))
@@ -254,7 +254,7 @@ def _duration_seconds(run_state: Dict[str, Any]) -> Optional[float]:
     return round((max(report_times) - start).total_seconds(), 3)
 
 
-def _parse_iso(value: Any) -> Optional[_dt.datetime]:
+def _parse_iso(value: Any) -> _dt.datetime | None:
     if not isinstance(value, str) or not value:
         return None
     text = value.replace("Z", "+00:00")
@@ -267,7 +267,7 @@ def _parse_iso(value: Any) -> Optional[_dt.datetime]:
     return parsed
 
 
-def _traceability_score(metrics: Dict[str, Any]) -> float:
+def _traceability_score(metrics: dict[str, Any]) -> float:
     return round(
         _mean([
             metrics.get("valid_hypothesis_rate", 0.0),
@@ -279,7 +279,7 @@ def _traceability_score(metrics: Dict[str, Any]) -> float:
     )
 
 
-def _quality_score(metrics: Dict[str, Any]) -> float:
+def _quality_score(metrics: dict[str, Any]) -> float:
     accepted = 1.0 if metrics.get("expert_accepted") is True else 0.0 if metrics.get("expert_accepted") is False else 0.5
     human_edits = metrics.get("human_edits_needed")
     edit_score = 0.5 if human_edits is None else max(0.0, 1.0 - min(10, int(human_edits)) / 10.0)
@@ -311,7 +311,7 @@ def _rate(numerator: int, denominator: int) -> float:
     return round(max(0.0, min(1.0, numerator / denominator)), 6)
 
 
-def _per_verified(value: Optional[Any], verified_count: int) -> Optional[float]:
+def _per_verified(value: Any | None, verified_count: int) -> float | None:
     if value is None or verified_count <= 0:
         return None
     return round(float(value) / verified_count, 6)

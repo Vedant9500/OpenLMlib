@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import os
-import socket
 import sqlite3
 import ssl
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
@@ -21,7 +21,7 @@ _URL_TIMEOUT_SEC = 3.0
 
 EVIDENCE_LABELS = frozenset({"support", "refute", "neutral"})
 
-EVIDENCE_QUALITY_RUBRIC: Dict[str, Dict[str, object]] = {
+EVIDENCE_QUALITY_RUBRIC: dict[str, dict[str, object]] = {
     "primary_source": {
         "score": 1.0,
         "description": "Primary source, official documentation, or directly authored source.",
@@ -47,7 +47,7 @@ EVIDENCE_QUALITY_RUBRIC: Dict[str, Dict[str, object]] = {
 EVIDENCE_QUALITY_LEVELS = frozenset(EVIDENCE_QUALITY_RUBRIC)
 
 
-def get_evidence_quality_rubric() -> Dict[str, object]:
+def get_evidence_quality_rubric() -> dict[str, object]:
     """Return the deterministic Phase 6 evidence labels and quality rubric."""
     return {
         "labels": sorted(EVIDENCE_LABELS),
@@ -61,9 +61,9 @@ def validate_evidence_items(
     require_label: bool = True,
     require_quality: bool = False,
     field_name: str = "evidence",
-) -> List[ValidationIssue]:
+) -> list[ValidationIssue]:
     """Validate Phase 6 evidence labels and optional quality levels."""
-    issues: List[ValidationIssue] = []
+    issues: list[ValidationIssue] = []
     if not isinstance(evidence, list) or not evidence:
         return [ValidationIssue(field_name, "Must be a non-empty evidence list")]
 
@@ -100,7 +100,7 @@ def validate_evidence_items(
     return issues
 
 
-def evidence_quality_score(evidence_item: Dict[str, Any]) -> float:
+def evidence_quality_score(evidence_item: dict[str, Any]) -> float:
     """Return rubric score for an evidence item, falling back to confidence."""
     quality = evidence_item.get("quality")
     if quality in EVIDENCE_QUALITY_RUBRIC:
@@ -114,19 +114,19 @@ def evidence_quality_score(evidence_item: Dict[str, Any]) -> float:
 def verify_citations(
     citations: Any,
     *,
-    conn: Optional[sqlite3.Connection] = None,
-    session_ids: Optional[Sequence[str]] = None,
-    workspace_root: Optional[Path] = None,
-    check_url_reachability: Optional[bool] = None,
-) -> Dict[str, object]:
+    conn: sqlite3.Connection | None = None,
+    session_ids: Sequence[str] | None = None,
+    workspace_root: Path | None = None,
+    check_url_reachability: bool | None = None,
+) -> dict[str, object]:
     """Verify that citations refer to a URL, local file, or known artifact.
 
     External URLs require valid syntax. When check_url_reachability is true
     (or OPENLMLIB_CHECK_CITATION_URLS=1), a short HEAD/GET probe is performed.
     Local paths and artifact IDs are checked against the filesystem/database.
     """
-    issues: List[ValidationIssue] = []
-    results: List[Dict[str, object]] = []
+    issues: list[ValidationIssue] = []
+    results: list[dict[str, object]] = []
     if not isinstance(citations, list) or not citations:
         return {
             "valid": False,
@@ -161,11 +161,11 @@ def verify_citations(
 def resolve_citation(
     citation: str,
     *,
-    conn: Optional[sqlite3.Connection] = None,
-    session_ids: Optional[Sequence[str]] = None,
-    workspace_root: Optional[Path] = None,
-    check_url_reachability: Optional[bool] = None,
-) -> Dict[str, object]:
+    conn: sqlite3.Connection | None = None,
+    session_ids: Sequence[str] | None = None,
+    workspace_root: Path | None = None,
+    check_url_reachability: bool | None = None,
+) -> dict[str, object]:
     """Resolve one citation to a URL, local file, or artifact record."""
     parsed = urlparse(citation)
     if parsed.scheme in {"http", "https"} and parsed.netloc:
@@ -222,12 +222,12 @@ def resolve_citation(
 
 
 def validate_hypothesis_grounding(
-    packet: Dict[str, Any],
+    packet: dict[str, Any],
     *,
-    conn: Optional[sqlite3.Connection] = None,
-    session_ids: Optional[Sequence[str]] = None,
-    workspace_root: Optional[Path] = None,
-) -> List[ValidationIssue]:
+    conn: sqlite3.Connection | None = None,
+    session_ids: Sequence[str] | None = None,
+    workspace_root: Path | None = None,
+) -> list[ValidationIssue]:
     """Validate evidence labels and citation resolution before verification."""
     issues = validate_evidence_items(packet.get("evidence"), require_label=True)
     citation_result = verify_citations(
@@ -243,11 +243,11 @@ def validate_hypothesis_grounding(
     return issues
 
 
-def evidence_issues_to_dicts(issues: Iterable[ValidationIssue]) -> List[Dict[str, str]]:
+def evidence_issues_to_dicts(issues: Iterable[ValidationIssue]) -> list[dict[str, str]]:
     return _issues_to_dicts(issues)
 
 
-def deepcopy_evidence_rubric() -> Dict[str, Dict[str, object]]:
+def deepcopy_evidence_rubric() -> dict[str, dict[str, object]]:
     return {
         name: {
             "score": item["score"],
@@ -260,9 +260,9 @@ def deepcopy_evidence_rubric() -> Dict[str, Dict[str, object]]:
 def _resolve_artifact(
     citation: str,
     *,
-    conn: Optional[sqlite3.Connection],
-    session_ids: Optional[Sequence[str]],
-) -> Optional[Dict[str, Any]]:
+    conn: sqlite3.Connection | None,
+    session_ids: Sequence[str] | None,
+) -> dict[str, Any] | None:
     if conn is None:
         return None
     try:
@@ -284,7 +284,7 @@ def _resolve_artifact(
         return None
 
 
-def _resolve_path(citation: str, workspace_root: Optional[Path]) -> Optional[Path]:
+def _resolve_path(citation: str, workspace_root: Path | None) -> Path | None:
     path = Path(citation)
     root = (workspace_root or Path.cwd()).resolve()
     candidates = [path]
@@ -326,14 +326,14 @@ def _probe_url(url: str, timeout: float = _URL_TIMEOUT_SEC) -> tuple:
             if method == "HEAD" and exc.code in {403, 405, 501}:
                 continue
             return False, f"URL returned HTTP {exc.code}"
-        except (URLError, socket.timeout, TimeoutError, ssl.SSLError, ValueError, OSError) as exc:
+        except (URLError, TimeoutError, ssl.SSLError, ValueError, OSError) as exc:
             if method == "HEAD":
                 continue
             return False, f"URL not reachable: {exc}"
     return False, "URL not reachable"
 
 
-def _issues_to_dicts(issues: Iterable[ValidationIssue]) -> List[Dict[str, str]]:
+def _issues_to_dicts(issues: Iterable[ValidationIssue]) -> list[dict[str, str]]:
     return [
         {"field": issue.field, "message": issue.message, "severity": issue.severity}
         for issue in issues

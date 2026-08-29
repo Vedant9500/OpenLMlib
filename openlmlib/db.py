@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 import re
+import sqlite3
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
 
 from .schema import Finding, FindingAudit, FindingText, PaperContext
 
@@ -170,7 +170,7 @@ def _json_dump(value) -> str:
     return json.dumps(value, separators=(",", ":"))
 
 
-def _json_load(value: Optional[str], default):
+def _json_load(value: str | None, default):
     if value is None:
         return default
     return json.loads(value)
@@ -255,7 +255,7 @@ def delete_finding(conn: sqlite3.Connection, finding_id: str) -> None:
         conn.execute("DELETE FROM findings WHERE id = ?", (finding_id,))
 
 
-def get_finding(conn: sqlite3.Connection, finding_id: str) -> Optional[Finding]:
+def get_finding(conn: sqlite3.Connection, finding_id: str) -> Finding | None:
     # Single query with LEFT JOIN across all three tables
     row = conn.execute(
         """
@@ -316,12 +316,12 @@ def get_finding(conn: sqlite3.Connection, finding_id: str) -> Optional[Finding]:
     )
 
 
-def get_finding_by_embedding_id(conn: sqlite3.Connection, embedding_id: int) -> Optional[str]:
+def get_finding_by_embedding_id(conn: sqlite3.Connection, embedding_id: int) -> str | None:
     row = conn.execute("SELECT id FROM findings WHERE embedding_id = ?", (embedding_id,)).fetchone()
     return row["id"] if row else None
 
 
-def list_findings(conn: sqlite3.Connection, limit: int = 50, offset: int = 0) -> List[Dict[str, str]]:
+def list_findings(conn: sqlite3.Connection, limit: int = 50, offset: int = 0) -> list[dict[str, str]]:
     rows = conn.execute(
         """
         SELECT id, project, claim, confidence, created_at, status
@@ -335,7 +335,7 @@ def list_findings(conn: sqlite3.Connection, limit: int = 50, offset: int = 0) ->
     return [dict(row) for row in rows]
 
 
-def search_findings(conn: sqlite3.Connection, query: str, limit: int = 10) -> List[Dict[str, str]]:
+def search_findings(conn: sqlite3.Connection, query: str, limit: int = 10) -> list[dict[str, str]]:
     normalized_query = _normalize_fts_query(query)
     if not normalized_query:
         return []
@@ -356,15 +356,15 @@ def search_findings(conn: sqlite3.Connection, query: str, limit: int = 10) -> Li
 
 def _append_filters(
     base_sql: str,
-    params: List,
-    project: Optional[str] = None,
-    tags: Optional[List[str]] = None,
-    created_after: Optional[str] = None,
-    created_before: Optional[str] = None,
-    confidence_min: Optional[float] = None,
-    status: Optional[str] = "active",
+    params: list,
+    project: str | None = None,
+    tags: list[str] | None = None,
+    created_after: str | None = None,
+    created_before: str | None = None,
+    confidence_min: float | None = None,
+    status: str | None = "active",
 ) -> str:
-    clauses: List[str] = []
+    clauses: list[str] = []
 
     if project:
         clauses.append("f.project = ?")
@@ -402,18 +402,18 @@ def search_findings_filtered(
     conn: sqlite3.Connection,
     query: str,
     limit: int = 10,
-    project: Optional[str] = None,
-    tags: Optional[List[str]] = None,
-    created_after: Optional[str] = None,
-    created_before: Optional[str] = None,
-    confidence_min: Optional[float] = None,
-    status: Optional[str] = "active",
-) -> List[Dict[str, str]]:
+    project: str | None = None,
+    tags: list[str] | None = None,
+    created_after: str | None = None,
+    created_before: str | None = None,
+    confidence_min: float | None = None,
+    status: str | None = "active",
+) -> list[dict[str, str]]:
     normalized_query = _normalize_fts_query(query)
     if not normalized_query:
         return []
 
-    params: List = [normalized_query]
+    params: list = [normalized_query]
     sql = """
         SELECT
             f.id,
@@ -445,7 +445,7 @@ def search_findings_filtered(
     sql += " ORDER BY rank LIMIT ?"
     params.append(limit)
     rows = conn.execute(sql, tuple(params)).fetchall()
-    results: List[Dict[str, str]] = []
+    results: list[dict[str, str]] = []
     for row in rows:
         payload = dict(row)
         payload["tags"] = _json_load(payload.get("tags"), [])
@@ -459,7 +459,7 @@ def search_findings_filtered(
 def get_findings_by_embedding_ids(
     conn: sqlite3.Connection,
     embedding_ids: Iterable[int],
-) -> Dict[int, Dict[str, str]]:
+) -> dict[int, dict[str, str]]:
     embedding_id_list = [int(value) for value in embedding_ids]
     if not embedding_id_list:
         return {}
@@ -486,7 +486,7 @@ def get_findings_by_embedding_ids(
         tuple(embedding_id_list),
     ).fetchall()
 
-    result: Dict[int, Dict[str, str]] = {}
+    result: dict[int, dict[str, str]] = {}
     for row in rows:
         payload = dict(row)
         payload["tags"] = _json_load(payload.get("tags"), [])
@@ -501,9 +501,9 @@ def log_retrieval_usage(
     query_id: str,
     query: str,
     created_at: str,
-    items: List[Dict[str, str]],
-    project: Optional[str] = None,
-    tags: Optional[List[str]] = None,
+    items: list[dict[str, str]],
+    project: str | None = None,
+    tags: list[str] | None = None,
 ) -> None:
     tags_json = _json_dump(tags or [])
     # Build rows for executemany
@@ -535,7 +535,7 @@ def log_retrieval_usage(
             )
 
 
-def list_retrieval_usage(conn: sqlite3.Connection, query_id: str) -> List[Dict[str, str]]:
+def list_retrieval_usage(conn: sqlite3.Connection, query_id: str) -> list[dict[str, str]]:
     rows = conn.execute(
         """
         SELECT query_id, finding_id, rank, cited, created_at, query, project, tags
@@ -546,7 +546,7 @@ def list_retrieval_usage(conn: sqlite3.Connection, query_id: str) -> List[Dict[s
         (query_id,),
     ).fetchall()
 
-    items: List[Dict[str, str]] = []
+    items: list[dict[str, str]] = []
     for row in rows:
         payload = dict(row)
         payload["tags"] = _json_load(payload.get("tags"), [])

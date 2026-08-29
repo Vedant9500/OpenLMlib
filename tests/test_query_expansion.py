@@ -2,9 +2,9 @@ import unittest
 
 from openlmlib.query_expansion import (
     QueryExpander,
+    _add_qualifiers,
     _extract_keywords,
     _remove_modifiers,
-    _add_qualifiers,
 )
 
 

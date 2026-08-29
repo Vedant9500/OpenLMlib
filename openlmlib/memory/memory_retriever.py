@@ -14,7 +14,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .markup import MEMORY_CONTEXT_CLOSE, MEMORY_CONTEXT_OPEN, escape_untrusted
 from .storage import MemoryStorage, normalize_limit
@@ -22,7 +22,7 @@ from .storage import MemoryStorage, normalize_limit
 logger = logging.getLogger(__name__)
 
 
-def _parse_iso_timestamp(value: str) -> Optional[datetime]:
+def _parse_iso_timestamp(value: str) -> datetime | None:
     if not value:
         return None
     try:
@@ -36,7 +36,7 @@ def _parse_iso_timestamp(value: str) -> Optional[datetime]:
         return None
 
 
-def _parse_window_seconds(window: str) -> Optional[int]:
+def _parse_window_seconds(window: str) -> int | None:
     """Parse window strings like ``5m``, ``1h``, ``30s`` into seconds."""
     if window is None:
         return None
@@ -71,7 +71,7 @@ class MemoryTimeline:
     timestamp: str
     session_id: str
     narrative: str
-    related: List[str] = field(default_factory=list)
+    related: list[str] = field(default_factory=list)
     token_estimate: int = 200  # ~200 tokens
 
 
@@ -85,10 +85,10 @@ class MemoryDetail:
     tool_input: str
     tool_output: str
     compressed_summary: str
-    facts: List[str] = field(default_factory=list)
-    concepts: List[str] = field(default_factory=list)
+    facts: list[str] = field(default_factory=list)
+    concepts: list[str] = field(default_factory=list)
     obs_type: str = "general"
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     token_estimate: int = 750  # ~500-1000 tokens
 
 
@@ -114,8 +114,8 @@ class ProgressiveRetriever:
         self,
         query: str,
         limit: int = 50,
-        filters: Optional[Dict[str, Any]] = None
-    ) -> List[MemoryIndex]:
+        filters: dict[str, Any] | None = None
+    ) -> list[MemoryIndex]:
         """
         Layer 1: Lightweight search index (~50-100 tokens/result).
 
@@ -158,9 +158,9 @@ class ProgressiveRetriever:
 
     def layer2_timeline(
         self,
-        ids: List[str],
+        ids: list[str],
         window: str = "5m"
-    ) -> List[MemoryTimeline]:
+    ) -> list[MemoryTimeline]:
         """
         Layer 2: Chronological context (~200 tokens/result).
 
@@ -185,7 +185,7 @@ class ProgressiveRetriever:
             return []
 
         # Expand each hit with same-session neighbors inside the time window.
-        expanded_by_id: Dict[str, Dict[str, Any]] = {obs["id"]: obs for obs in observations}
+        expanded_by_id: dict[str, dict[str, Any]] = {obs["id"]: obs for obs in observations}
         if window_seconds is not None and window_seconds > 0:
             for obs in list(observations):
                 session_id = obs.get("session_id")
@@ -232,8 +232,8 @@ class ProgressiveRetriever:
 
     def layer3_full_details(
         self,
-        ids: List[str]
-    ) -> List[MemoryDetail]:
+        ids: list[str]
+    ) -> list[MemoryDetail]:
         """
         Layer 3: Complete observation details (~500-1000 tokens/result).
 
@@ -276,10 +276,10 @@ class ProgressiveRetriever:
     def auto_inject_context(
         self,
         session_id: str,
-        query: Optional[str] = None,
+        query: str | None = None,
         limit: int = 50,
-        user_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        user_id: str | None = None,
+    ) -> dict[str, Any]:
         """
         Automatic context injection at session start.
 
@@ -294,7 +294,7 @@ class ProgressiveRetriever:
         Returns:
             Context dict with formatted context block
         """
-        filters: Dict[str, Any] = {"exclude_session_id": session_id}
+        filters: dict[str, Any] = {"exclude_session_id": session_id}
         if user_id:
             filters["user_id"] = user_id
 
@@ -331,7 +331,7 @@ class ProgressiveRetriever:
             "token_estimate": token_estimate,
         }
 
-    def _format_context(self, observations: List[Dict[str, Any]]) -> str:
+    def _format_context(self, observations: list[dict[str, Any]]) -> str:
         """
         Format observations into LLM-readable context block.
 
@@ -388,7 +388,7 @@ class ProgressiveRetriever:
 
         return "\n".join(lines)
 
-    def _generate_title(self, observation: Dict[str, Any]) -> str:
+    def _generate_title(self, observation: dict[str, Any]) -> str:
         """Generate a concise title for an observation."""
         tool_name = observation.get("tool_name", "unknown")
 
@@ -409,7 +409,7 @@ class ProgressiveRetriever:
 
         return f"{tool_name} execution"
 
-    def _calculate_confidence(self, observation: Dict[str, Any]) -> float:
+    def _calculate_confidence(self, observation: dict[str, Any]) -> float:
         """
         Calculate confidence score for an observation.
 
