@@ -183,6 +183,27 @@ def _normalize_fts_query(query: str) -> str:
     return " ".join(tokens)
 
 
+def _fts_query_variants(query: str) -> list[str]:
+    """Return FTS5 query variants, AND-first then OR-fallback.
+
+    Plain ``"a b c"`` in FTS5 means ``a AND b AND c`` — natural-language
+    queries almost always return 0 rows. Callers should try the AND form
+    first (precise), then fall back to OR (forgiving) so models stop
+    seeing empty libraries.
+
+    Bare AND/OR/NOT words in natural text (e.g. "AND->OR") are stripped so
+    they never become FTS5 operators and cause syntax errors.
+    """
+    tokens = re.findall(r"[A-Za-z0-9_]+", query)
+    # Drop bare boolean operators — the OR-fallback covers explicit-OR intent.
+    tokens = [t for t in tokens if t.upper() not in {"AND", "OR", "NOT"}]
+    if not tokens:
+        return []
+    if len(tokens) == 1:
+        return [tokens[0]]
+    return [" ".join(tokens), " OR ".join(tokens)]
+
+
 def insert_finding(conn: sqlite3.Connection, finding: Finding) -> None:
     text = finding.text
     audit = finding.audit
@@ -336,22 +357,25 @@ def list_findings(conn: sqlite3.Connection, limit: int = 50, offset: int = 0) ->
 
 
 def search_findings(conn: sqlite3.Connection, query: str, limit: int = 10) -> list[dict[str, str]]:
-    normalized_query = _normalize_fts_query(query)
-    if not normalized_query:
+    variants = _fts_query_variants(query)
+    if not variants:
         return []
-    rows = conn.execute(
-        """
+    sql = """
         SELECT f.id, f.project, f.claim, f.confidence, f.created_at, f.status, fts.rank
         FROM findings_fts AS fts
         JOIN findings AS f ON f.id = fts.id
         WHERE findings_fts MATCH ?
         ORDER BY rank
         LIMIT ?
-        """,
-        (normalized_query, limit),
-    ).fetchall()
-
-    return [dict(row) for row in rows]
+        """
+    for variant in variants:
+        try:
+            rows = conn.execute(sql, (variant, limit)).fetchall()
+        except sqlite3.OperationalError:
+            continue
+        if rows:
+            return [dict(row) for row in rows]
+    return []
 
 
 def _append_filters(
@@ -409,12 +433,11 @@ def search_findings_filtered(
     confidence_min: float | None = None,
     status: str | None = "active",
 ) -> list[dict[str, str]]:
-    normalized_query = _normalize_fts_query(query)
-    if not normalized_query:
+    variants = _fts_query_variants(query)
+    if not variants:
         return []
 
-    params: list = [normalized_query]
-    sql = """
+    base_sql = """
         SELECT
             f.id,
             f.project,
@@ -432,28 +455,35 @@ def search_findings_filtered(
         JOIN findings_text AS ft ON ft.id = f.id
         WHERE findings_fts MATCH ?
     """
-    sql = _append_filters(
-        sql,
-        params,
-        project=project,
-        tags=tags,
-        created_after=created_after,
-        created_before=created_before,
-        confidence_min=confidence_min,
-        status=status,
-    )
-    sql += " ORDER BY rank LIMIT ?"
-    params.append(limit)
-    rows = conn.execute(sql, tuple(params)).fetchall()
-    results: list[dict[str, str]] = []
-    for row in rows:
-        payload = dict(row)
-        payload["tags"] = _json_load(payload.get("tags"), [])
-        payload["evidence"] = _json_load(payload.get("evidence"), [])
-        payload["caveats"] = _json_load(payload.get("caveats"), [])
-        payload["reasoning"] = payload.get("reasoning") or ""
-        results.append(payload)
-    return results
+    for variant in variants:
+        params: list = [variant]
+        sql = _append_filters(
+            base_sql,
+            params,
+            project=project,
+            tags=tags,
+            created_after=created_after,
+            created_before=created_before,
+            confidence_min=confidence_min,
+            status=status,
+        )
+        sql += " ORDER BY rank LIMIT ?"
+        params.append(limit)
+        try:
+            rows = conn.execute(sql, tuple(params)).fetchall()
+        except sqlite3.OperationalError:
+            continue
+        if rows:
+            results: list[dict[str, str]] = []
+            for row in rows:
+                payload = dict(row)
+                payload["tags"] = _json_load(payload.get("tags"), [])
+                payload["evidence"] = _json_load(payload.get("evidence"), [])
+                payload["caveats"] = _json_load(payload.get("caveats"), [])
+                payload["reasoning"] = payload.get("reasoning") or ""
+                results.append(payload)
+            return results
+    return []
 
 
 def get_findings_by_embedding_ids(

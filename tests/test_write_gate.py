@@ -72,7 +72,9 @@ class TestWriteGate(unittest.TestCase):
             embedder=SplitEmbedder(),
         )
         issues = gate.validate("claim", ["evidence"], "reasoning text", 0.7)
-        self.assertFalse(gate.is_allowed(issues))
+        # Low similarity no longer blocks save — warning + lowered confidence.
+        self.assertTrue(gate.is_allowed(issues))
+        self.assertTrue(any(i.field == "evidence" and i.severity == "warning" for i in issues))
 
     def test_multi_item_evidence_rescued_by_strong_item(self):
         # With a single off-topic item, joined similarity would fail.
@@ -109,7 +111,15 @@ class TestWriteGate(unittest.TestCase):
             "reasoning text long enough",
             0.9,
         )
-        self.assertFalse(gate.is_allowed(issues))
+        # Off-topic evidence warns (not errors) but must lower confidence.
+        self.assertTrue(gate.is_allowed(issues))
+        adjusted = gate.adjust_confidence(
+            claim="claimish claim",
+            evidence=["offtopic unrelated filler one", "offtopic unrelated filler two"],
+            proposed_confidence=0.9,
+            issues=issues,
+        )
+        self.assertLess(adjusted, 0.9)
 
     def test_accepts_valid(self):
         gate = WriteGate(

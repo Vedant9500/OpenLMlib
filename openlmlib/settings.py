@@ -25,8 +25,8 @@ def _parse_bool(value: object, default: bool) -> bool:
 @dataclass
 class WriteGateSettings:
     min_confidence: float = 0.6
-    min_reasoning_length: int = 50
-    min_claim_evidence_sim: float = 0.75
+    min_reasoning_length: int = 20
+    min_claim_evidence_sim: float = 0.6
 
 
 @dataclass
@@ -146,8 +146,8 @@ class Settings:
             embedding_metric=data.get("embedding_metric", "cosine"),
             write_gate=WriteGateSettings(
                 min_confidence=float(write_gate_data.get("min_confidence", 0.6)),
-                min_reasoning_length=int(write_gate_data.get("min_reasoning_length", 50)),
-                min_claim_evidence_sim=float(write_gate_data.get("min_claim_evidence_sim", 0.75)),
+                min_reasoning_length=int(write_gate_data.get("min_reasoning_length", 20)),
+                min_claim_evidence_sim=float(write_gate_data.get("min_claim_evidence_sim", 0.6)),
             ),
             novelty=NoveltySettings(
                 similarity_threshold=float(novelty_data.get("similarity_threshold", 0.85)),
@@ -212,8 +212,8 @@ DEFAULT_SETTINGS_DATA = {
     "embedding_metric": "cosine",
     "write_gate": {
         "min_confidence": 0.6,
-        "min_reasoning_length": 50,
-        "min_claim_evidence_sim": 0.75,
+        "min_reasoning_length": 20,
+        "min_claim_evidence_sim": 0.6,
     },
     "novelty": {
         "similarity_threshold": 0.85,

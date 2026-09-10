@@ -118,7 +118,10 @@ class WriteGate:
             issues.append(
                 ValidationIssue(
                     field="reasoning",
-                    message=f"Reasoning must be at least {self.min_reasoning_length} characters",
+                    message=(
+                        f"Reasoning too short ({len(reasoning.strip())}/{self.min_reasoning_length} chars). "
+                        "Add 1-2 sentences explaining why the evidence supports the claim."
+                    ),
                 )
             )
 
@@ -160,12 +163,11 @@ class WriteGate:
                 ValidationIssue(
                     field="evidence",
                     message=(
-                        f"Claim/evidence similarity {similarity:.2f} below threshold "
-                        f"{self.min_claim_evidence_sim}. The evidence does not appear to support the claim. "
-                        "Add a paraphrase sentence restating the claim (verbatim quotes alone "
-                        "score too low to pass), or move the quote into reasoning and keep "
-                        "evidence as a paraphrase."
+                        f"Claim/evidence similarity {similarity:.2f} below {self.min_claim_evidence_sim}. "
+                        "Saved anyway with lowered confidence. "
+                        "To score higher, add one evidence sentence paraphrasing the claim."
                     ),
+                    severity="warning",
                 )
             )
 
@@ -215,8 +217,11 @@ class WriteGate:
     ) -> float:
         adjusted = float(proposed_confidence)
         if self.embedder is not None and evidence:
-            claim_vec, evidence_vec = self._encode_claim_evidence(claim, evidence)
-            sim = _cosine_similarity(claim_vec, evidence_vec)
+            try:
+                sim = self.evidence_similarity(claim, evidence)
+            except Exception:
+                claim_vec, evidence_vec = self._encode_claim_evidence(claim, evidence)
+                sim = _cosine_similarity(claim_vec, evidence_vec)
             adjusted = (0.7 * adjusted) + (0.3 * sim)
 
         for issue in issues or []:
@@ -226,6 +231,10 @@ class WriteGate:
                 adjusted -= 0.1
             elif issue.field == "novelty":
                 adjusted -= 0.05
+            elif issue.field == "evidence":
+                # Low claim/evidence similarity no longer blocks save;
+                # it just lowers confidence so weak support stays visible.
+                adjusted -= 0.1
 
         adjusted = max(0.0, min(1.0, adjusted))
         return float(round(float(adjusted), 3))

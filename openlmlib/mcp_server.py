@@ -1038,6 +1038,11 @@ def save_finding(
     WORKFLOW POSITION: Call after discovering insights, before ending session.
     Save findings as you go - don't wait until the end.
 
+    TO SAVE FIRST-TRY: always pass confirm=true, 1+ evidence strings, and
+    reasoning >= 20 chars. Evidence should include one sentence paraphrasing
+    the claim (verbatim quotes alone score low). Low claim/evidence similarity
+    only lowers confidence — it no longer blocks the save.
+
     READ-BEFORE-WRITE: This tool automatically checks for similar findings before saving.
     If a very similar finding exists (similarity > 0.90), it will be returned as a suggestion
     instead of saving a duplicate. Consider updating the existing finding instead.
@@ -1053,14 +1058,14 @@ def save_finding(
     - project: Project name for categorization (required)
     - claim: The finding/insight text (required) - be specific and actionable
     - confidence: Confidence level 0.0-1.0 (default: 0.8). Use 0.9 for definitive findings, 0.7 for tentative, 0.5 for hypotheses
-    - evidence: Supporting evidence strings (optional) - quotes, data points, references
-    - reasoning: Your reasoning behind the finding (optional but recommended)
+    - evidence: Supporting evidence strings (required, min 1) - include a paraphrase of the claim
+    - reasoning: Your reasoning behind the finding (required, min 20 chars)
     - caveats: Limitations or cave (optional)
     - tags: Tags for categorization (optional) - use consistent tags
     - confirm: Must be True to save (safety gate). Use False for drafts.
 
     TIP: If a similar finding already exists, consider updating it instead of creating a duplicate.
-    Use search_findings first to check for duplicates.
+    Use search_knowledge first to check for duplicates.
     """
     import time
 
@@ -1192,20 +1197,22 @@ def get_finding(finding_id: str) -> dict:
 
 @mcp.tool()
 def search_findings(query: str, limit: int = 10) -> dict:
-    """Search findings using keyword (FTS5) search. Fast, exact keyword matching.
+    """Search findings using keyword (FTS5) search. Exact keyword matching only.
 
     AUTOMATIC TRIGGERS - Call this when:
-    - Looking for findings containing specific keywords
-    - You know the exact terms used in a finding
-    - Quick lookup of stored knowledge
+    - You know the exact distinctive keyword from a finding
+    - You need a fast exact-term lookup
 
-    WORKFLOW POSITION: Use FIRST for targeted keyword search. If results are insufficient,
-    try retrieve_findings for semantic search that finds related concepts.
+    PREFER search_knowledge or retrieve_findings for natural-language or
+    related-topic searches — they use hybrid semantic+keyword and rarely
+    return 0 rows. search_findings uses AND-then-OR keyword matching and
+    can still miss paraphrased findings.
 
     CONFIRMATION TIER: READ OPERATION - No confirmation needed. Safe to call freely.
 
-    SEARCH TIPS: Use specific keywords. FTS5 supports boolean operators:
-    - "python web framework" finds all three words
+    SEARCH TIPS: Use 1-3 distinctive keywords (e.g. "hark preview cache").
+    Avoid long sentences. FTS5 supports boolean operators:
+    - "python web framework" finds docs with any of the words (OR-fallback)
     - "python AND web" finds both
     - "python OR javascript" finds either
 
@@ -1231,13 +1238,14 @@ def retrieve_findings(
     """Run intelligent retrieval combining semantic similarity and keyword matching.
 
     AUTOMATIC TRIGGERS - Call this when:
-    - Keyword search (search_fts) didn't find relevant results
+    - Starting research or checking for prior work on a topic
     - Looking for findings related to a concept or topic
     - You need the most relevant findings for a research question
     - Broad exploration of what knowledge exists
 
-    WORKFLOW POSITION: Use AFTER search_fts returns insufficient results.
-    This tool automatically combines semantic (meaning-based) and lexical (keyword) search.
+    WORKFLOW POSITION: DEFAULT search — use this (or search_knowledge) first.
+    Falls back gracefully across paraphrases. Use search_findings only for
+    exact-keyword lookups.
 
     CONFIRMATION TIER: READ OPERATION - No confirmation needed. Safe to call freely.
 
@@ -1312,8 +1320,8 @@ def search_knowledge(query: str, limit: int = 10) -> dict:
     - Starting research or looking for past findings
     - Not sure whether to use keyword or semantic search
 
-    This tool handles routing internally - no need to choose between
-    search_findings and retrieve_findings.
+    DEFAULT SEARCH — use this first. Forgiving of natural-language queries;
+    rarely returns 0 rows when related findings exist.
 
     For broad exploration, use general query terms. For specific facts,
     use exact phrases or keywords.
@@ -1434,8 +1442,9 @@ def start_research(
     - User asks to "research" or "look into" something
     - Beginning work on a new topic area
 
-    This replaces calling session_start + search_findings separately.
+    This replaces calling session_start + search_knowledge separately.
     It handles session creation, context injection, and initial finding search in one step.
+    Uses hybrid (semantic + keyword) search so natural-language topics find prior work.
 
     WORKFLOW: After this returns, proceed with research and call save_finding
     for important discoveries. When done, call session_end.
@@ -1457,15 +1466,23 @@ def start_research(
     except Exception:
         pass  # Session may already exist - continue anyway
 
-    # Step 2: Search existing findings on the topic
-    existing_findings = search_fts(_settings_path(), topic, limit=10)
+    # Step 2: Search existing findings on the topic (hybrid, forgiving).
+    try:
+        from .library import retrieve_findings as _hybrid_retrieve
+
+        _hybrid = _hybrid_retrieve(_settings_path(), topic, final_k=10)
+        existing_items = _hybrid.get("items", []) if _hybrid.get("status") == "ok" else []
+        existing_findings: dict = {"status": "ok", "items": existing_items}
+    except Exception:
+        existing_findings = search_fts(_settings_path(), topic, limit=10)
+        existing_items = existing_findings.get("items", [])
 
     return {
         "session_id": session_id,
         "session_started": session_result is not None,
         "topic": topic,
         "existing_findings": existing_findings,
-        "finding_count": existing_findings.get("count", 0),
+        "finding_count": len(existing_items),
         "next_steps": [
             "Proceed with research (web search, code analysis, etc.)",
             "Call save_finding for important discoveries",
@@ -1532,7 +1549,7 @@ def end_session(
         "status": "completed",
         "summary_generated": end_result.get("summary_generated", False),
         "observation_count": obs_count,
-        "recent_findings_count": recent_findings.get("count", 0) if recent_findings else 0,
+        "recent_findings_count": len(recent_findings.get("items", [])) if recent_findings else 0,
         "message": message,
     }
 
@@ -1544,8 +1561,9 @@ def check_context(query: str, project: str | None = None) -> dict:
     AUTOMATIC TRIGGERS - Call this at the start of ANY new task to determine
     whether you have existing knowledge to build upon.
 
-    This is a convenience wrapper around search_fts that returns a simple
-    yes/no with relevant finding count and top topics.
+    This is a convenience wrapper around hybrid search (semantic + keyword)
+    that returns a simple yes/no with relevant finding count and top topics.
+    Forgiving of natural-language queries — prefers recall over precision.
 
     WORKFLOW POSITION: First tool to call when starting any task.
 
@@ -1557,10 +1575,16 @@ def check_context(query: str, project: str | None = None) -> dict:
 
     Returns: {has_context: bool, finding_count: int, top_findings: []}
     """
-    results = search_fts(_settings_path(), query, limit=5)
-    # search_fts contract: {"status": "ok", "items": [...]}. Older code read
-    # nonexistent "findings"/"count" keys and always reported no context.
-    findings = results.get("items", []) or []
+    try:
+        from .library import retrieve_findings as _hybrid_retrieve
+
+        _hybrid = _hybrid_retrieve(
+            _settings_path(), query, project=project, final_k=5
+        )
+        findings = _hybrid.get("items", []) if _hybrid.get("status") == "ok" else []
+    except Exception:
+        results = search_fts(_settings_path(), query, limit=5)
+        findings = results.get("items", []) or []
 
     # Extract top topics/tags
     top_topics = []
@@ -1597,6 +1621,10 @@ def save_finding_auto(
     - 0.7 for tentative findings (contains words like 'might', 'possibly', 'appears', 'suggests')
     - Uses provided confidence if explicitly set
 
+    TO SAVE FIRST-TRY: always pass confirm=true, 1+ evidence strings, and
+    reasoning >= 20 chars. Low claim/evidence similarity only lowers
+    confidence — it no longer blocks the save.
+
     READ-BEFORE-WRITE: This tool automatically checks for similar findings before saving.
     If a very similar finding exists, it will be returned as a suggestion.
 
@@ -1607,8 +1635,8 @@ def save_finding_auto(
     - project: Project name (required)
     - claim: The finding text (required)
     - confidence: Optional override (default: auto-scored 0.9 for definitive, 0.7 for tentative)
-    - evidence: Supporting evidence (optional)
-    - reasoning: Your reasoning (optional but recommended)
+    - evidence: Supporting evidence (required, min 1) - include a paraphrase of the claim
+    - reasoning: Your reasoning (required, min 20 chars)
     - caveats: Limitations or cave (optional)
     - tags: Tags for categorization (optional)
     - confirm: Must be True to save (safety gate)

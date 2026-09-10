@@ -669,16 +669,10 @@ def add_finding(
     t4 = monotonic()
     logger.debug("add_finding: gate.adjust_confidence=%.1fs", t4 - t3)
 
-    if adjusted_confidence < settings.write_gate.min_confidence:
-        issues.append(
-            ValidationIssue(
-                field="confidence",
-                message=(
-                    "Validator-adjusted confidence "
-                    f"{adjusted_confidence:.2f} below threshold {settings.write_gate.min_confidence:.2f}"
-                ),
-            )
-        )
+    # Note: proposed confidence below threshold already blocks in
+    # gate.validate. Adjusted confidence below threshold does NOT block —
+    # it just records weak support honestly. (Blocking on adjusted
+    # re-introduced the old "picky wording" loop through the back door.)
     if trusted_export:
         issues.append(
             ValidationIssue(
