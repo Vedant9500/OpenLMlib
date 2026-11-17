@@ -10,7 +10,7 @@ Complete reference for all 76 MCP tools available in OpenLMlib.
   - [Progressive Retrieval (4)](#progressive-retrieval)
   - [Context Injection & Synthesis (4)](#context-injection--synthesis)
 - [Collaboration Session Tools (48)](#collaboration-session-tools)
-  - [Session Management (7)](#session-management)
+  - [Session Management (8)](#session-management)
   - [Message Operations (7)](#message-operations)
   - [Artifact Management (4)](#artifact-management)
   - [Session Discovery & Analytics (6)](#session-discovery--analytics)
@@ -533,6 +533,22 @@ Terminate a collaboration session.
 - `summary` (string, optional): Final summary text
 
 **Returns:** Termination confirmation
+
+---
+
+#### `export_to_library`
+Export a completed session's artifacts as findings in the main library.
+
+**Parameters:**
+- `session_id` (string): Completed session to export
+- `agent_id` (string, optional): Orchestrator agent authorizing the export
+- `project` (string, optional): Project name for the findings (defaults to the session title)
+- `confidence` (number, optional): Default confidence from 0.0 to 1.0 (default: 0.8)
+- `tags` (array of strings, optional): Additional tags applied to every finding
+- `artifact_ids` (array of strings, optional): Specific artifacts to export (default: all)
+- `include_summary` (boolean, optional): Also export the session summary as a finding (default: true)
+
+**Returns:** Export summary with the created finding IDs
 
 ---
 

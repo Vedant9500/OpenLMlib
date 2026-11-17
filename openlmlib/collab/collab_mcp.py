@@ -569,7 +569,6 @@ def list_sessions(
         return _handle_tool_error("list_sessions", e)
 
 
-@collab_mcp.tool()
 def collab_claim_task(session_id: str, agent_id: str, task_id: str | None = None) -> Dict:
     """Claim a pending task in a collaboration session.
 

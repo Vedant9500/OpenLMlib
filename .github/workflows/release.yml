@@ -39,10 +39,11 @@ jobs:
       - name: Verify tag matches package version
         shell: bash
         run: |
-          PKG_VERSION="$(sed -n 's/^version = "\(.*\)"$/\1/p' pyproject.toml | head -n 1)"
+          # The version is dynamic in pyproject.toml; openlmlib/__init__.py is the source of truth.
+          PKG_VERSION="$(tr -d '\r' < openlmlib/__init__.py | sed -n 's/^__version__ = "\(.*\)"$/\1/p' | head -n 1)"
           TAG_VERSION="${GITHUB_REF_NAME#v}"
           if [ -z "$PKG_VERSION" ]; then
-            echo "Could not read version from pyproject.toml" >&2
+            echo "Could not read __version__ from openlmlib/__init__.py" >&2
             exit 1
           fi
           if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then

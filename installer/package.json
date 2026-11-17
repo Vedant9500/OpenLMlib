@@ -1,7 +1,7 @@
 {
   "name": "openlmlib",
-  "version": "0.2.7",
-  "description": "AI-powered knowledge library for LLM agents — install, manage, and retrieve findings via CLI and MCP",
+  "version": "0.2.8",
+  "description": "Local knowledge and research library for LLM workflows — CLI plus a 76-tool MCP server for AI assistants",
   "type": "module",
   "main": "src/cli.js",
   "bin": {
@@ -16,9 +16,10 @@
   ],
   "scripts": {
     "bundle": "node bundle-python.js",
-    "prepack": "node bundle-python.js",
+    "prepack": "node bundle-python.js && node scripts/verify-package.mjs",
     "postpack": "node bundle-python.js --cleanup",
     "postinstall": "node src/postinstall.mjs",
+    "verify": "node bundle-python.js && node scripts/verify-package.mjs",
     "dev": "node src/cli.js",
     "build": "echo 'No build step — src runs directly with Node.js'"
   },
@@ -39,7 +40,8 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Vedant9500/OpenLMlib.git"
+    "url": "git+https://github.com/Vedant9500/OpenLMlib.git",
+    "directory": "installer"
   },
   "homepage": "https://github.com/Vedant9500/OpenLMlib#readme",
   "bugs": {

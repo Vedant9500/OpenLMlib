@@ -1,4 +1,5 @@
 import os
+import re
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -184,6 +185,33 @@ class TestMcpServerTools(unittest.TestCase):
         self.assertIn("Co-Scientist", description)
         self.assertIn("independent verification", description)
         self.assertIn("multi-agent research", description)
+
+
+class TestDocumentedToolSurface(unittest.TestCase):
+    """The READMEs and the MCP tool reference must match the registered tools."""
+
+    @classmethod
+    def setUpClass(cls):
+        mcp_server._register_memory_tools()
+        mcp_server._register_collab_tools()
+        cls.tools = set(mcp_server.mcp._tool_manager._tools)
+        cls.repo_root = Path(__file__).resolve().parents[1]
+
+    def test_readmes_claim_the_registered_count(self):
+        count = len(self.tools)
+        readme = (self.repo_root / "README.md").read_text(encoding="utf-8")
+        installer_readme = (self.repo_root / "installer" / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn(f"{count} tools", readme)
+        self.assertIn(f"{count} MCP tools", readme)
+        self.assertIn(f"{count} tools", installer_readme)
+
+    def test_tool_reference_documents_every_registered_tool(self):
+        reference = (self.repo_root / "docs" / "MCP_TOOLS.md").read_text(encoding="utf-8")
+        documented = set(re.findall(r"^#{2,4} `(\w+)`", reference, re.MULTILINE))
+
+        self.assertIn(f"all {len(self.tools)} MCP tools", reference)
+        self.assertEqual(documented, self.tools)
 
 
 if __name__ == "__main__":

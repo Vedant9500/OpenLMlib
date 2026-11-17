@@ -2,27 +2,46 @@
 
 ## Versioning
 
-- This project uses Semantic Versioning (`MAJOR.MINOR.PATCH`).
-- Pre-release tags are allowed (`a`, `b`, `rc`, `dev`).
-- Package version is defined in `openlmlib/__init__.py` and `pyproject.toml`.
+- This project uses Semantic Versioning (`MAJOR.MINOR.PATCH`). Pre-release tags
+  are allowed (`a`, `b`, `rc`, `dev`).
+- `openlmlib/__init__.py` (`__version__`) is the single source of truth.
+  `pyproject.toml` reads the version dynamically from that attribute.
+- `installer/package.json` must carry the same version; the npm packaging check
+  fails when the two disagree.
+- Never reuse a version that has already been published to npm or PyPI.
 
 ## Update Checklist
 
-1. Update version in `openlmlib/__init__.py` and `pyproject.toml`.
+1. Update `__version__` in `openlmlib/__init__.py` and `version` in
+   `installer/package.json` to the same new value.
 2. Add release notes to `CHANGELOG.md` under a new version heading.
-3. Run tests locally:
+3. Run the tests and verify the tool surface:
    - `python -m unittest discover -s tests -v`
-4. Commit and push to default branch.
+   - `python scripts/count_mcp_tools.py`
+4. Verify the npm package before publishing:
+   - `cd installer && npm run verify`
+5. Commit and push to the default branch.
 
 ## Tag and Publish
 
-1. Create a tag in format `vX.Y.Z` (or `vX.Y.Zrc1` for prerelease).
-2. Push tag:
+1. Create a tag in the format `vX.Y.Z` (or `vX.Y.Zrc1` for a prerelease) and push
+   it:
    - `git tag vX.Y.Z`
    - `git push origin vX.Y.Z`
-3. GitHub Actions `release.yml` builds artifacts and publishes:
-   - Always publishes tagged builds to TestPyPI.
-   - Publishes stable tags to PyPI.
+2. GitHub Actions `release.yml` builds the distributions and checks that the tag
+   matches `__version__`. It always publishes tagged builds to TestPyPI and
+   publishes stable tags to PyPI.
+3. Publish the npm package from the same commit:
+   - `cd installer && npm publish`
+   - The `prepack` hook bundles the Python source and runs the package
+     verification, so a stale or mismatched package cannot be published.
+4. Verify both registries from outside the repository:
+   - `pipx install --force openlmlib==X.Y.Z`
+   - `npm install -g openlmlib@X.Y.Z`
+   - `openlmlib doctor`
+5. Marketplace listings that mirror PyPI (for example mcprush) update after the
+   new release is indexed. Confirm that the version and tool count shown there
+   match the release.
 
 ## Trusted Publishing Setup
 

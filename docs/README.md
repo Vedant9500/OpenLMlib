@@ -51,8 +51,8 @@ openlmlib setup
 
 ### Option 3: From Source
 ```bash
-git clone https://github.com/Vedant9500/LMlib.git
-cd LMlib
+git clone https://github.com/Vedant9500/OpenLMlib.git
+cd OpenLMlib
 pip install -e .
 openlmlib setup
 ```
@@ -323,6 +323,6 @@ OpenLMlib
 ## Getting Help
 
 - **Documentation**: You're reading it!
-- **Issues**: [GitHub Issues](https://github.com/Vedant9500/LMlib/issues)
+- **Issues**: [GitHub Issues](https://github.com/Vedant9500/OpenLMlib/issues)
 - **CLI Help**: `openlmlib --help` or `openlmlib help`
 - **MCP Help**: `openlmlib-mcp --call help_library` or `help_collab`

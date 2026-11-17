@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
+## [0.2.8] - 2026-11-17
+
+### Added
+- **Package verification**: `installer/scripts/verify-package.mjs` runs during `npm pack` and `npm publish` and fails when the npm and Python versions differ, the bundled source does not register the documented tools, the README tool counts are stale, or the installer's tool gate is out of sync.
+- **Documentation consistency test**: the test suite now checks that both READMEs and `docs/MCP_TOOLS.md` match the registered MCP tool set.
+
+### Changed
+- **npm README**: replaced the internal release checklist with a user-facing README (requirements, installation, quickstart, MCP client setup, tool overview, troubleshooting). Packaging instructions moved to `installer/DEVELOPING.md`.
+- **Repository links**: documentation now uses the `OpenLMlib` repository name and absolute links that also work on PyPI and npm.
+
+### Fixed
+- **Tool surface drift**: PyPI 0.2.6 and npm 0.2.7 shipped 59 MCP tools while the documentation described 76. 0.2.8 bundles the full 76-tool surface (17 core, 11 memory, 48 collaboration).
+- **Stray tool decorator**: `collab_claim_task` was decorated on an unused FastMCP instance but never registered, which made static tool scanners report one tool too many. The decorator was removed.
+- **Release version gate**: `.github/workflows/release.yml` now reads `__version__` from `openlmlib/__init__.py`; the previous check read a static version from `pyproject.toml`, which uses dynamic versioning, so tag releases failed.
+- **Missing documentation**: added the `export_to_library` entry to `docs/MCP_TOOLS.md`.
+
 ## [0.2.7] - 2026-05-17
 
 ### Added
