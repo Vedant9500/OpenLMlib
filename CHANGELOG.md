@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
+## [Unreleased]
+
+### Changed
+- **Smaller installs**: the npm installer installs the CPU-only PyTorch build on Linux and Windows instead of the default wheel that bundles the CUDA stack, cutting roughly 2-3 GB from the managed virtual environment. Override with `OPENLMLIB_TORCH_INDEX=<index-url>` or `OPENLMLIB_TORCH_INDEX=pypi` to keep the default build.
+- **Faster CI**: the Ubuntu, Arch and Windows jobs and the package smoke test resolve torch from the CPU index in the same pip pass as the package, so dependency installation no longer downloads the CUDA wheels.
+
 ## [0.2.9] - 2026-11-17
 
 ### Fixed

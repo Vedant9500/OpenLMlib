@@ -45,9 +45,12 @@ jobs:
             pyproject.toml
 
       - name: Install test dependencies
+        # The PyTorch CPU index keeps sentence-transformers from pulling the
+        # CUDA stack (~2-3 GB) on Linux and Windows; macOS wheels are already
+        # CPU builds. One pip pass resolves everything.
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
+          python -m pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[dev]"
 
       - name: Run unit tests
         run: python scripts/run_tests.py
@@ -67,11 +70,12 @@ jobs:
 
       - name: Install test dependencies
         # Arch ships a rolling Python and its system interpreter is PEP 668
-        # managed, so the tests run inside a venv.
+        # managed, so the tests run inside a venv. The PyTorch CPU index avoids
+        # pulling the CUDA wheels.
         run: |
           python -m venv .ci-venv
           .ci-venv/bin/python -m pip install --upgrade pip
-          .ci-venv/bin/python -m pip install -e ".[dev]"
+          .ci-venv/bin/python -m pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[dev]"
 
       - name: Report interpreter version
         run: .ci-venv/bin/python --version
@@ -103,7 +107,8 @@ jobs:
           python -m build
 
       - name: Install wheel
-        run: python -m pip install dist/*.whl
+        # Resolve torch to the CPU wheel instead of the CUDA stack.
+        run: python -m pip install --extra-index-url https://download.pytorch.org/whl/cpu dist/*.whl
 
       - name: Verify CLI entrypoint
         run: openlmlib --help
