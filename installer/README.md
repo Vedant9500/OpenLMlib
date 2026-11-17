@@ -125,7 +125,7 @@ The server exposes 76 tools across three groups:
 
 The collaboration group includes templates, model discovery, session analytics,
 and the 17 Co-Scientist tools. See the
-[full MCP tool reference](https://github.com/Vedant9500/OpenLMlib/blob/main/docs/MCP_TOOLS.md)
+[full MCP tool reference](https://github.com/Vedant9500/OpenLMlib/blob/master/docs/MCP_TOOLS.md)
 for parameters and return values.
 
 ## CLI overview
@@ -171,7 +171,7 @@ the npm package.
 The model is downloaded during `openlmlib setup`. Check network access to
 Hugging Face, then run `openlmlib setup` again. If the machine must stay offline,
 see the
-[configuration documentation](https://github.com/Vedant9500/OpenLMlib/blob/main/CLI_MCP_GLOBAL_CONFIG.md)
+[configuration documentation](https://github.com/Vedant9500/OpenLMlib/blob/master/CLI_MCP_GLOBAL_CONFIG.md)
 for local model paths.
 
 ### Reinstall
@@ -187,19 +187,19 @@ Library data lives in `~/.openlmlib/` and is preserved across reinstalls. Use
 
 ## Documentation
 
-- [Full documentation](https://github.com/Vedant9500/OpenLMlib/blob/main/docs/README.md)
-- [MCP tools reference](https://github.com/Vedant9500/OpenLMlib/blob/main/docs/MCP_TOOLS.md)
-- [CollabSessions](https://github.com/Vedant9500/OpenLMlib/blob/main/docs/COLLAB_SESSIONS.md)
-- [Configuration](https://github.com/Vedant9500/OpenLMlib/blob/main/CLI_MCP_GLOBAL_CONFIG.md)
-- [Changelog](https://github.com/Vedant9500/OpenLMlib/blob/main/CHANGELOG.md)
+- [Full documentation](https://github.com/Vedant9500/OpenLMlib/blob/master/docs/README.md)
+- [MCP tools reference](https://github.com/Vedant9500/OpenLMlib/blob/master/docs/MCP_TOOLS.md)
+- [CollabSessions](https://github.com/Vedant9500/OpenLMlib/blob/master/docs/COLLAB_SESSIONS.md)
+- [Configuration](https://github.com/Vedant9500/OpenLMlib/blob/master/CLI_MCP_GLOBAL_CONFIG.md)
+- [Changelog](https://github.com/Vedant9500/OpenLMlib/blob/master/CHANGELOG.md)
 - [Issues](https://github.com/Vedant9500/OpenLMlib/issues)
 
 ## Development
 
 The npm package lives in `installer/`. Packaging, verification, and release
 steps are documented in
-[DEVELOPING.md](https://github.com/Vedant9500/OpenLMlib/blob/main/installer/DEVELOPING.md).
+[DEVELOPING.md](https://github.com/Vedant9500/OpenLMlib/blob/master/installer/DEVELOPING.md).
 
 ## License
 
-MIT. See [LICENSE](https://github.com/Vedant9500/OpenLMlib/blob/main/LICENSE).
+MIT. See [LICENSE](https://github.com/Vedant9500/OpenLMlib/blob/master/LICENSE).

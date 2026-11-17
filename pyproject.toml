@@ -50,7 +50,7 @@ dev = []
 Homepage = "https://github.com/Vedant9500/OpenLMlib"
 Documentation = "https://github.com/Vedant9500/OpenLMlib#readme"
 Repository = "https://github.com/Vedant9500/OpenLMlib"
-Changelog = "https://github.com/Vedant9500/OpenLMlib/blob/main/CHANGELOG.md"
+Changelog = "https://github.com/Vedant9500/OpenLMlib/blob/master/CHANGELOG.md"
 "Bug Tracker" = "https://github.com/Vedant9500/OpenLMlib/issues"
 
 [project.scripts]

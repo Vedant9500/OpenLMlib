@@ -4,7 +4,7 @@
 
 Store, retrieve, and collaborate on findings with semantic search, full-text search, and multi-agent collaboration sessions.
 
-[📚 Full Documentation](https://github.com/Vedant9500/OpenLMlib/blob/main/docs/README.md) · [Quickstart](#quickstart) · [MCP Tools](https://github.com/Vedant9500/OpenLMlib/blob/main/docs/MCP_TOOLS.md) · [CollabSessions](https://github.com/Vedant9500/OpenLMlib/blob/main/docs/COLLAB_SESSIONS.md)
+[📚 Full Documentation](https://github.com/Vedant9500/OpenLMlib/blob/master/docs/README.md) · [Quickstart](#quickstart) · [MCP Tools](https://github.com/Vedant9500/OpenLMlib/blob/master/docs/MCP_TOOLS.md) · [CollabSessions](https://github.com/Vedant9500/OpenLMlib/blob/master/docs/COLLAB_SESSIONS.md)
 
 ---
 
@@ -107,8 +107,8 @@ for unusual environments, but it can add 10+ seconds to MCP startup on Windows.
 
 For hypothesis-generation workflows, configure the client first, then ask for a
 Co-Scientist run or use wording such as "research this and verify the
-hypotheses". See [MCP client integration](https://github.com/Vedant9500/OpenLMlib/blob/main/docs/MCP_CLI_INTEGRATION_RESEARCH.md)
-and [system prompt templates](https://github.com/Vedant9500/OpenLMlib/blob/main/docs/SYSTEM_PROMPT.md).
+hypotheses". See [MCP client integration](https://github.com/Vedant9500/OpenLMlib/blob/master/docs/MCP_CLI_INTEGRATION_RESEARCH.md)
+and [system prompt templates](https://github.com/Vedant9500/OpenLMlib/blob/master/docs/SYSTEM_PROMPT.md).
 
 ---
 
@@ -160,7 +160,7 @@ openlmlib query "retrieval" \
 - `check_context`, `save_finding_auto` - Convenience tools
 - `evaluate_retrieval`, `get_usage_analytics`, `help_library` - Utilities
 
-📖 **[See all 76 tools →](https://github.com/Vedant9500/OpenLMlib/blob/main/docs/MCP_TOOLS.md)**
+📖 **[See all 76 tools →](https://github.com/Vedant9500/OpenLMlib/blob/master/docs/MCP_TOOLS.md)**
 
 ### 👥 Multi-Agent Collaboration
 
@@ -198,7 +198,7 @@ openlmlib-mcp --call save_artifact '{...}'
 - `co_scientist_generate` - Co-Scientist hypothesis generation (6 steps, 7 agents)
 - `co_scientist_verify` - Co-Scientist independent verification (5 steps, 6 agents)
 
-📖 **[Full CollabSessions guide →](https://github.com/Vedant9500/OpenLMlib/blob/main/docs/COLLAB_SESSIONS.md)**
+📖 **[Full CollabSessions guide →](https://github.com/Vedant9500/OpenLMlib/blob/master/docs/COLLAB_SESSIONS.md)**
 
 ### 🧠 Memory System (Session Persistence & Retrieval)
 
@@ -257,7 +257,7 @@ session_recap(limit=3)
 - Layer 1+2+3: 1,025 tokens/result (full details only for relevant items)
 - **vs. full dump**: 3-13x token savings!
 
-📖 **[Memory System Guide →](https://github.com/Vedant9500/OpenLMlib/blob/main/docs/MEMORY_QUICKSTART.md)**
+📖 **[Memory System Guide →](https://github.com/Vedant9500/OpenLMlib/blob/master/docs/MEMORY_QUICKSTART.md)**
 
 ---
 
@@ -291,12 +291,12 @@ OpenLMlib
 
 ## Documentation
 
-📚 **Complete documentation is in the [docs/](https://github.com/Vedant9500/OpenLMlib/blob/main/docs/README.md) folder:**
+📚 **Complete documentation is in the [docs/](https://github.com/Vedant9500/OpenLMlib/blob/master/docs/README.md) folder:**
 
-- **[docs/README.md](https://github.com/Vedant9500/OpenLMlib/blob/main/docs/README.md)** - Documentation index and quick reference
-- **[docs/MCP_TOOLS.md](https://github.com/Vedant9500/OpenLMlib/blob/main/docs/MCP_TOOLS.md)** - Complete reference for all 76 MCP tools
-- **[docs/COLLAB_SESSIONS.md](https://github.com/Vedant9500/OpenLMlib/blob/main/docs/COLLAB_SESSIONS.md)** - Multi-agent collaboration guide
-- **[docs/SYSTEM_PROMPT.md](https://github.com/Vedant9500/OpenLMlib/blob/main/docs/SYSTEM_PROMPT.md)** - Agent instruction templates
+- **[docs/README.md](https://github.com/Vedant9500/OpenLMlib/blob/master/docs/README.md)** - Documentation index and quick reference
+- **[docs/MCP_TOOLS.md](https://github.com/Vedant9500/OpenLMlib/blob/master/docs/MCP_TOOLS.md)** - Complete reference for all 76 MCP tools
+- **[docs/COLLAB_SESSIONS.md](https://github.com/Vedant9500/OpenLMlib/blob/master/docs/COLLAB_SESSIONS.md)** - Multi-agent collaboration guide
+- **[docs/SYSTEM_PROMPT.md](https://github.com/Vedant9500/OpenLMlib/blob/master/docs/SYSTEM_PROMPT.md)** - Agent instruction templates
 
 ---
 
@@ -382,17 +382,17 @@ python -m openlmlib.mcp_server --settings ./config/settings.json
 ## Releases
 
 - **Versioning**: Semantic versioning (MAJOR.MINOR.PATCH)
-- **Changelog**: [CHANGELOG.md](https://github.com/Vedant9500/OpenLMlib/blob/main/CHANGELOG.md)
-- **Release process**: [RELEASE.md](https://github.com/Vedant9500/OpenLMlib/blob/main/RELEASE.md)
+- **Changelog**: [CHANGELOG.md](https://github.com/Vedant9500/OpenLMlib/blob/master/CHANGELOG.md)
+- **Release process**: [RELEASE.md](https://github.com/Vedant9500/OpenLMlib/blob/master/RELEASE.md)
 
 ---
 
 ## Contributing
 
-See [CONTRIBUTING.md](https://github.com/Vedant9500/OpenLMlib/blob/main/CONTRIBUTING.md) for development workflow and guidelines.
+See [CONTRIBUTING.md](https://github.com/Vedant9500/OpenLMlib/blob/master/CONTRIBUTING.md) for development workflow and guidelines.
 
 ---
 
 ## License
 
-MIT License - see [LICENSE](https://github.com/Vedant9500/OpenLMlib/blob/main/LICENSE)
+MIT License - see [LICENSE](https://github.com/Vedant9500/OpenLMlib/blob/master/LICENSE)
