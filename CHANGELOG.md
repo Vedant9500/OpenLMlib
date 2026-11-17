@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
+## [0.2.9] - 2026-11-17
+
+### Fixed
+- **Windows file lock probed with CTRL+C**: `openlmlib.file_lock._pid_is_alive` used `os.kill(pid, 0)`, which CPython maps to `CTRL_C_EVENT` + `GenerateConsoleCtrlEvent` on Windows instead of a liveness check. Probing a live lock owner sent CTRL+C to the console process group (interrupting the test suite and any other process sharing the console) and reported live owners as dead when the call failed, so stale locks could be reclaimed while still held. Windows now uses `OpenProcess` + `GetExitCodeProcess`, and non-positive PIDs (where 0 means "every process on this console") are rejected.
+
+### Changed
+- **CI matrix**: one unit-test job per operating system — Ubuntu, Arch Linux (container), macOS and Windows — instead of four Ubuntu + one Windows jobs. Unit tests run through `scripts/run_tests.py`, which reports the unittest summary and a deterministic exit status.
+
 ## [0.2.8] - 2026-11-17
 
 ### Added

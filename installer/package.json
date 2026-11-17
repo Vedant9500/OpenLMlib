@@ -1,6 +1,6 @@
 {
   "name": "openlmlib",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Local knowledge and research library for LLM workflows — CLI plus a 76-tool MCP server for AI assistants",
   "type": "module",
   "main": "src/cli.js",
