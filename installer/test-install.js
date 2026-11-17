@@ -94,4 +94,20 @@ run(venvPython, [
   ].join('; '),
 ], { cwd: projectDir, stdio: 'inherit' });
 
+// The installer installs the CPU-only PyTorch build on Linux/Windows so it does
+// not pull the CUDA stack (~2-3 GB). Guard that behaviour for the tarball
+// install; an explicit OPENLMLIB_TORCH_INDEX means the caller chose otherwise.
+if (process.platform !== 'darwin' && process.env.OPENLMLIB_TORCH_INDEX === undefined) {
+  const torchInfo = run(venvPython, [
+    '-c',
+    'import json, torch; print(json.dumps({"version": torch.__version__, "cuda": torch.version.cuda}))',
+  ]);
+  const { version: torchVersion, cuda } = JSON.parse(torchInfo);
+  if (cuda !== null) {
+    console.error(`Expected the CPU-only PyTorch build, got ${torchVersion} (cuda=${cuda})`);
+    process.exit(1);
+  }
+  console.log(`torch-ok:${torchVersion} (cuda=${cuda})`);
+}
+
 console.log('Installer smoke test passed');

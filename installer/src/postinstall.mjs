@@ -114,6 +114,53 @@ function hasPythonProject(dirPath) {
   return fs.existsSync(path.join(dirPath, 'pyproject.toml')) || fs.existsSync(path.join(dirPath, 'setup.py'));
 }
 
+// ─── PyTorch wheel selection ───────────────────────────────
+
+const CPU_TORCH_INDEX = 'https://download.pytorch.org/whl/cpu';
+
+// PyPI's PyTorch wheels bundle the CUDA stack on Linux and Windows (~2-3 GB of
+// nvidia/* wheels). OpenLMlib only runs sentence-transformers on the CPU, so
+// install the smaller CPU build from PyTorch's own index first. macOS wheels on
+// PyPI are already CPU/Metal builds, so the index is skipped there.
+//
+// Set OPENLMLIB_TORCH_INDEX to override the index URL, or to one of
+// "pypi" / "default" / "none" to install whatever the default index provides.
+function resolveTorchIndexUrl() {
+  const override = process.env.OPENLMLIB_TORCH_INDEX;
+  if (override !== undefined) {
+    const value = override.trim();
+    if (!value || ['pypi', 'default', 'none', 'off'].includes(value.toLowerCase())) {
+      return null;
+    }
+    return value;
+  }
+  return process.platform === 'darwin' ? null : CPU_TORCH_INDEX;
+}
+
+function installSpec(VENV_PYTHON, spec, torchIndex) {
+  const args = ['-m', 'pip', 'install'];
+  if (spec.kind === 'editable') {
+    args.push('-e', spec.value);
+  } else {
+    args.push(spec.value);
+  }
+
+  if (!torchIndex) {
+    execFileSync(VENV_PYTHON, args, { stdio: 'pipe' });
+    return;
+  }
+
+  try {
+    // One resolver pass: torch comes from PyTorch's CPU index while every other
+    // dependency resolves from the default index.
+    execFileSync(VENV_PYTHON, [...args, '--extra-index-url', torchIndex], { stdio: 'pipe' });
+  } catch {
+    // Retry against the default index alone, so an unreachable PyTorch index or
+    // a platform without CPU wheels cannot block the install.
+    execFileSync(VENV_PYTHON, args, { stdio: 'pipe' });
+  }
+}
+
 function hasOpenLMlibProject(dirPath) {
   if (!dirPath) return false;
   const pyprojectPath = path.join(dirPath, 'pyproject.toml');
@@ -185,6 +232,10 @@ function validateInstalledOpenLMlib(VENV_PYTHON) {
 function installOpenLMlib(VENV_PYTHON, spinner) {
   execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', '--upgrade', 'pip'], { stdio: 'pipe' });
 
+  // Pip resolves torch to the CPU build from PyTorch's index, so the install
+  // does not pull the multi-gigabyte CUDA wheels. See resolveTorchIndexUrl().
+  const torchIndex = resolveTorchIndexUrl();
+
   const candidateSpecs = [];
   
   // Priority 1: Use bundled Python source from npm package (if available)
@@ -243,11 +294,7 @@ function installOpenLMlib(VENV_PYTHON, spinner) {
   for (const spec of candidateSpecs) {
     try {
       spinner.text = `Installing openlmlib (${spec.label})...`;
-      if (spec.kind === 'editable') {
-        execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', '-e', spec.value], { stdio: 'pipe' });
-      } else {
-        execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', spec.value], { stdio: 'pipe' });
-      }
+      installSpec(VENV_PYTHON, spec, torchIndex);
       const validation = validateInstalledOpenLMlib(VENV_PYTHON);
       if (validation?.status === 'warn') {
         spinner.text = `Installed with warning: ${validation.message}`;

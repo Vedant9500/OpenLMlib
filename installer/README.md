@@ -26,6 +26,10 @@ CLI, Gemini CLI, Windsurf, Zed, Cline, and any other MCP-compatible client.
 - About 500 MB for the local embedding model, plus the Python dependency stack
   (PyTorch and related packages) in the managed virtual environment. The model
   is downloaded once during `openlmlib setup`; later runs work offline.
+  On Linux and Windows the installer installs the CPU-only PyTorch build
+  (a few hundred MB instead of the ~2-3 GB CUDA stack). Set
+  `OPENLMLIB_TORCH_INDEX=pypi` to take the default PyPI build instead, or set it
+  to another index URL to use a different wheel source.
 
 ## Installation
 
