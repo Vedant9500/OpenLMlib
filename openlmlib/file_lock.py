@@ -22,7 +22,56 @@ def _lock_owner_pid(lock_path: Path) -> int | None:
         return None
 
 
+_STILL_ACTIVE = 259
+_ERROR_ACCESS_DENIED = 5
+_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+
+
+def _windows_pid_is_alive(pid: int) -> bool:
+    """Liveness probe using the Win32 process handle.
+
+    ``os.kill(pid, 0)`` cannot be used here: CPython maps signal 0 to
+    ``CTRL_C_EVENT`` and calls ``GenerateConsoleCtrlEvent``, which sends a
+    CTRL+C event to every process sharing the console instead of checking
+    whether ``pid`` exists.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.GetExitCodeProcess.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    handle = kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not handle:
+        # Access denied still proves the process exists.
+        return ctypes.get_last_error() == _ERROR_ACCESS_DENIED
+
+    try:
+        exit_code = wintypes.DWORD()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+            return True
+        return exit_code.value == _STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def _pid_is_alive(pid: int) -> bool:
+    # Reject non-positive PIDs: on Windows pid 0 means "every process in the
+    # console group", so probing it would interrupt the whole console.
+    if pid <= 0 or pid > 0xFFFFFFFF:
+        return False
+
+    if os.name == "nt":
+        return _windows_pid_is_alive(pid)
+
     try:
         os.kill(pid, 0)
     except ProcessLookupError:

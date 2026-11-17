@@ -18,6 +18,12 @@ class TestFileLock(unittest.TestCase):
     def test_pid_is_alive_missing(self):
         self.assertFalse(_pid_is_alive(2_000_000_001))
 
+    def test_pid_is_alive_rejects_console_group_pids(self):
+        # On Windows pid 0 means "every process sharing this console", so it
+        # must never be treated as a live owner (it would send CTRL+C).
+        for pid in (0, -1, -1000, 0x1_0000_0000):
+            self.assertFalse(_pid_is_alive(pid), pid)
+
     def test_reclaim_empty_lock_after_grace(self):
         with tempfile.TemporaryDirectory() as tmp:
             lock_path = Path(tmp) / "test.lock"
