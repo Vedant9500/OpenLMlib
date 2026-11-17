@@ -56,7 +56,13 @@ const projectDir = path.join(tmpRoot, 'project');
 const openlmlibHome = path.join(tmpRoot, 'home');
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 fs.mkdirSync(projectDir, { recursive: true });
-fs.writeFileSync(path.join(projectDir, 'package.json'), '{"private":true}\n');
+// npm 12+ requires install scripts to be explicitly allowed. The dependency is
+// a local tarball here, so the policy key is its project-relative file spec.
+const relativeTarball = path.relative(projectDir, tarball).split(path.sep).join('/');
+fs.writeFileSync(
+  path.join(projectDir, 'package.json'),
+  `${JSON.stringify({ private: true, allowScripts: { [`file:${relativeTarball}`]: true } }, null, 2)}\n`,
+);
 
 console.log('Installing tarball into temp project:', projectDir);
 run(npmCommand, ['install', tarball], {

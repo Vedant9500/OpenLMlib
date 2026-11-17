@@ -160,6 +160,19 @@ Run `openlmlib --help` or `openlmlib <command> --help` for details.
 
 4. Re-run `openlmlib mcp-config` and restart the client again.
 
+### npm blocked the postinstall script
+
+Newer npm releases can require explicit approval before running dependency
+install scripts. If npm prints `install scripts blocked` and `openlmlib` then
+reports "OpenLMlib is not installed", approve the script and reinstall:
+
+```bash
+npm install -g openlmlib --allow-scripts=openlmlib
+```
+
+You can also add `allow-scripts=openlmlib` to your `~/.npmrc`. Project-scoped
+installs should put `openlmlib` in the project's `allowScripts` field instead.
+
 ### Python 3.10+ was not found
 
 Run `openlmlib setup` again and accept the automatic installation prompt, or

@@ -19,6 +19,7 @@ class TestCheckContext(unittest.TestCase):
             ],
         }
         with patch.object(mcp_server, "_settings_path", return_value=Path("s.json")), \
+             patch("openlmlib.library.retrieve_findings", side_effect=RuntimeError("unavailable")), \
              patch.object(mcp_server, "search_fts", return_value=payload):
             result = mcp_server.check_context("caching")
 
@@ -28,6 +29,7 @@ class TestCheckContext(unittest.TestCase):
 
     def test_reports_no_context_for_empty_results(self):
         with patch.object(mcp_server, "_settings_path", return_value=Path("s.json")), \
+             patch("openlmlib.library.retrieve_findings", side_effect=RuntimeError("unavailable")), \
              patch.object(mcp_server, "search_fts", return_value={"status": "ok", "items": []}):
             result = mcp_server.check_context("anything")
 
