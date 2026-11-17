@@ -30,7 +30,9 @@
    - `git push origin vX.Y.Z`
 2. GitHub Actions `release.yml` builds the distributions and checks that the tag
    matches `__version__`. It always publishes tagged builds to TestPyPI and
-   publishes stable tags to PyPI.
+   publishes stable tags to PyPI. The build job fails if `dist/` contains
+   anything other than `.whl` and `.tar.gz` files, so checksums and reports must
+   stay outside that directory.
 3. Publish the npm package from the same commit:
    - `cd installer && npm publish`
    - The `prepack` hook bundles the Python source and runs the package

@@ -59,16 +59,30 @@ jobs:
           python -m pip install build
           python -m build
 
+      - name: Verify distribution contents
+        run: |
+          unexpected="$(find dist -maxdepth 1 -type f ! -name '*.whl' ! -name '*.tar.gz')"
+          if [ -n "$unexpected" ]; then
+            echo "dist/ contains files that are not distributions:" >&2
+            echo "$unexpected" >&2
+            exit 1
+          fi
+
       - name: Generate checksum manifest
         run: |
-          cd dist
-          sha256sum *.whl *.tar.gz > SHA256SUMS.txt
+          sha256sum dist/*.whl dist/*.tar.gz > SHA256SUMS.txt
 
       - name: Upload distribution artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dist
           path: dist/
+
+      - name: Upload checksum manifest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: checksums
+          path: SHA256SUMS.txt
 
   publish-testpypi:
     name: Publish to TestPyPI
